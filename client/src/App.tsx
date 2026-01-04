@@ -15,6 +15,7 @@ import Landing from "@/pages/landing";
 import Budget from "@/pages/budget";
 import Contact from "@/pages/contact";
 import Inspections from "@/pages/inspections";
+import Terms from "@/pages/terms";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -67,6 +68,7 @@ function Router() {
       <Route path="/budget" component={Budget} />
       <Route path="/inspections" component={Inspections} />
       <Route path="/contact" component={Contact} />
+      <Route path="/terms" component={Terms} />
       <Route component={NotFound} />
     </Switch>
   );

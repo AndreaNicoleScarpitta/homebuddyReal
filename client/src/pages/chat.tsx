@@ -1,6 +1,6 @@
 import { Layout } from "@/components/layout";
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Paperclip, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Send, Bot, User, Camera, Loader2, AlertCircle, X, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -10,15 +10,23 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getHome, getChatMessages } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { PhotoConsentModal, usePhotoConsent } from "@/components/photo-consent-modal";
+import { Link } from "wouter";
 import logoImage from "@assets/generated_images/orange_house_logo_with_grey_gear..png";
 
 export default function Chat() {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState("");
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { hasConsented, isLoaded, grantConsent } = usePhotoConsent();
 
   const { data: home } = useQuery({
     queryKey: ["home"],
@@ -37,19 +45,101 @@ export default function Chat() {
     }
   }, [messages, streamingMessage]);
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file",
+        description: "Please select an image file (JPG, PNG, etc.)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please select an image under 10MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!isLoaded) {
+      return;
+    }
+    
+    if (!hasConsented) {
+      setPendingImageFile(file);
+      setShowConsentModal(true);
+    } else {
+      attachImage(file);
+    }
+  };
+
+  const attachImage = (file: File) => {
+    setSelectedImage(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setImagePreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleConsentAccept = () => {
+    grantConsent();
+    setShowConsentModal(false);
+    if (pendingImageFile) {
+      attachImage(pendingImageFile);
+      setPendingImageFile(null);
+    }
+  };
+
+  const handleConsentCancel = () => {
+    setShowConsentModal(false);
+    setPendingImageFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const removeImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleSend = async () => {
-    if (!input.trim() || !home || isStreaming) return;
+    if ((!input.trim() && !selectedImage) || !home || isStreaming) return;
 
     const userMessage = input;
+    const imageToSend = selectedImage;
+    const imagePreviewToSend = imagePreview;
+    
     setInput("");
+    setSelectedImage(null);
+    setImagePreview(null);
     setIsStreaming(true);
     setStreamingMessage("");
 
     try {
+      let imageBase64: string | undefined;
+      if (imageToSend && imagePreviewToSend) {
+        imageBase64 = imagePreviewToSend.split(",")[1];
+      }
+
       const response = await fetch(`/api/home/${home.id}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: userMessage }),
+        body: JSON.stringify({ 
+          content: userMessage || "What can you tell me about this?",
+          image: imageBase64,
+          imageType: imageToSend?.type,
+        }),
       });
 
       if (!response.ok) throw new Error("Failed to send message");
@@ -111,10 +201,24 @@ export default function Chat() {
 
   return (
     <Layout>
+      <PhotoConsentModal 
+        isOpen={showConsentModal} 
+        onAccept={handleConsentAccept}
+        onCancel={handleConsentCancel}
+      />
+      
       <div className="h-[calc(100vh-8rem)] flex flex-col max-w-3xl mx-auto">
-        <div className="mb-6">
+        <div className="mb-4">
           <h1 className="text-3xl font-heading font-bold text-foreground" data-testid="text-heading">Assistant</h1>
-          <p className="text-muted-foreground">Expert advice for your home, 24/7.</p>
+          <p className="text-muted-foreground">Expert guidance for your home, 24/7.</p>
+        </div>
+
+        <div className="flex items-start gap-2 p-3 mb-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg text-sm">
+          <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+          <div className="text-blue-800 dark:text-blue-200">
+            <span className="font-medium">For informational purposes only.</span> Our AI provides general guidance, not professional advice. 
+            <Link href="/terms" className="underline ml-1 hover:text-blue-600">View terms</Link>
+          </div>
         </div>
 
         <Card className="flex-1 flex flex-col overflow-hidden border-none shadow-md bg-white/50 backdrop-blur-sm">
@@ -134,7 +238,7 @@ export default function Chat() {
                   </div>
                   <h3 className="text-lg font-semibold mb-3">How can I help?</h3>
                   <p className="text-sm text-muted-foreground mb-6">
-                    I can help you understand repairs, estimate costs, or figure out what can wait. What's on your mind?
+                    I can help you understand repairs, estimate costs, or figure out what can wait. You can also share photos for guidance.
                   </p>
                   <div className="flex flex-wrap justify-center gap-2">
                     <button 
@@ -191,7 +295,12 @@ export default function Chat() {
                             : "bg-white border text-foreground rounded-tl-none"
                         }`}
                       >
-                        {msg.content}
+                        <div className="whitespace-pre-wrap">{msg.content}</div>
+                        {msg.role === "assistant" && (
+                          <div className="mt-3 pt-2 border-t border-muted/30 text-xs text-muted-foreground italic">
+                            This is general guidance only. Consult a professional for your specific situation.
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -210,7 +319,7 @@ export default function Chat() {
                         Home Buddy
                       </span>
                       <div className="p-4 rounded-2xl shadow-sm text-sm leading-relaxed bg-white border text-foreground rounded-tl-none">
-                        {streamingMessage}
+                        <div className="whitespace-pre-wrap">{streamingMessage}</div>
                         <span className="inline-block w-2 h-4 bg-primary/50 animate-pulse ml-1" />
                       </div>
                     </div>
@@ -242,25 +351,56 @@ export default function Chat() {
           </ScrollArea>
 
           <div className="p-4 bg-white/80 border-t backdrop-blur-md">
+            {imagePreview && (
+              <div className="mb-3 flex items-start gap-2">
+                <div className="relative">
+                  <img 
+                    src={imagePreview} 
+                    alt="Selected" 
+                    className="h-20 w-20 object-cover rounded-lg border"
+                  />
+                  <button
+                    onClick={removeImage}
+                    className="absolute -top-2 -right-2 h-5 w-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center shadow-sm hover:bg-destructive/90"
+                    data-testid="button-remove-image"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+                <div className="text-xs text-muted-foreground flex items-start gap-1">
+                  <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                  <span>Photo analysis is for guidance only. A professional may see things we can't.</span>
+                </div>
+              </div>
+            )}
+            
             <div className="relative flex items-center gap-2">
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleImageSelect}
+                ref={fileInputRef}
+                className="hidden"
+                data-testid="input-image-file"
+              />
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary shrink-0" data-testid="button-attach">
-                    <Paperclip className="h-5 w-5" />
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="text-muted-foreground hover:text-primary shrink-0" 
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isStreaming}
+                    data-testid="button-add-photo"
+                  >
+                    <Camera className="h-5 w-5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Attach a file (coming soon)</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary shrink-0" data-testid="button-image">
-                    <ImageIcon className="h-5 w-5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Add an image (coming soon)</TooltipContent>
+                <TooltipContent>Add a photo for analysis</TooltipContent>
               </Tooltip>
               <Input
-                placeholder="Ask about maintenance, repairs, or costs..."
+                placeholder={selectedImage ? "Ask about this photo..." : "Ask about maintenance, repairs, or costs..."}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !isStreaming && handleSend()}
@@ -273,7 +413,7 @@ export default function Chat() {
                   <Button 
                     size="icon" 
                     onClick={handleSend}
-                    disabled={!input.trim() || isStreaming}
+                    disabled={(!input.trim() && !selectedImage) || isStreaming}
                     className="rounded-full shadow-lg shadow-primary/20 shrink-0"
                     data-testid="button-send"
                   >

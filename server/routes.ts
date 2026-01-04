@@ -265,12 +265,16 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
       
-      const { content } = req.body;
-      if (!content) {
-        return res.status(400).json({ message: "Message content is required", code: "VALIDATION_ERROR" });
+      const { content, image, imageType } = req.body;
+      if (!content && !image) {
+        return res.status(400).json({ message: "Message content or image is required", code: "VALIDATION_ERROR" });
       }
       
-      await storage.createChatMessage({ homeId, role: "user", content });
+      const messageContent = image 
+        ? `${content || "What can you tell me about this?"} [Photo attached]`
+        : content;
+      
+      await storage.createChatMessage({ homeId, role: "user", content: messageContent });
       
       const history = await storage.getChatMessagesByHomeId(homeId);
       const conversationHistory = history.slice(-10).map(m => ({ role: m.role, content: m.content }));
@@ -282,10 +286,12 @@ export async function registerRoutes(
       try {
         const fullResponse = await streamAIResponse(
           homeId,
-          content,
+          content || "What can you tell me about this photo?",
           conversationHistory.slice(0, -1),
           (chunk) => res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`),
-          () => {}
+          () => {},
+          image,
+          imageType
         );
         
         await storage.createChatMessage({ homeId, role: "assistant", content: fullResponse });
