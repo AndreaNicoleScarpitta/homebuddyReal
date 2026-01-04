@@ -7,11 +7,13 @@ import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Chat from "@/pages/chat";
 import Onboarding from "@/pages/onboarding";
+import Login from "@/pages/login";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Onboarding} />
+      <Route path="/" component={Login} />
+      <Route path="/onboarding" component={Onboarding} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/chat" component={Chat} />
       {/* Fallback to 404 */}
