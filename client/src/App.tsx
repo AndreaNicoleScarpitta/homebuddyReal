@@ -1,8 +1,11 @@
+import { useState, useEffect } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { AnimatePresence } from "framer-motion";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SplashScreen } from "@/components/splash-screen";
 import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
@@ -14,8 +17,31 @@ import Contact from "@/pages/contact";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
+  const [showSplash, setShowSplash] = useState(true);
+  const [splashComplete, setSplashComplete] = useState(false);
+
+  useEffect(() => {
+    const hasSeenSplash = sessionStorage.getItem("splashShown");
+    if (hasSeenSplash) {
+      setShowSplash(false);
+      setSplashComplete(true);
+    }
+  }, []);
+
+  const handleSplashComplete = () => {
+    sessionStorage.setItem("splashShown", "true");
+    setShowSplash(false);
+    setSplashComplete(true);
+  };
   
-  // Show loading state
+  if (showSplash && !splashComplete) {
+    return (
+      <AnimatePresence>
+        <SplashScreen onComplete={handleSplashComplete} />
+      </AnimatePresence>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5">
@@ -27,12 +53,10 @@ function Router() {
     );
   }
   
-  // Show landing page if not authenticated
   if (!isAuthenticated) {
     return <Landing />;
   }
   
-  // Show authenticated routes
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
@@ -41,7 +65,6 @@ function Router() {
       <Route path="/chat" component={Chat} />
       <Route path="/budget" component={Budget} />
       <Route path="/contact" component={Contact} />
-      {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>
   );
