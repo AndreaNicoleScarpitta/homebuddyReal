@@ -32,7 +32,7 @@ export default function Landing() {
             </div>
             <span className="text-xl font-heading font-bold">Home Buddy</span>
           </div>
-          <Button onClick={handleLogin} variant="ghost" className="font-medium" data-testid="button-login">
+          <Button onClick={handleLogin} variant="outline" className="font-medium" data-testid="button-login">
             Sign In
           </Button>
         </div>
