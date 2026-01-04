@@ -1,125 +1,169 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Home, Calendar, MessageSquare, Shield, CheckCircle2 } from "lucide-react";
+import { Home, Calendar, MessageSquare, Shield, ArrowRight, Sparkles } from "lucide-react";
+import { motion } from "framer-motion";
 
 export default function Landing() {
   const handleLogin = () => {
     window.location.href = "/api/login";
   };
 
+  const features = [
+    { icon: Calendar, title: "Smart Scheduling", desc: "Now, Soon, Later priorities" },
+    { icon: Shield, title: "Safety First", desc: "DIY vs Pro guidance" },
+    { icon: MessageSquare, title: "AI Assistant", desc: "24/7 expert advice" },
+  ];
+
+  const benefits = [
+    "Track all your home systems in one place",
+    "Get reminders before issues become emergencies",
+    "Know when to DIY vs. call a pro",
+    "See estimated costs before you commit",
+    "Access permit requirements for your area",
+    "Build trust with transparent safety guidance"
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
-      {/* Header */}
-      <header className="border-b border-border/40 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="relative h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Home className="h-6 w-6 text-primary" />
-              <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-muted border-2 border-background flex items-center justify-center">
-                <div className="h-2 w-2 rounded-full bg-muted-foreground" />
-              </div>
+    <div className="min-h-screen bg-background">
+      <header className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-md border-b border-border/40">
+        <div className="container mx-auto px-6 h-16 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+              <Home className="h-4 w-4 text-white" />
             </div>
-            <span className="text-2xl font-heading font-bold text-foreground">Home Buddy</span>
+            <span className="text-xl font-heading font-bold">Home Buddy</span>
           </div>
-          <Button onClick={handleLogin} size="lg" data-testid="button-login">
+          <Button onClick={handleLogin} variant="ghost" className="font-medium" data-testid="button-login">
             Sign In
           </Button>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="container mx-auto px-4 py-20 text-center">
-        <div className="max-w-3xl mx-auto space-y-6">
-          <h1 className="text-5xl md:text-6xl font-heading font-bold text-foreground tracking-tight">
-            Your Home's{" "}
-            <span className="text-primary">Maintenance</span>{" "}
-            Assistant
-          </h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Never miss a maintenance task again. Get AI-powered guidance, safety alerts, and expert recommendations—all tailored to your home.
-          </p>
-          <div className="pt-4">
-            <Button onClick={handleLogin} size="lg" className="text-lg h-14 px-8 shadow-lg shadow-primary/20" data-testid="button-hero-login">
-              Get Started Free
-            </Button>
+      <main className="pt-16">
+        <section className="min-h-[90vh] flex items-center relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+          <div className="absolute top-1/4 right-0 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl" />
+          
+          <div className="container mx-auto px-6 py-20">
+            <div className="max-w-3xl">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="space-y-8"
+              >
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
+                  <Sparkles className="h-4 w-4" />
+                  AI-Powered Home Maintenance
+                </div>
+                
+                <h1 className="text-5xl md:text-7xl font-heading font-bold text-foreground leading-tight tracking-tight">
+                  Your home,<br />
+                  <span className="text-primary">perfectly maintained.</span>
+                </h1>
+                
+                <p className="text-xl text-muted-foreground max-w-xl leading-relaxed">
+                  Never miss a maintenance task. Get personalized guidance, safety alerts, and expert recommendations tailored to your home.
+                </p>
+                
+                <div className="flex items-center gap-4 pt-4">
+                  <Button 
+                    onClick={handleLogin} 
+                    size="lg" 
+                    className="h-14 px-8 text-lg font-medium shadow-lg shadow-primary/25"
+                    data-testid="button-hero-login"
+                  >
+                    Get Started Free
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Button>
+                  <span className="text-sm text-muted-foreground">No credit card required</span>
+                </div>
+              </motion.div>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Features */}
-      <section className="container mx-auto px-4 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-          <Card className="border-primary/20 bg-card/50 backdrop-blur">
-            <CardHeader>
-              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                <Calendar className="h-6 w-6 text-primary" />
-              </div>
-              <CardTitle>Smart Scheduling</CardTitle>
-              <CardDescription>
-                Get personalized maintenance plans with Now, Soon, Later, and Monitor priorities.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-          
-          <Card className="border-primary/20 bg-card/50 backdrop-blur">
-            <CardHeader>
-              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                <Shield className="h-6 w-6 text-primary" />
-              </div>
-              <CardTitle>Safety First</CardTitle>
-              <CardDescription>
-                Clear DIY-Safe, Caution, and Pro-Only badges with explicit safety warnings.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-          
-          <Card className="border-primary/20 bg-card/50 backdrop-blur">
-            <CardHeader>
-              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                <MessageSquare className="h-6 w-6 text-primary" />
-              </div>
-              <CardTitle>AI Assistant</CardTitle>
-              <CardDescription>
-                Chat with your personal home maintenance expert 24/7 for instant advice.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        </div>
-      </section>
-
-      {/* Benefits */}
-      <section className="container mx-auto px-4 py-16">
-        <div className="max-w-4xl mx-auto">
-          <Card className="border-primary/20 bg-gradient-to-br from-card to-primary/5">
-            <CardHeader className="text-center pb-8">
-              <CardTitle className="text-3xl font-heading">Why Home Buddy?</CardTitle>
-              <CardDescription>Built for homeowners who want peace of mind</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[
-                  "Track all your home systems in one place",
-                  "Get reminders before issues become emergencies",
-                  "Know when to DIY vs. call a pro",
-                  "See estimated costs before you commit",
-                  "Access permit requirements for your area",
-                  "Build trust with transparent safety guidance"
-                ].map((benefit, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                    <span className="text-muted-foreground">{benefit}</span>
+        <section className="py-24 border-t border-border/40">
+          <div className="container mx-auto px-6">
+            <div className="flex flex-wrap gap-4 justify-center mb-16">
+              {features.map((feature, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  viewport={{ once: true }}
+                  className="flex items-center gap-3 px-6 py-4 rounded-full bg-secondary/50 border border-border/40"
+                >
+                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <feature.icon className="h-5 w-5 text-primary" />
                   </div>
+                  <div>
+                    <div className="font-medium text-foreground">{feature.title}</div>
+                    <div className="text-sm text-muted-foreground">{feature.desc}</div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="py-24 bg-secondary/30">
+          <div className="container mx-auto px-6">
+            <div className="max-w-4xl mx-auto">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="text-center mb-16"
+              >
+                <h2 className="text-4xl font-heading font-bold text-foreground mb-4">
+                  Why Home Buddy?
+                </h2>
+                <p className="text-lg text-muted-foreground">
+                  Built for homeowners who want peace of mind
+                </p>
+              </motion.div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {benefits.map((benefit, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: i % 2 === 0 ? -20 : 20 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    viewport={{ once: true }}
+                    className="flex items-center gap-4 p-4"
+                  >
+                    <div className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                    <span className="text-foreground">{benefit}</span>
+                  </motion.div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
+              
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="text-center mt-12"
+              >
+                <Button 
+                  onClick={handleLogin} 
+                  size="lg" 
+                  className="h-12 px-8"
+                  data-testid="button-cta-login"
+                >
+                  Start Managing Your Home
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+      </main>
 
-      {/* Footer */}
-      <footer className="border-t border-border/40 mt-20">
-        <div className="container mx-auto px-4 py-8 text-center text-sm text-muted-foreground">
-          <p>© 2026 Home Buddy. Your trusted home maintenance assistant.</p>
+      <footer className="border-t border-border/40 py-8">
+        <div className="container mx-auto px-6 text-center text-sm text-muted-foreground">
+          © 2026 Home Buddy. Your trusted home maintenance assistant.
         </div>
       </footer>
     </div>
