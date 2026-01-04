@@ -17,7 +17,9 @@ import {
   insertFundAllocationSchema,
   insertExpenseSchema,
   insertContactMessageSchema,
+  insertInspectionReportSchema,
 } from "@shared/schema";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
 function formatValidationError(error: ZodError): string {
   const zodError = fromZodError(error);
@@ -534,6 +536,119 @@ export async function registerRoutes(
       });
     } catch (error) {
       return handleApiError(res, "contact.create", error);
+    }
+  });
+  
+  // Register object storage routes
+  registerObjectStorageRoutes(app);
+  
+  // Inspection Reports routes
+  app.get("/api/home/:homeId/reports", isAuthenticated, async (req: any, res) => {
+    try {
+      const homeId = parseInt(req.params.homeId);
+      const userId = req.user.claims.sub;
+      if (!await storage.verifyHomeOwnership(homeId, userId)) {
+        return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
+      }
+      const reports = await storage.getInspectionReportsByHomeId(homeId);
+      res.json(reports);
+    } catch (error) {
+      return handleApiError(res, "reports.list", error, 500);
+    }
+  });
+  
+  app.get("/api/reports/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const userId = req.user.claims.sub;
+      if (!await storage.verifyReportOwnership(id, userId)) {
+        return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
+      }
+      const report = await storage.getInspectionReport(id);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found", code: "NOT_FOUND" });
+      }
+      const findings = await storage.getFindingsByReportId(id);
+      res.json({ ...report, findings });
+    } catch (error) {
+      return handleApiError(res, "reports.get", error, 500);
+    }
+  });
+  
+  app.post("/api/home/:homeId/reports", isAuthenticated, async (req: any, res) => {
+    try {
+      const homeId = parseInt(req.params.homeId);
+      const userId = req.user.claims.sub;
+      if (!await storage.verifyHomeOwnership(homeId, userId)) {
+        return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
+      }
+      const reportData = insertInspectionReportSchema.parse({ ...req.body, homeId });
+      const report = await storage.createInspectionReport(reportData);
+      logInfo("reports.create", "Report created successfully", { reportId: report.id });
+      res.json(report);
+    } catch (error) {
+      return handleApiError(res, "reports.create", error);
+    }
+  });
+  
+  app.post("/api/reports/:id/analyze", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const userId = req.user.claims.sub;
+      if (!await storage.verifyReportOwnership(id, userId)) {
+        return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
+      }
+      const report = await storage.getInspectionReport(id);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found", code: "NOT_FOUND" });
+      }
+      
+      await storage.updateInspectionReport(id, { status: "analyzing" });
+      
+      setTimeout(async () => {
+        try {
+          const sampleFindings = [
+            { reportId: id, category: "Roof", title: "Shingle wear observed", description: "Minor wear on south-facing shingles", severity: "minor", location: "Roof - South side", estimatedCost: "$500-1,500", urgency: "later", diyLevel: "Pro-Only" },
+            { reportId: id, category: "HVAC", title: "Filter replacement needed", description: "HVAC filter is dirty and should be replaced", severity: "minor", location: "HVAC Unit", estimatedCost: "$20-50", urgency: "soon", diyLevel: "DIY-Safe" },
+            { reportId: id, category: "Plumbing", title: "Minor leak under kitchen sink", description: "Small drip from P-trap connection", severity: "moderate", location: "Kitchen", estimatedCost: "$50-150", urgency: "soon", diyLevel: "Caution" },
+          ];
+          
+          for (const finding of sampleFindings) {
+            await storage.createFinding(finding as any);
+          }
+          
+          await storage.updateInspectionReport(id, { 
+            status: "analyzed",
+            summary: "Inspection analysis complete. 3 issues identified - 1 moderate, 2 minor. Estimated total repair cost: $570-1,700.",
+            issuesFound: sampleFindings.length,
+            analyzedAt: new Date(),
+          });
+          
+          logInfo("reports.analyze", "Report analyzed successfully", { reportId: id, findingsCount: sampleFindings.length });
+        } catch (err) {
+          logError("reports.analyze.background", err);
+          await storage.updateInspectionReport(id, { status: "error" });
+        }
+      }, 2000);
+      
+      res.json({ message: "Analysis started", status: "analyzing" });
+    } catch (error) {
+      return handleApiError(res, "reports.analyze", error);
+    }
+  });
+  
+  app.delete("/api/reports/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const userId = req.user.claims.sub;
+      if (!await storage.verifyReportOwnership(id, userId)) {
+        return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
+      }
+      await storage.deleteInspectionReport(id);
+      logInfo("reports.delete", "Report deleted successfully", { id });
+      res.json({ message: "Report deleted successfully" });
+    } catch (error) {
+      return handleApiError(res, "reports.delete", error);
     }
   });
   

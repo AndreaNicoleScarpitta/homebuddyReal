@@ -23,6 +23,12 @@ import {
   contactMessages,
   type ContactMessage,
   type InsertContactMessage,
+  inspectionReports,
+  type InspectionReport,
+  type InsertInspectionReport,
+  inspectionFindings,
+  type InspectionFinding,
+  type InsertInspectionFinding,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -84,6 +90,20 @@ export interface IStorage {
   // Contact Messages
   createContactMessage(message: InsertContactMessage): Promise<ContactMessage>;
   getContactMessages(): Promise<ContactMessage[]>;
+  
+  // Inspection Reports
+  getInspectionReportsByHomeId(homeId: number): Promise<InspectionReport[]>;
+  getInspectionReport(id: number): Promise<InspectionReport | undefined>;
+  createInspectionReport(report: InsertInspectionReport): Promise<InspectionReport>;
+  updateInspectionReport(id: number, data: Partial<InsertInspectionReport>): Promise<InspectionReport>;
+  deleteInspectionReport(id: number): Promise<void>;
+  
+  // Inspection Findings
+  getFindingsByReportId(reportId: number): Promise<InspectionFinding[]>;
+  createFinding(finding: InsertInspectionFinding): Promise<InspectionFinding>;
+  updateFinding(id: number, data: Partial<InsertInspectionFinding>): Promise<InspectionFinding>;
+  deleteFinding(id: number): Promise<void>;
+  verifyReportOwnership(reportId: number, userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -333,6 +353,71 @@ export class DatabaseStorage implements IStorage {
     const expense = await this.getExpense(expenseId);
     if (!expense) return false;
     return this.verifyFundOwnership(expense.fundId, userId);
+  }
+  
+  // Inspection Reports
+  async getInspectionReportsByHomeId(homeId: number): Promise<InspectionReport[]> {
+    return await db
+      .select()
+      .from(inspectionReports)
+      .where(eq(inspectionReports.homeId, homeId))
+      .orderBy(desc(inspectionReports.createdAt));
+  }
+  
+  async getInspectionReport(id: number): Promise<InspectionReport | undefined> {
+    const [report] = await db.select().from(inspectionReports).where(eq(inspectionReports.id, id));
+    return report;
+  }
+  
+  async createInspectionReport(reportData: InsertInspectionReport): Promise<InspectionReport> {
+    const [report] = await db.insert(inspectionReports).values(reportData).returning();
+    return report;
+  }
+  
+  async updateInspectionReport(id: number, data: Partial<InsertInspectionReport>): Promise<InspectionReport> {
+    const [report] = await db
+      .update(inspectionReports)
+      .set(data)
+      .where(eq(inspectionReports.id, id))
+      .returning();
+    return report;
+  }
+  
+  async deleteInspectionReport(id: number): Promise<void> {
+    await db.delete(inspectionReports).where(eq(inspectionReports.id, id));
+  }
+  
+  // Inspection Findings
+  async getFindingsByReportId(reportId: number): Promise<InspectionFinding[]> {
+    return await db
+      .select()
+      .from(inspectionFindings)
+      .where(eq(inspectionFindings.reportId, reportId))
+      .orderBy(desc(inspectionFindings.createdAt));
+  }
+  
+  async createFinding(findingData: InsertInspectionFinding): Promise<InspectionFinding> {
+    const [finding] = await db.insert(inspectionFindings).values(findingData).returning();
+    return finding;
+  }
+  
+  async updateFinding(id: number, data: Partial<InsertInspectionFinding>): Promise<InspectionFinding> {
+    const [finding] = await db
+      .update(inspectionFindings)
+      .set(data)
+      .where(eq(inspectionFindings.id, id))
+      .returning();
+    return finding;
+  }
+  
+  async deleteFinding(id: number): Promise<void> {
+    await db.delete(inspectionFindings).where(eq(inspectionFindings.id, id));
+  }
+  
+  async verifyReportOwnership(reportId: number, userId: string): Promise<boolean> {
+    const report = await this.getInspectionReport(reportId);
+    if (!report) return false;
+    return this.verifyHomeOwnership(report.homeId, userId);
   }
 }
 

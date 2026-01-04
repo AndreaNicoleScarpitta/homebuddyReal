@@ -163,6 +163,50 @@ export const insertContactMessageSchema = createInsertSchema(contactMessages).om
 export type InsertContactMessage = z.infer<typeof insertContactMessageSchema>;
 export type ContactMessage = typeof contactMessages.$inferSelect;
 
+// Inspection reports table - stores uploaded inspection reports
+export const inspectionReports = pgTable("inspection_reports", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  fileType: varchar("file_type", { length: 100 }),
+  objectPath: text("object_path").notNull(),
+  reportType: varchar("report_type", { length: 100 }).default("general"),
+  inspectionDate: timestamp("inspection_date"),
+  status: varchar("status", { length: 50 }).default("pending"),
+  summary: text("summary"),
+  issuesFound: integer("issues_found").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  analyzedAt: timestamp("analyzed_at"),
+}, (table) => [
+  index("inspection_reports_home_id_idx").on(table.homeId),
+]);
+
+export const insertInspectionReportSchema = createInsertSchema(inspectionReports).omit({ id: true, createdAt: true, analyzedAt: true });
+export type InsertInspectionReport = z.infer<typeof insertInspectionReportSchema>;
+export type InspectionReport = typeof inspectionReports.$inferSelect;
+
+// Inspection findings table - stores individual findings from reports
+export const inspectionFindings = pgTable("inspection_findings", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  reportId: integer("report_id").notNull().references(() => inspectionReports.id, { onDelete: "cascade" }),
+  category: varchar("category", { length: 100 }),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  severity: varchar("severity", { length: 50 }).default("minor"),
+  location: varchar("location", { length: 255 }),
+  estimatedCost: varchar("estimated_cost", { length: 100 }),
+  urgency: varchar("urgency", { length: 50 }).default("later"),
+  diyLevel: varchar("diy_level", { length: 50 }).default("Pro-Only"),
+  taskCreated: boolean("task_created").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("inspection_findings_report_id_idx").on(table.reportId),
+]);
+
+export const insertInspectionFindingSchema = createInsertSchema(inspectionFindings).omit({ id: true, createdAt: true });
+export type InsertInspectionFinding = z.infer<typeof insertInspectionFindingSchema>;
+export type InspectionFinding = typeof inspectionFindings.$inferSelect;
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   homes: many(homes),
@@ -177,6 +221,7 @@ export const homesRelations = relations(homes, ({ one, many }) => ({
   maintenanceTasks: many(maintenanceTasks),
   chatMessages: many(chatMessages),
   funds: many(funds),
+  inspectionReports: many(inspectionReports),
 }));
 
 export const systemsRelations = relations(systems, ({ one }) => ({
@@ -230,5 +275,20 @@ export const expensesRelations = relations(expenses, ({ one }) => ({
   task: one(maintenanceTasks, {
     fields: [expenses.taskId],
     references: [maintenanceTasks.id],
+  }),
+}));
+
+export const inspectionReportsRelations = relations(inspectionReports, ({ one, many }) => ({
+  home: one(homes, {
+    fields: [inspectionReports.homeId],
+    references: [homes.id],
+  }),
+  findings: many(inspectionFindings),
+}));
+
+export const inspectionFindingsRelations = relations(inspectionFindings, ({ one }) => ({
+  report: one(inspectionReports, {
+    fields: [inspectionFindings.reportId],
+    references: [inspectionReports.id],
   }),
 }));

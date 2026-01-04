@@ -1,4 +1,4 @@
-import type { Home, System, MaintenanceTask, ChatMessage, Fund, FundAllocation, Expense } from "@shared/schema";
+import type { Home, System, MaintenanceTask, ChatMessage, Fund, FundAllocation, Expense, InspectionReport, InspectionFinding } from "@shared/schema";
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -239,6 +239,46 @@ export async function updateExpense(id: number, data: Partial<Expense>): Promise
 
 export async function deleteExpense(id: number): Promise<void> {
   const response = await fetch(`/api/expenses/${id}`, {
+    method: "DELETE",
+  });
+  return handleResponse<void>(response);
+}
+
+// Inspection Reports API
+export async function getInspectionReports(homeId: number): Promise<InspectionReport[]> {
+  const response = await fetch(`/api/home/${homeId}/reports`);
+  return handleResponse<InspectionReport[]>(response);
+}
+
+export async function getInspectionReport(id: number): Promise<InspectionReport & { findings: InspectionFinding[] }> {
+  const response = await fetch(`/api/reports/${id}`);
+  return handleResponse<InspectionReport & { findings: InspectionFinding[] }>(response);
+}
+
+export async function createInspectionReport(homeId: number, data: {
+  fileName: string;
+  fileType?: string;
+  objectPath: string;
+  reportType?: string;
+  inspectionDate?: string;
+}): Promise<InspectionReport> {
+  const response = await fetch(`/api/home/${homeId}/reports`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<InspectionReport>(response);
+}
+
+export async function analyzeInspectionReport(id: number): Promise<{ message: string; status: string }> {
+  const response = await fetch(`/api/reports/${id}/analyze`, {
+    method: "POST",
+  });
+  return handleResponse<{ message: string; status: string }>(response);
+}
+
+export async function deleteInspectionReport(id: number): Promise<void> {
+  const response = await fetch(`/api/reports/${id}`, {
     method: "DELETE",
   });
   return handleResponse<void>(response);
