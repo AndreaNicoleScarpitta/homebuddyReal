@@ -12,11 +12,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
 
   const navItems = [
-    { href: "/dashboard", icon: Home, label: "Overview", sublabel: "What needs attention" },
-    { href: "/budget", icon: Wallet, label: "Budget", sublabel: "What you can afford" },
-    { href: "/inspections", icon: FileText, label: "Inspections", sublabel: "What's wrong" },
-    { href: "/chat", icon: MessageSquare, label: "Assistant", sublabel: "Get guidance" },
-    { href: "/contact", icon: Mail, label: "Contact", sublabel: "Reach us" },
+    { href: "/dashboard", icon: Home, label: "Overview", sublabel: "What needs attention", tourId: "nav-overview" },
+    { href: "/budget", icon: Wallet, label: "Budget", sublabel: "What you can afford", tourId: "nav-budget" },
+    { href: "/inspections", icon: FileText, label: "Inspections", sublabel: "What's wrong", tourId: "nav-inspections" },
+    { href: "/chat", icon: MessageSquare, label: "Assistant", sublabel: "Get guidance", tourId: "nav-assistant" },
+    { href: "/contact", icon: Mail, label: "Contact", sublabel: "Reach us", tourId: "nav-contact" },
   ];
 
   const handleLogout = () => {
@@ -55,6 +55,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   key={item.href} 
                   href={item.href}
                   onClick={() => setIsOpen(false)}
+                  data-tour={`mobile-${item.tourId}`}
                   className={`flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${
                     location === item.href 
                       ? "bg-primary text-primary-foreground" 
@@ -97,6 +98,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Link 
               key={item.href} 
               href={item.href}
+              data-tour={item.tourId}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
                 location === item.href 
                   ? "bg-primary text-primary-foreground shadow-sm translate-x-1" 

@@ -1,10 +1,11 @@
 import { Layout } from "@/components/layout";
 import { HomeHealth } from "@/components/home-health";
 import { MaintenanceCard } from "@/components/maintenance-card";
+import { OnboardingTour, useTourState } from "@/components/onboarding-tour";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Plus, ArrowRight, Info } from "lucide-react";
+import { Plus, ArrowRight, HelpCircle } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { getHome, getTasks, getSystems } from "@/lib/api";
@@ -14,6 +15,7 @@ import { useEffect } from "react";
 export default function Dashboard() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
+  const { hasSeenTour, showTour, tourKey, startTour, completeTour } = useTourState();
 
   const { data: home, isLoading: homeLoading } = useQuery({
     queryKey: ["home"],
@@ -39,6 +41,15 @@ export default function Dashboard() {
     }
   }, [authLoading, homeLoading, home, navigate]);
 
+  useEffect(() => {
+    if (home && hasSeenTour === false && !showTour) {
+      const timer = setTimeout(() => {
+        startTour();
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [home, hasSeenTour, showTour, startTour]);
+
   if (authLoading || homeLoading) {
     return (
       <Layout>
@@ -61,27 +72,47 @@ export default function Dashboard() {
 
   return (
     <Layout>
+      <OnboardingTour key={tourKey} isOpen={showTour} onComplete={completeTour} />
+      
       <div className="space-y-8">
         <header className="flex justify-between items-end">
           <div>
             <h1 className="text-3xl font-heading font-bold text-foreground" data-testid="text-heading">Overview</h1>
             <p className="text-muted-foreground mt-1">Here's what needs your attention.</p>
           </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link href="/chat">
-                <Button size="lg" className="shadow-lg shadow-primary/20" data-testid="button-chat">
-                  Ask Assistant <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent>Get expert advice on repairs, maintenance, and costs</TooltipContent>
-          </Tooltip>
+          <div className="flex items-center gap-2">
+            {hasSeenTour && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={startTour}
+                    className="text-muted-foreground hover:text-foreground"
+                    data-testid="button-restart-tour"
+                  >
+                    <HelpCircle className="h-5 w-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Take a quick tour</TooltipContent>
+              </Tooltip>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link href="/chat">
+                  <Button size="lg" className="shadow-lg shadow-primary/20" data-testid="button-chat">
+                    Ask Assistant <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent>Get expert advice on repairs, maintenance, and costs</TooltipContent>
+            </Tooltip>
+          </div>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Home Status */}
-          <div className="md:col-span-1">
+          <div className="md:col-span-1" data-tour="home-status">
             <HomeHealth 
               score={home.healthScore || 0} 
               systemsCount={systems.length}
@@ -90,7 +121,7 @@ export default function Dashboard() {
           </div>
 
           {/* Quick Stats */}
-          <div className="md:col-span-2 grid grid-cols-2 gap-4">
+          <div className="md:col-span-2 grid grid-cols-2 gap-4" data-tour="quick-stats">
              <Card className="bg-primary/5 border-primary/10">
                <CardHeader className="pb-2">
                  <CardTitle className="text-sm font-medium text-muted-foreground">Next Service</CardTitle>
@@ -155,7 +186,7 @@ export default function Dashboard() {
         </div>
 
         {/* Tasks Section */}
-        <div className="space-y-6">
+        <div className="space-y-6" data-tour="maintenance-plan">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-xl font-heading font-semibold">Your Maintenance Plan</h2>
