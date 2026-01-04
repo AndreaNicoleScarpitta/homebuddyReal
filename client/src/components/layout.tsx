@@ -3,7 +3,7 @@ import { Home, MessageSquare, User, Wrench, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
-import logoImage from "@assets/generated_images/minimalist_geometric_house_logo_with_a_wrench_or_gear_integration,_blue_and_green_gradient..png";
+import logoImage from "@assets/generated_images/orange_house_logo_with_grey_gear..png";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();

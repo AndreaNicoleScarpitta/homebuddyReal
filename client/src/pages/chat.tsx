@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CHAT_HISTORY } from "@/lib/mock-data";
 import { Card } from "@/components/ui/card";
-import logoImage from "@assets/generated_images/minimalist_geometric_house_logo_with_a_wrench_or_gear_integration,_blue_and_green_gradient..png";
+import logoImage from "@assets/generated_images/orange_house_logo_with_grey_gear..png";
 
 export default function Chat() {
   const [messages, setMessages] = useState(CHAT_HISTORY);

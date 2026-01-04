@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { ArrowRight, Home, Search } from "lucide-react";
-import logoImage from "@assets/generated_images/minimalist_geometric_house_logo_with_a_wrench_or_gear_integration,_blue_and_green_gradient..png";
+import logoImage from "@assets/generated_images/orange_house_logo_with_grey_gear..png";
 
 export default function Onboarding() {
   const [, setLocation] = useLocation();
