@@ -52,16 +52,19 @@ export async function registerRoutes(
   app.get("/api/home", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      logInfo("home.get", "Fetching home for user", { userId });
       const home = await storage.getHome(userId);
       
       if (!home) {
-        return res.status(404).json({ message: "Home not found" });
+        return res.status(404).json({ 
+          message: "No home profile found. Please complete your home setup first.",
+          code: "HOME_NOT_FOUND"
+        });
       }
       
       res.json(home);
     } catch (error) {
-      console.error("Error fetching home:", error);
-      res.status(500).json({ message: "Failed to fetch home" });
+      return handleApiError(res, "home.get", error, 500);
     }
   });
   
@@ -70,10 +73,10 @@ export async function registerRoutes(
       const userId = req.user.claims.sub;
       const homeData = insertHomeSchema.parse({ ...req.body, userId });
       const home = await storage.createHome(homeData);
+      logInfo("home.create", "Home created successfully", { homeId: home.id, userId });
       res.json(home);
     } catch (error) {
-      console.error("Error creating home:", error);
-      res.status(400).json({ message: "Failed to create home" });
+      return handleApiError(res, "home.create", error);
     }
   });
   
@@ -81,10 +84,10 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       const home = await storage.updateHome(id, req.body);
+      logInfo("home.update", "Home updated successfully", { homeId: id });
       res.json(home);
     } catch (error) {
-      console.error("Error updating home:", error);
-      res.status(400).json({ message: "Failed to update home" });
+      return handleApiError(res, "home.update", error);
     }
   });
   
@@ -95,8 +98,7 @@ export async function registerRoutes(
       const systems = await storage.getSystemsByHomeId(homeId);
       res.json(systems);
     } catch (error) {
-      console.error("Error fetching systems:", error);
-      res.status(500).json({ message: "Failed to fetch systems" });
+      return handleApiError(res, "systems.get", error, 500);
     }
   });
   
@@ -105,10 +107,10 @@ export async function registerRoutes(
       const homeId = parseInt(req.params.homeId);
       const systemData = insertSystemSchema.parse({ ...req.body, homeId });
       const system = await storage.createSystem(systemData);
+      logInfo("systems.create", "System created successfully", { systemId: system.id, homeId });
       res.json(system);
     } catch (error) {
-      console.error("Error creating system:", error);
-      res.status(400).json({ message: "Failed to create system" });
+      return handleApiError(res, "systems.create", error);
     }
   });
   
@@ -119,8 +121,7 @@ export async function registerRoutes(
       const tasks = await storage.getTasksByHomeId(homeId);
       res.json(tasks);
     } catch (error) {
-      console.error("Error fetching tasks:", error);
-      res.status(500).json({ message: "Failed to fetch tasks" });
+      return handleApiError(res, "tasks.get", error, 500);
     }
   });
   
@@ -129,10 +130,10 @@ export async function registerRoutes(
       const homeId = parseInt(req.params.homeId);
       const taskData = insertMaintenanceTaskSchema.parse({ ...req.body, homeId });
       const task = await storage.createTask(taskData);
+      logInfo("tasks.create", "Task created successfully", { taskId: task.id, homeId });
       res.json(task);
     } catch (error) {
-      console.error("Error creating task:", error);
-      res.status(400).json({ message: "Failed to create task" });
+      return handleApiError(res, "tasks.create", error);
     }
   });
   
@@ -140,10 +141,10 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       const task = await storage.updateTask(id, req.body);
+      logInfo("tasks.update", "Task updated successfully", { taskId: id });
       res.json(task);
     } catch (error) {
-      console.error("Error updating task:", error);
-      res.status(400).json({ message: "Failed to update task" });
+      return handleApiError(res, "tasks.update", error);
     }
   });
   
@@ -151,10 +152,10 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       await storage.deleteTask(id);
+      logInfo("tasks.delete", "Task deleted successfully", { taskId: id });
       res.json({ message: "Task deleted successfully" });
     } catch (error) {
-      console.error("Error deleting task:", error);
-      res.status(400).json({ message: "Failed to delete task" });
+      return handleApiError(res, "tasks.delete", error);
     }
   });
   
@@ -165,8 +166,7 @@ export async function registerRoutes(
       const messages = await storage.getChatMessagesByHomeId(homeId);
       res.json(messages);
     } catch (error) {
-      console.error("Error fetching chat messages:", error);
-      res.status(500).json({ message: "Failed to fetch chat messages" });
+      return handleApiError(res, "chat.get", error, 500);
     }
   });
   
@@ -177,8 +177,7 @@ export async function registerRoutes(
       const message = await storage.createChatMessage(messageData);
       res.json(message);
     } catch (error) {
-      console.error("Error creating chat message:", error);
-      res.status(400).json({ message: "Failed to create chat message" });
+      return handleApiError(res, "chat.create", error);
     }
   });
   
@@ -189,8 +188,7 @@ export async function registerRoutes(
       const fundsList = await storage.getFundsByHomeId(homeId);
       res.json(fundsList);
     } catch (error) {
-      console.error("Error fetching funds:", error);
-      res.status(500).json({ message: "Failed to fetch funds" });
+      return handleApiError(res, "funds.get", error, 500);
     }
   });
   
@@ -199,10 +197,10 @@ export async function registerRoutes(
       const homeId = parseInt(req.params.homeId);
       const fundData = insertFundSchema.parse({ ...req.body, homeId });
       const fund = await storage.createFund(fundData);
+      logInfo("funds.create", "Fund created successfully", { fundId: fund.id, homeId });
       res.json(fund);
     } catch (error) {
-      console.error("Error creating fund:", error);
-      res.status(400).json({ message: "Failed to create fund" });
+      return handleApiError(res, "funds.create", error);
     }
   });
   
@@ -210,10 +208,10 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       const fund = await storage.updateFund(id, req.body);
+      logInfo("funds.update", "Fund updated successfully", { fundId: id });
       res.json(fund);
     } catch (error) {
-      console.error("Error updating fund:", error);
-      res.status(400).json({ message: "Failed to update fund" });
+      return handleApiError(res, "funds.update", error);
     }
   });
   
@@ -221,10 +219,10 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       await storage.deleteFund(id);
+      logInfo("funds.delete", "Fund deleted successfully", { fundId: id });
       res.json({ message: "Fund deleted successfully" });
     } catch (error) {
-      console.error("Error deleting fund:", error);
-      res.status(400).json({ message: "Failed to delete fund" });
+      return handleApiError(res, "funds.delete", error);
     }
   });
   
@@ -235,8 +233,7 @@ export async function registerRoutes(
       const allocations = await storage.getAllocationsByFundId(fundId);
       res.json(allocations);
     } catch (error) {
-      console.error("Error fetching allocations:", error);
-      res.status(500).json({ message: "Failed to fetch allocations" });
+      return handleApiError(res, "allocations.get", error, 500);
     }
   });
   
@@ -246,8 +243,7 @@ export async function registerRoutes(
       const allocations = await storage.getAllocationsByTaskId(taskId);
       res.json(allocations);
     } catch (error) {
-      console.error("Error fetching task allocations:", error);
-      res.status(500).json({ message: "Failed to fetch task allocations" });
+      return handleApiError(res, "allocations.getByTask", error, 500);
     }
   });
   
@@ -255,10 +251,10 @@ export async function registerRoutes(
     try {
       const allocationData = insertFundAllocationSchema.parse(req.body);
       const allocation = await storage.createAllocation(allocationData);
+      logInfo("allocations.create", "Allocation created successfully", { allocationId: allocation.id });
       res.json(allocation);
     } catch (error) {
-      console.error("Error creating allocation:", error);
-      res.status(400).json({ message: "Failed to create allocation" });
+      return handleApiError(res, "allocations.create", error);
     }
   });
   
@@ -266,10 +262,10 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       const allocation = await storage.updateAllocation(id, req.body);
+      logInfo("allocations.update", "Allocation updated successfully", { allocationId: id });
       res.json(allocation);
     } catch (error) {
-      console.error("Error updating allocation:", error);
-      res.status(400).json({ message: "Failed to update allocation" });
+      return handleApiError(res, "allocations.update", error);
     }
   });
   
@@ -277,10 +273,10 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       await storage.deleteAllocation(id);
+      logInfo("allocations.delete", "Allocation deleted successfully", { allocationId: id });
       res.json({ message: "Allocation deleted successfully" });
     } catch (error) {
-      console.error("Error deleting allocation:", error);
-      res.status(400).json({ message: "Failed to delete allocation" });
+      return handleApiError(res, "allocations.delete", error);
     }
   });
   
@@ -291,8 +287,7 @@ export async function registerRoutes(
       const expensesList = await storage.getExpensesByHomeId(homeId);
       res.json(expensesList);
     } catch (error) {
-      console.error("Error fetching expenses:", error);
-      res.status(500).json({ message: "Failed to fetch expenses" });
+      return handleApiError(res, "expenses.get", error, 500);
     }
   });
   
@@ -302,8 +297,7 @@ export async function registerRoutes(
       const expensesList = await storage.getExpensesByFundId(fundId);
       res.json(expensesList);
     } catch (error) {
-      console.error("Error fetching fund expenses:", error);
-      res.status(500).json({ message: "Failed to fetch fund expenses" });
+      return handleApiError(res, "expenses.getByFund", error, 500);
     }
   });
   
@@ -311,10 +305,10 @@ export async function registerRoutes(
     try {
       const expenseData = insertExpenseSchema.parse(req.body);
       const expense = await storage.createExpense(expenseData);
+      logInfo("expenses.create", "Expense created successfully", { expenseId: expense.id });
       res.json(expense);
     } catch (error) {
-      console.error("Error creating expense:", error);
-      res.status(400).json({ message: "Failed to create expense" });
+      return handleApiError(res, "expenses.create", error);
     }
   });
   
@@ -322,10 +316,10 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       const expense = await storage.updateExpense(id, req.body);
+      logInfo("expenses.update", "Expense updated successfully", { expenseId: id });
       res.json(expense);
     } catch (error) {
-      console.error("Error updating expense:", error);
-      res.status(400).json({ message: "Failed to update expense" });
+      return handleApiError(res, "expenses.update", error);
     }
   });
   
