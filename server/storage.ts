@@ -11,9 +11,18 @@ import {
   chatMessages,
   type ChatMessage,
   type InsertChatMessage,
+  funds,
+  type Fund,
+  type InsertFund,
+  fundAllocations,
+  type FundAllocation,
+  type InsertFundAllocation,
+  expenses,
+  type Expense,
+  type InsertExpense,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Homes
@@ -36,6 +45,27 @@ export interface IStorage {
   // Chat Messages
   getChatMessagesByHomeId(homeId: number): Promise<ChatMessage[]>;
   createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
+  
+  // Funds
+  getFundsByHomeId(homeId: number): Promise<Fund[]>;
+  getFund(id: number): Promise<Fund | undefined>;
+  createFund(fund: InsertFund): Promise<Fund>;
+  updateFund(id: number, data: Partial<InsertFund>): Promise<Fund>;
+  deleteFund(id: number): Promise<void>;
+  
+  // Fund Allocations
+  getAllocationsByFundId(fundId: number): Promise<FundAllocation[]>;
+  getAllocationsByTaskId(taskId: number): Promise<FundAllocation[]>;
+  createAllocation(allocation: InsertFundAllocation): Promise<FundAllocation>;
+  updateAllocation(id: number, data: Partial<InsertFundAllocation>): Promise<FundAllocation>;
+  deleteAllocation(id: number): Promise<void>;
+  
+  // Expenses
+  getExpensesByFundId(fundId: number): Promise<Expense[]>;
+  getExpensesByHomeId(homeId: number): Promise<Expense[]>;
+  createExpense(expense: InsertExpense): Promise<Expense>;
+  updateExpense(id: number, data: Partial<InsertExpense>): Promise<Expense>;
+  deleteExpense(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -121,6 +151,104 @@ export class DatabaseStorage implements IStorage {
   async createChatMessage(messageData: InsertChatMessage): Promise<ChatMessage> {
     const [message] = await db.insert(chatMessages).values(messageData).returning();
     return message;
+  }
+  
+  // Funds
+  async getFundsByHomeId(homeId: number): Promise<Fund[]> {
+    return await db.select().from(funds).where(eq(funds.homeId, homeId));
+  }
+  
+  async getFund(id: number): Promise<Fund | undefined> {
+    const [fund] = await db.select().from(funds).where(eq(funds.id, id));
+    return fund;
+  }
+  
+  async createFund(fundData: InsertFund): Promise<Fund> {
+    const [fund] = await db.insert(funds).values(fundData).returning();
+    return fund;
+  }
+  
+  async updateFund(id: number, data: Partial<InsertFund>): Promise<Fund> {
+    const [fund] = await db
+      .update(funds)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(funds.id, id))
+      .returning();
+    return fund;
+  }
+  
+  async deleteFund(id: number): Promise<void> {
+    await db.delete(funds).where(eq(funds.id, id));
+  }
+  
+  // Fund Allocations
+  async getAllocationsByFundId(fundId: number): Promise<FundAllocation[]> {
+    return await db
+      .select()
+      .from(fundAllocations)
+      .where(eq(fundAllocations.fundId, fundId));
+  }
+  
+  async getAllocationsByTaskId(taskId: number): Promise<FundAllocation[]> {
+    return await db
+      .select()
+      .from(fundAllocations)
+      .where(eq(fundAllocations.taskId, taskId));
+  }
+  
+  async createAllocation(allocationData: InsertFundAllocation): Promise<FundAllocation> {
+    const [allocation] = await db.insert(fundAllocations).values(allocationData).returning();
+    return allocation;
+  }
+  
+  async updateAllocation(id: number, data: Partial<InsertFundAllocation>): Promise<FundAllocation> {
+    const [allocation] = await db
+      .update(fundAllocations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(fundAllocations.id, id))
+      .returning();
+    return allocation;
+  }
+  
+  async deleteAllocation(id: number): Promise<void> {
+    await db.delete(fundAllocations).where(eq(fundAllocations.id, id));
+  }
+  
+  // Expenses
+  async getExpensesByFundId(fundId: number): Promise<Expense[]> {
+    return await db
+      .select()
+      .from(expenses)
+      .where(eq(expenses.fundId, fundId))
+      .orderBy(desc(expenses.createdAt));
+  }
+  
+  async getExpensesByHomeId(homeId: number): Promise<Expense[]> {
+    return await db
+      .select()
+      .from(expenses)
+      .innerJoin(funds, eq(expenses.fundId, funds.id))
+      .where(eq(funds.homeId, homeId))
+      .orderBy(desc(expenses.createdAt))
+      .then(rows => rows.map(r => r.expenses));
+  }
+  
+  async createExpense(expenseData: InsertExpense): Promise<Expense> {
+    const [expense] = await db.insert(expenses).values(expenseData).returning();
+    return expense;
+  }
+  
+  async updateExpense(id: number, data: Partial<InsertExpense>): Promise<Expense> {
+    const [expense] = await db
+      .update(expenses)
+      .set(data)
+      .where(eq(expenses.id, id))
+      .returning();
+    return expense;
+  }
+  
+  async deleteExpense(id: number): Promise<void> {
+    await db.delete(expenses).where(eq(expenses.id, id));
   }
 }
 

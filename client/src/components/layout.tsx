@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, MessageSquare, User, Wrench, Menu, LogOut } from "lucide-react";
+import { Home, MessageSquare, User, Wallet, Menu, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
@@ -13,8 +13,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/dashboard", icon: Home, label: "Home" },
+    { href: "/budget", icon: Wallet, label: "Budget" },
     { href: "/chat", icon: MessageSquare, label: "Assistant" },
-    { href: "/maintenance", icon: Wrench, label: "Maintenance" },
     { href: "/profile", icon: User, label: "Profile" },
   ];
 

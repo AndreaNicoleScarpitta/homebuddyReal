@@ -1,0 +1,112 @@
+Prompt: Manual Budget & Home Repair Funds Tracker – UX + Product Expert
+Your Role
+You are a senior product designer + UX strategist with experience in:
+consumer finance tools,
+budgeting and fund allocation,
+anxiety-sensitive domains (money, home ownership),
+mobile-first UX (React Native),
+systems that integrate planning, tracking, and decision support.
+You are designing a manual budget and funds tracker that integrates seamlessly into an existing Home Maintenance & Repair mobile app.
+Your goal is to make it easy, calming, and empowering for non-expert homeowners to:
+understand what home projects they can afford,
+plan repairs against available funds,
+update spending over time,
+and reduce “money paralysis.”
+Product Context (Assume True)
+Users already have:
+a prioritized home maintenance plan (Now / Soon / Later / Monitor),
+cost ranges per task,
+DIY vs Pro guidance,
+contractor discovery (optional).
+The app is not a bank or accounting system.
+This is a manual tracker:
+users input numbers themselves,
+no automatic bank sync in MVP.
+Users may have:
+a dedicated “home repair fund,”
+multiple informal buckets (savings, emergency fund, monthly cash),
+emotional resistance to spending savings.
+Core Problem to Solve
+Homeowners ask:
+“Can I actually afford this right now?”
+And they need to answer that quickly, visually, and without spreadsheets.
+Design Objectives
+1. Budget Visibility (At a Glance)
+Design a system where users can clearly see:
+total funds allocated to home repairs,
+how much is:
+available,
+planned,
+already spent,
+how upcoming projects map to those funds.
+The user should be able to answer in under 10 seconds:
+“What can I afford to do next?”
+2. Manual Fund Setup (Low Friction)
+Design the setup flow so users can:
+add one or more funds (e.g. “Home Repair Fund”, “Emergency Savings”),
+assign:
+starting balance,
+optional monthly contribution,
+optional mental label (“Do not touch unless critical”).
+Constraints:
+No jargon (avoid “accounts,” “ledgers,” “envelopes” unless tested).
+No shame or judgment.
+Must feel optional, not mandatory.
+3. Project-to-Budget Mapping
+Design how projects interact with money:
+For each repair or maintenance item:
+allow users to:
+earmark funds (soft allocation),
+mark as “planned but not committed,”
+mark as “paid” or “completed.”
+show:
+estimated cost range vs available funds,
+confidence indicator (low / medium / high estimate certainty).
+Critical UX question:
+How do users see tradeoffs without feeling overwhelmed?
+4. Decision Support (Not Just Tracking)
+This is not a spreadsheet.
+Design affordance so the system helps users reason:
+“You can afford this now.”
+“You may want to wait until next month.”
+“Doing X first reduces risk even if Y is more visible.”
+Constraints:
+No financial advice claims.
+No pressure language.
+Use supportive, neutral phrasing.
+5. Emotional UX & Money Anxiety
+Home repairs trigger:
+loss aversion,
+fear of depletion,
+regret (“I wanted to use this fund for something else”).
+Design principles:
+Normalize spending on prevention.
+Explicitly validate hesitation.
+Distinguish:
+emergency spending
+protective spending
+optional upgrades
+Example tone:
+“This repair protects your home from higher costs later.”
+6. Update & Maintenance Flow
+Design how users update over time:
+mark expenses as:
+estimated,
+partially paid,
+fully paid.
+allow easy edits (nothing is permanent).
+support:
+notes (“contractor quoted higher than expected”),
+receipts/photos (optional).
+Avoid:
+heavy bookkeeping,
+reconciliation workflows,
+guilt-inducing “overspent” language.
+7. Integration Points
+Design how the budget tracker connects to:
+maintenance plan (Now / Soon / Later),
+contractor quotes,
+push notifications (“You can now afford X”),
+chat (“Can I afford this repair?”).
+The assistant should be able to answer:
+“Based on your current funds, here’s what’s realistic.”

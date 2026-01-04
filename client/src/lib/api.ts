@@ -1,4 +1,4 @@
-import type { Home, System, MaintenanceTask, ChatMessage } from "@shared/schema";
+import type { Home, System, MaintenanceTask, ChatMessage, Fund, FundAllocation, Expense } from "@shared/schema";
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -113,4 +113,127 @@ export async function createChatMessage(homeId: number, data: {
     body: JSON.stringify(data),
   });
   return handleResponse<ChatMessage>(response);
+}
+
+// Funds API
+export async function getFunds(homeId: number): Promise<Fund[]> {
+  const response = await fetch(`/api/home/${homeId}/funds`);
+  return handleResponse<Fund[]>(response);
+}
+
+export async function createFund(homeId: number, data: {
+  name: string;
+  balance: number;
+  monthlyContribution?: number;
+  fundType?: string;
+  label?: string;
+  color?: string;
+}): Promise<Fund> {
+  const response = await fetch(`/api/home/${homeId}/funds`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<Fund>(response);
+}
+
+export async function updateFund(id: number, data: Partial<Fund>): Promise<Fund> {
+  const response = await fetch(`/api/funds/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<Fund>(response);
+}
+
+export async function deleteFund(id: number): Promise<void> {
+  const response = await fetch(`/api/funds/${id}`, {
+    method: "DELETE",
+  });
+  return handleResponse<void>(response);
+}
+
+// Allocations API
+export async function getAllocationsByFund(fundId: number): Promise<FundAllocation[]> {
+  const response = await fetch(`/api/funds/${fundId}/allocations`);
+  return handleResponse<FundAllocation[]>(response);
+}
+
+export async function getAllocationsByTask(taskId: number): Promise<FundAllocation[]> {
+  const response = await fetch(`/api/tasks/${taskId}/allocations`);
+  return handleResponse<FundAllocation[]>(response);
+}
+
+export async function createAllocation(data: {
+  fundId: number;
+  taskId: number;
+  amount: number;
+  status?: string;
+  notes?: string;
+}): Promise<FundAllocation> {
+  const response = await fetch(`/api/allocations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<FundAllocation>(response);
+}
+
+export async function updateAllocation(id: number, data: Partial<FundAllocation>): Promise<FundAllocation> {
+  const response = await fetch(`/api/allocations/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<FundAllocation>(response);
+}
+
+export async function deleteAllocation(id: number): Promise<void> {
+  const response = await fetch(`/api/allocations/${id}`, {
+    method: "DELETE",
+  });
+  return handleResponse<void>(response);
+}
+
+// Expenses API
+export async function getExpenses(homeId: number): Promise<Expense[]> {
+  const response = await fetch(`/api/home/${homeId}/expenses`);
+  return handleResponse<Expense[]>(response);
+}
+
+export async function getExpensesByFund(fundId: number): Promise<Expense[]> {
+  const response = await fetch(`/api/funds/${fundId}/expenses`);
+  return handleResponse<Expense[]>(response);
+}
+
+export async function createExpense(data: {
+  fundId: number;
+  taskId?: number;
+  amount: number;
+  description?: string;
+  paymentStatus?: string;
+  notes?: string;
+}): Promise<Expense> {
+  const response = await fetch(`/api/expenses`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<Expense>(response);
+}
+
+export async function updateExpense(id: number, data: Partial<Expense>): Promise<Expense> {
+  const response = await fetch(`/api/expenses/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<Expense>(response);
+}
+
+export async function deleteExpense(id: number): Promise<void> {
+  const response = await fetch(`/api/expenses/${id}`, {
+    method: "DELETE",
+  });
+  return handleResponse<void>(response);
 }

@@ -82,6 +82,65 @@ export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ i
 export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 
+// Funds table - stores user's budget funds/buckets
+export const funds = pgTable("funds", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 100 }).notNull(),
+  balance: integer("balance").notNull().default(0), // in cents
+  monthlyContribution: integer("monthly_contribution").default(0), // in cents
+  fundType: varchar("fund_type", { length: 50 }).default("general"), // general, emergency, dedicated
+  label: text("label"), // optional mental label like "Do not touch unless critical"
+  color: varchar("color", { length: 20 }).default("#f97316"), // for visual distinction
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("funds_home_id_idx").on(table.homeId),
+]);
+
+export const insertFundSchema = createInsertSchema(funds).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertFund = z.infer<typeof insertFundSchema>;
+export type Fund = typeof funds.$inferSelect;
+
+// Fund allocations table - tracks money earmarked for specific tasks
+export const fundAllocations = pgTable("fund_allocations", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  fundId: integer("fund_id").notNull().references(() => funds.id, { onDelete: "cascade" }),
+  taskId: integer("task_id").notNull().references(() => maintenanceTasks.id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull().default(0), // in cents
+  status: varchar("status", { length: 50 }).default("planned"), // planned, committed, paid
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("fund_allocations_fund_id_idx").on(table.fundId),
+  index("fund_allocations_task_id_idx").on(table.taskId),
+]);
+
+export const insertFundAllocationSchema = createInsertSchema(fundAllocations).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertFundAllocation = z.infer<typeof insertFundAllocationSchema>;
+export type FundAllocation = typeof fundAllocations.$inferSelect;
+
+// Expenses table - tracks actual spending
+export const expenses = pgTable("expenses", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  fundId: integer("fund_id").notNull().references(() => funds.id, { onDelete: "cascade" }),
+  taskId: integer("task_id").references(() => maintenanceTasks.id, { onDelete: "set null" }),
+  amount: integer("amount").notNull().default(0), // in cents
+  description: text("description"),
+  paymentStatus: varchar("payment_status", { length: 50 }).default("paid"), // estimated, partial, paid
+  paidAt: timestamp("paid_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("expenses_fund_id_idx").on(table.fundId),
+  index("expenses_task_id_idx").on(table.taskId),
+]);
+
+export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true, createdAt: true });
+export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+export type Expense = typeof expenses.$inferSelect;
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   homes: many(homes),
@@ -95,6 +154,7 @@ export const homesRelations = relations(homes, ({ one, many }) => ({
   systems: many(systems),
   maintenanceTasks: many(maintenanceTasks),
   chatMessages: many(chatMessages),
+  funds: many(funds),
 }));
 
 export const systemsRelations = relations(systems, ({ one }) => ({
@@ -104,16 +164,49 @@ export const systemsRelations = relations(systems, ({ one }) => ({
   }),
 }));
 
-export const maintenanceTasksRelations = relations(maintenanceTasks, ({ one }) => ({
+export const maintenanceTasksRelations = relations(maintenanceTasks, ({ one, many }) => ({
   home: one(homes, {
     fields: [maintenanceTasks.homeId],
     references: [homes.id],
   }),
+  allocations: many(fundAllocations),
+  expenses: many(expenses),
 }));
 
 export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
   home: one(homes, {
     fields: [chatMessages.homeId],
     references: [homes.id],
+  }),
+}));
+
+export const fundsRelations = relations(funds, ({ one, many }) => ({
+  home: one(homes, {
+    fields: [funds.homeId],
+    references: [homes.id],
+  }),
+  allocations: many(fundAllocations),
+  expenses: many(expenses),
+}));
+
+export const fundAllocationsRelations = relations(fundAllocations, ({ one }) => ({
+  fund: one(funds, {
+    fields: [fundAllocations.fundId],
+    references: [funds.id],
+  }),
+  task: one(maintenanceTasks, {
+    fields: [fundAllocations.taskId],
+    references: [maintenanceTasks.id],
+  }),
+}));
+
+export const expensesRelations = relations(expenses, ({ one }) => ({
+  fund: one(funds, {
+    fields: [expenses.fundId],
+    references: [funds.id],
+  }),
+  task: one(maintenanceTasks, {
+    fields: [expenses.taskId],
+    references: [maintenanceTasks.id],
   }),
 }));
