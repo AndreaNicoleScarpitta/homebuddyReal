@@ -16,6 +16,8 @@ Home Buddy is a home maintenance assistant web application with OAuth authentica
 - PWA with service worker and manifest for installability
 
 ## Recent Changes
+- 2026-01-04: Updated AI system prompt with comprehensive operating instructions covering response structure, safety escalation, tone guidelines, budget handling, provider research rules, and photo analysis
+- 2026-01-04: Added photo upload to chat with Vision API, consent modal, Terms page, and high-risk topic filtering
 - 2026-01-04: Added onboarding tour for new users with tooltips, spotlight highlights, and guided steps through key features (home status, quick stats, maintenance plan, budget, inspections, assistant)
 - 2026-01-04: Major UX overhaul implementing comprehensive audit findings:
   - Replaced numeric Home Health Score with tier-based status (Healthy/Watch/Needs Attention)
