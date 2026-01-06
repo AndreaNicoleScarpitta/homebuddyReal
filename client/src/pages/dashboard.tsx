@@ -4,6 +4,7 @@ import { HomeInfoCard } from "@/components/home-info-card";
 import { MaintenanceCard } from "@/components/maintenance-card";
 import { AddSystemWizard } from "@/components/add-system-wizard";
 import { OnboardingTour, useTourState } from "@/components/onboarding-tour";
+import { ContractorSection } from "@/components/contractor-section";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -224,6 +225,13 @@ export default function Dashboard() {
             </div>
           )}
         </section>
+
+        {/* Contractor Section */}
+        {tasks.filter(t => t.diyLevel === "Pro-Only" && t.status !== "completed").length > 0 && (
+          <section className="space-y-4" data-tour="find-pro">
+            <ContractorSection homeId={home.id} pendingTasks={tasks} />
+          </section>
+        )}
 
         {/* Help link */}
         {hasSeenTour && (

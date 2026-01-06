@@ -76,6 +76,13 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
     installYear: "",
     condition: "Unknown",
     notes: "",
+    make: "",
+    model: "",
+    material: "",
+    energyRating: "",
+    provider: "",
+    treatmentType: "",
+    recurrenceInterval: "",
   });
 
   const queryClient = useQueryClient();
@@ -86,10 +93,17 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
       category: data.category,
       name: data.name,
       installYear: data.installYear ? parseInt(data.installYear) : undefined,
-      condition: data.condition,
+      condition: data.category === "Pest" ? undefined : data.condition,
       notes: data.notes || undefined,
+      make: data.make || undefined,
+      model: data.model || undefined,
+      material: data.material || undefined,
+      energyRating: data.energyRating || undefined,
+      provider: data.provider || undefined,
+      treatmentType: data.treatmentType || undefined,
+      recurrenceInterval: data.recurrenceInterval || undefined,
       source: "manual",
-    }),
+    } as any),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["systems", homeId] });
       toast({ title: "System added", description: `${formData.name} has been added to your home.` });
@@ -102,10 +116,19 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
 
   const handleClose = () => {
     setStep(1);
-    setFormData({ category: "", name: "", installYear: "", condition: "Unknown", notes: "" });
+    setFormData({ 
+      category: "", name: "", installYear: "", condition: "Unknown", notes: "",
+      make: "", model: "", material: "", energyRating: "", provider: "", treatmentType: "", recurrenceInterval: ""
+    });
     setShowHints(false);
     onClose();
   };
+
+  const showsCondition = (cat: string) => !["Pest"].includes(cat);
+  const showsMakeModel = (cat: string) => ["HVAC", "Appliances", "Water Heater"].includes(cat);
+  const showsMaterial = (cat: string) => ["Roof", "Windows", "Siding/Exterior", "Foundation"].includes(cat);
+  const showsEnergyRating = (cat: string) => ["HVAC", "Windows", "Water Heater"].includes(cat);
+  const showsPestFields = (cat: string) => cat === "Pest";
 
   const handleCategorySelect = (category: string) => {
     setFormData({ ...formData, category, name: formData.name || category });
@@ -203,29 +226,124 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
                   data-testid="input-install-year"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="condition">Condition</Label>
-                <Select value={formData.condition} onValueChange={(v) => setFormData({ ...formData, condition: v })}>
-                  <SelectTrigger data-testid="select-condition">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {systemConditions.map((cond) => (
-                      <SelectItem key={cond} value={cond}>{cond}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {showsCondition(formData.category) && (
+                <div className="space-y-2">
+                  <Label htmlFor="condition">Condition</Label>
+                  <Select value={formData.condition} onValueChange={(v) => setFormData({ ...formData, condition: v })}>
+                    <SelectTrigger data-testid="select-condition">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {systemConditions.map((cond) => (
+                        <SelectItem key={cond} value={cond}>{cond}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
+            
+            {showsMakeModel(formData.category) && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="make">Make/Brand</Label>
+                  <Input
+                    id="make"
+                    placeholder="e.g., Carrier, Lennox"
+                    value={formData.make}
+                    onChange={(e) => setFormData({ ...formData, make: e.target.value })}
+                    data-testid="input-make"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="model">Model</Label>
+                  <Input
+                    id="model"
+                    placeholder="Model number"
+                    value={formData.model}
+                    onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                    data-testid="input-model"
+                  />
+                </div>
+              </div>
+            )}
+            
+            {showsMaterial(formData.category) && (
+              <div className="space-y-2">
+                <Label htmlFor="material">Material</Label>
+                <Input
+                  id="material"
+                  placeholder={formData.category === "Roof" ? "e.g., Asphalt Shingle, Metal" : "e.g., Vinyl, Wood, Aluminum"}
+                  value={formData.material}
+                  onChange={(e) => setFormData({ ...formData, material: e.target.value })}
+                  data-testid="input-material"
+                />
+              </div>
+            )}
+            
+            {showsEnergyRating(formData.category) && (
+              <div className="space-y-2">
+                <Label htmlFor="energyRating">Energy Rating (optional)</Label>
+                <Input
+                  id="energyRating"
+                  placeholder="e.g., SEER 16, Energy Star"
+                  value={formData.energyRating}
+                  onChange={(e) => setFormData({ ...formData, energyRating: e.target.value })}
+                  data-testid="input-energy-rating"
+                />
+              </div>
+            )}
+            
+            {showsPestFields(formData.category) && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="provider">Pest Control Provider</Label>
+                  <Input
+                    id="provider"
+                    placeholder="e.g., Terminix, Orkin, local company"
+                    value={formData.provider}
+                    onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
+                    data-testid="input-provider"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="treatmentType">Treatment Type</Label>
+                    <Input
+                      id="treatmentType"
+                      placeholder="e.g., Termite, General Pest"
+                      value={formData.treatmentType}
+                      onChange={(e) => setFormData({ ...formData, treatmentType: e.target.value })}
+                      data-testid="input-treatment-type"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="recurrenceInterval">Service Frequency</Label>
+                    <Select value={formData.recurrenceInterval} onValueChange={(v) => setFormData({ ...formData, recurrenceInterval: v })}>
+                      <SelectTrigger data-testid="select-recurrence">
+                        <SelectValue placeholder="Select..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                        <SelectItem value="biannual">Twice a year</SelectItem>
+                        <SelectItem value="annual">Annual</SelectItem>
+                        <SelectItem value="one-time">One-time</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </>
+            )}
             
             <div className="space-y-2">
               <Label htmlFor="notes">Notes (optional)</Label>
               <Textarea
                 id="notes"
-                placeholder="Brand, model, serial number, or any relevant details..."
+                placeholder="Serial number or any relevant details..."
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                rows={3}
+                rows={2}
                 data-testid="input-notes"
               />
             </div>
@@ -259,14 +377,58 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
                     <span className="text-muted-foreground">Category:</span>
                     <span className="ml-2">{formData.category}</span>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Condition:</span>
-                    <span className="ml-2">{formData.condition}</span>
-                  </div>
+                  {showsCondition(formData.category) && (
+                    <div>
+                      <span className="text-muted-foreground">Condition:</span>
+                      <span className="ml-2">{formData.condition}</span>
+                    </div>
+                  )}
                   {formData.installYear && (
                     <div>
                       <span className="text-muted-foreground">Installed:</span>
                       <span className="ml-2">{formData.installYear}</span>
+                    </div>
+                  )}
+                  {formData.make && (
+                    <div>
+                      <span className="text-muted-foreground">Make:</span>
+                      <span className="ml-2">{formData.make}</span>
+                    </div>
+                  )}
+                  {formData.model && (
+                    <div>
+                      <span className="text-muted-foreground">Model:</span>
+                      <span className="ml-2">{formData.model}</span>
+                    </div>
+                  )}
+                  {formData.material && (
+                    <div>
+                      <span className="text-muted-foreground">Material:</span>
+                      <span className="ml-2">{formData.material}</span>
+                    </div>
+                  )}
+                  {formData.energyRating && (
+                    <div>
+                      <span className="text-muted-foreground">Energy:</span>
+                      <span className="ml-2">{formData.energyRating}</span>
+                    </div>
+                  )}
+                  {formData.provider && (
+                    <div>
+                      <span className="text-muted-foreground">Provider:</span>
+                      <span className="ml-2">{formData.provider}</span>
+                    </div>
+                  )}
+                  {formData.treatmentType && (
+                    <div>
+                      <span className="text-muted-foreground">Treatment:</span>
+                      <span className="ml-2">{formData.treatmentType}</span>
+                    </div>
+                  )}
+                  {formData.recurrenceInterval && (
+                    <div>
+                      <span className="text-muted-foreground">Frequency:</span>
+                      <span className="ml-2">{formData.recurrenceInterval}</span>
                     </div>
                   )}
                 </div>

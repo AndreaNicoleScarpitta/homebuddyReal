@@ -1,9 +1,28 @@
-import { Calendar, AlertTriangle, CheckCircle2, Clock, ChevronRight, User, ShieldAlert } from "lucide-react";
+import { Calendar, AlertTriangle, CheckCircle2, Clock, ChevronRight, User, ShieldAlert, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { MaintenanceTask } from "@shared/schema";
+
+const serviceTypeMapping: Record<string, string> = {
+  "HVAC": "hvac",
+  "Plumbing": "plumbing", 
+  "Electrical": "electricians",
+  "Roof": "roofing",
+  "Windows": "windows",
+  "Siding/Exterior": "siding",
+  "Foundation": "foundation",
+  "Appliances": "appliance-repair",
+  "Water Heater": "water-heater",
+  "Landscaping": "landscaping",
+  "Pest": "pest-control",
+};
+
+function buildAngiesListUrl(serviceType: string): string {
+  const category = serviceTypeMapping[serviceType] || "home-improvement";
+  return `https://www.angi.com/companylist/${category}.htm`;
+}
 
 interface TaskProps {
   task: MaintenanceTask;
@@ -82,6 +101,19 @@ export function MaintenanceCard({ task }: TaskProps) {
              <span className="font-semibold text-foreground">{task.estimatedCost || "TBD"}</span>
           </div>
         </div>
+        
+        {task.diyLevel === "Pro-Only" && task.status !== "completed" && (
+          <a
+            href={buildAngiesListUrl(task.category || "Other")}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 flex items-center justify-center gap-2 w-full py-2 px-3 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+            data-testid={`link-find-pro-task-${task.id}`}
+          >
+            Find a Pro on Angi
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
       </CardContent>
     </Card>
   );
