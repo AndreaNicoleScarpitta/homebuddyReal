@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,10 +24,12 @@ import {
   ArrowLeft,
   Check,
   Info,
-  Camera
+  Camera,
+  Loader2,
+  Sparkles
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createSystem } from "@/lib/api";
+import { createSystem, identifySystemFromImage } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { systemCategories, systemConditions } from "@shared/schema";
 
@@ -70,6 +72,8 @@ const categoryHints: Record<string, string> = {
 export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProps) {
   const [step, setStep] = useState(1);
   const [showHints, setShowHints] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     category: "",
     name: "",
@@ -87,6 +91,66 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsAnalyzing(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        try {
+          const result = await identifySystemFromImage(base64);
+          
+          const validCategory = systemCategories.includes(result.category as any) 
+            ? result.category 
+            : "";
+          
+          setFormData(prev => ({
+            ...prev,
+            category: validCategory || prev.category,
+            name: result.name || prev.name,
+            make: result.make || prev.make,
+            model: result.model || prev.model,
+            condition: result.condition || prev.condition,
+            material: result.material || prev.material,
+            notes: result.notes ? `${prev.notes}${prev.notes ? "\n" : ""}AI: ${result.notes}` : prev.notes,
+          }));
+          
+          if (validCategory) {
+            setStep(2);
+          }
+          
+          toast({
+            title: "System identified",
+            description: result.name ? `Detected: ${result.name}` : "Photo analyzed - please verify details",
+          });
+        } catch (error) {
+          toast({
+            title: "Analysis failed",
+            description: "Could not identify the system. Please select a category manually.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsAnalyzing(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      setIsAnalyzing(false);
+      toast({
+        title: "Error",
+        description: "Failed to process image",
+        variant: "destructive",
+      });
+    }
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: (data: typeof formData) => createSystem(homeId, {
@@ -153,6 +217,16 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
 
         {step === 1 && (
           <div className="space-y-4">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handlePhotoCapture}
+              className="hidden"
+              data-testid="input-photo-capture"
+            />
+            
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Select a category</span>
               <Button 
@@ -172,7 +246,8 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
                   <button
                     key={category}
                     onClick={() => handleCategorySelect(category)}
-                    className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors"
+                    disabled={isAnalyzing}
+                    className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
                     data-testid={`button-category-${category.toLowerCase().replace(/\//g, "-")}`}
                   >
                     <Icon className="h-6 w-6 text-primary" />
@@ -193,6 +268,32 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
                 </ul>
               </Card>
             )}
+            
+            <div className="pt-2 border-t">
+              <Button
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isAnalyzing}
+                className="w-full gap-2"
+                data-testid="button-photo-identify"
+              >
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Analyzing photo...
+                  </>
+                ) : (
+                  <>
+                    <Camera className="h-4 w-4" />
+                    <Sparkles className="h-3 w-3" />
+                    Can't find it? Take a photo
+                  </>
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground text-center mt-2">
+                AI will identify the system and auto-fill details
+              </p>
+            </div>
           </div>
         )}
 

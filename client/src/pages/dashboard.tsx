@@ -5,6 +5,8 @@ import { MaintenanceCard } from "@/components/maintenance-card";
 import { AddSystemWizard } from "@/components/add-system-wizard";
 import { OnboardingTour, useTourState } from "@/components/onboarding-tour";
 import { ContractorSection } from "@/components/contractor-section";
+import { ContractorSchedule } from "@/components/contractor-schedule";
+import { NotificationSettings } from "@/components/notification-settings";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -232,6 +234,16 @@ export default function Dashboard() {
             <ContractorSection homeId={home.id} pendingTasks={tasks} zipCode={home.zipCode || undefined} />
           </section>
         )}
+        
+        {/* Contractor Schedule */}
+        <section className="space-y-4">
+          <ContractorSchedule homeId={home.id} />
+        </section>
+        
+        {/* Notification Settings */}
+        <section className="space-y-4">
+          <NotificationSettings />
+        </section>
 
         {/* Help link */}
         {hasSeenTour && (

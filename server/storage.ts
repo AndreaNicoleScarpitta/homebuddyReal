@@ -32,6 +32,12 @@ import {
   inspectionFindings,
   type InspectionFinding,
   type InsertInspectionFinding,
+  contractorAppointments,
+  type ContractorAppointment,
+  type InsertContractorAppointment,
+  notificationPreferences,
+  type NotificationPreferences,
+  type InsertNotificationPreferences,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -115,6 +121,19 @@ export interface IStorage {
   updateFinding(id: number, data: Partial<InsertInspectionFinding>): Promise<InspectionFinding>;
   deleteFinding(id: number): Promise<void>;
   verifyReportOwnership(reportId: number, userId: string): Promise<boolean>;
+  
+  // Contractor Appointments
+  getAppointmentsByHomeId(homeId: number): Promise<ContractorAppointment[]>;
+  getAppointment(id: number): Promise<ContractorAppointment | undefined>;
+  createAppointment(appointment: InsertContractorAppointment): Promise<ContractorAppointment>;
+  updateAppointment(id: number, data: Partial<InsertContractorAppointment>): Promise<ContractorAppointment>;
+  deleteAppointment(id: number): Promise<void>;
+  verifyAppointmentOwnership(appointmentId: number, userId: string): Promise<boolean>;
+  
+  // Notification Preferences
+  getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined>;
+  createNotificationPreferences(prefs: InsertNotificationPreferences): Promise<NotificationPreferences>;
+  updateNotificationPreferences(userId: string, data: Partial<InsertNotificationPreferences>): Promise<NotificationPreferences>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -467,6 +486,68 @@ export class DatabaseStorage implements IStorage {
     const report = await this.getInspectionReport(reportId);
     if (!report) return false;
     return this.verifyHomeOwnership(report.homeId, userId);
+  }
+  
+  // Contractor Appointments
+  async getAppointmentsByHomeId(homeId: number): Promise<ContractorAppointment[]> {
+    return await db
+      .select()
+      .from(contractorAppointments)
+      .where(eq(contractorAppointments.homeId, homeId))
+      .orderBy(desc(contractorAppointments.scheduledDate));
+  }
+  
+  async getAppointment(id: number): Promise<ContractorAppointment | undefined> {
+    const [appointment] = await db.select().from(contractorAppointments).where(eq(contractorAppointments.id, id));
+    return appointment;
+  }
+  
+  async createAppointment(appointmentData: InsertContractorAppointment): Promise<ContractorAppointment> {
+    const [appointment] = await db.insert(contractorAppointments).values(appointmentData).returning();
+    return appointment;
+  }
+  
+  async updateAppointment(id: number, data: Partial<InsertContractorAppointment>): Promise<ContractorAppointment> {
+    const [appointment] = await db
+      .update(contractorAppointments)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(contractorAppointments.id, id))
+      .returning();
+    return appointment;
+  }
+  
+  async deleteAppointment(id: number): Promise<void> {
+    await db.delete(contractorAppointments).where(eq(contractorAppointments.id, id));
+  }
+  
+  async verifyAppointmentOwnership(appointmentId: number, userId: string): Promise<boolean> {
+    const appointment = await this.getAppointment(appointmentId);
+    if (!appointment) return false;
+    return this.verifyHomeOwnership(appointment.homeId, userId);
+  }
+  
+  // Notification Preferences
+  async getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined> {
+    const [prefs] = await db.select().from(notificationPreferences).where(eq(notificationPreferences.userId, userId));
+    return prefs;
+  }
+  
+  async createNotificationPreferences(prefsData: InsertNotificationPreferences): Promise<NotificationPreferences> {
+    const [prefs] = await db.insert(notificationPreferences).values(prefsData).returning();
+    return prefs;
+  }
+  
+  async updateNotificationPreferences(userId: string, data: Partial<InsertNotificationPreferences>): Promise<NotificationPreferences> {
+    const existing = await this.getNotificationPreferences(userId);
+    if (!existing) {
+      return this.createNotificationPreferences({ userId, ...data });
+    }
+    const [prefs] = await db
+      .update(notificationPreferences)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(notificationPreferences.userId, userId))
+      .returning();
+    return prefs;
   }
 }
 

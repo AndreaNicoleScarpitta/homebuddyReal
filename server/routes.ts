@@ -19,6 +19,8 @@ import {
   insertExpenseSchema,
   insertContactMessageSchema,
   insertInspectionReportSchema,
+  insertContractorAppointmentSchema,
+  insertNotificationPreferencesSchema,
 } from "@shared/schema";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
@@ -727,6 +729,165 @@ export async function registerRoutes(
       timestamp: new Date().toISOString(),
       version: "1.0.0"
     });
+  });
+
+  // Notification Preferences routes
+  app.get("/api/notifications/preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let prefs = await storage.getNotificationPreferences(userId);
+      if (!prefs) {
+        prefs = await storage.createNotificationPreferences({ userId });
+      }
+      res.json(prefs);
+    } catch (error) {
+      return handleApiError(res, "notifications.get", error, 500);
+    }
+  });
+  
+  app.patch("/api/notifications/preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const data = insertNotificationPreferencesSchema.partial().parse(req.body);
+      const prefs = await storage.updateNotificationPreferences(userId, data);
+      logInfo("notifications.update", "Preferences updated", { userId });
+      res.json(prefs);
+    } catch (error) {
+      return handleApiError(res, "notifications.update", error);
+    }
+  });
+
+  // Contractor Appointments routes
+  app.get("/api/home/:homeId/appointments", isAuthenticated, async (req: any, res) => {
+    try {
+      const homeId = parseInt(req.params.homeId);
+      const userId = req.user.claims.sub;
+      if (!await storage.verifyHomeOwnership(homeId, userId)) {
+        return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
+      }
+      const appointments = await storage.getAppointmentsByHomeId(homeId);
+      res.json(appointments);
+    } catch (error) {
+      return handleApiError(res, "appointments.list", error, 500);
+    }
+  });
+  
+  app.post("/api/home/:homeId/appointments", isAuthenticated, async (req: any, res) => {
+    try {
+      const homeId = parseInt(req.params.homeId);
+      const userId = req.user.claims.sub;
+      if (!await storage.verifyHomeOwnership(homeId, userId)) {
+        return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
+      }
+      const appointmentData = insertContractorAppointmentSchema.parse({ ...req.body, homeId });
+      const appointment = await storage.createAppointment(appointmentData);
+      logInfo("appointments.create", "Appointment created", { appointmentId: appointment.id });
+      res.json(appointment);
+    } catch (error) {
+      return handleApiError(res, "appointments.create", error);
+    }
+  });
+  
+  app.patch("/api/appointments/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const userId = req.user.claims.sub;
+      if (!await storage.verifyAppointmentOwnership(id, userId)) {
+        return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
+      }
+      const updateData = insertContractorAppointmentSchema.omit({ homeId: true }).partial().parse(req.body);
+      const appointment = await storage.updateAppointment(id, updateData);
+      logInfo("appointments.update", "Appointment updated", { appointmentId: id });
+      res.json(appointment);
+    } catch (error) {
+      return handleApiError(res, "appointments.update", error);
+    }
+  });
+  
+  app.delete("/api/appointments/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const userId = req.user.claims.sub;
+      if (!await storage.verifyAppointmentOwnership(id, userId)) {
+        return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
+      }
+      await storage.deleteAppointment(id);
+      logInfo("appointments.delete", "Appointment deleted", { appointmentId: id });
+      res.json({ message: "Appointment deleted" });
+    } catch (error) {
+      return handleApiError(res, "appointments.delete", error);
+    }
+  });
+
+  // AI System Identification endpoint
+  const systemIdentifySchema = z.object({
+    imageBase64: z.string().min(1, "Image is required"),
+  });
+  
+  app.post("/api/ai/identify-system", isAuthenticated, async (req, res) => {
+    try {
+      const { imageBase64 } = systemIdentifySchema.parse(req.body);
+      
+      logInfo("ai.identify-system", "Analyzing image for system identification");
+      
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+      
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: `You are a home system identification expert. Analyze images of home systems and components to identify what they are.
+            
+Return a JSON object with these fields:
+- category: One of "HVAC", "Plumbing", "Electrical", "Roof", "Windows", "Siding/Exterior", "Foundation", "Appliances", "Water Heater", "Landscaping", "Pest", or "Other"
+- name: A descriptive name for the system (e.g., "Central AC Unit", "Gas Water Heater")
+- make: Brand/manufacturer if visible (e.g., "Carrier", "Rheem")
+- model: Model number if visible
+- condition: Estimated condition: "Excellent", "Good", "Fair", "Poor", or "Unknown"
+- material: Material type if applicable (for roof, windows, siding)
+- estimatedAge: Rough age estimate if possible (e.g., "5-10 years")
+- notes: Any additional observations about the system
+
+Only include fields you can reasonably determine from the image. If unsure, omit the field or set to null.`
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Please identify this home system and provide details in JSON format."
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: imageBase64.startsWith("data:") ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`
+                }
+              }
+            ]
+          }
+        ],
+        max_completion_tokens: 500,
+      });
+      
+      const content = response.choices[0]?.message?.content || "{}";
+      let result;
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        result = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+      } catch {
+        result = { notes: content };
+      }
+      
+      logInfo("ai.identify-system", "System identified successfully", { category: result.category });
+      res.json(result);
+    } catch (error) {
+      return handleApiError(res, "ai.identify-system", error, 500);
+    }
   });
 
   return httpServer;

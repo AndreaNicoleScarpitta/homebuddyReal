@@ -1,4 +1,4 @@
-import type { Home, System, MaintenanceTask, MaintenanceLogEntry, ChatMessage, Fund, FundAllocation, Expense, InspectionReport, InspectionFinding } from "@shared/schema";
+import type { Home, System, MaintenanceTask, MaintenanceLogEntry, ChatMessage, Fund, FundAllocation, Expense, InspectionReport, InspectionFinding, ContractorAppointment, NotificationPreferences } from "@shared/schema";
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -343,4 +343,78 @@ export async function deleteInspectionReport(id: number): Promise<void> {
     method: "DELETE",
   });
   return handleResponse<void>(response);
+}
+
+// AI System Identification
+export interface SystemIdentificationResult {
+  category?: string;
+  name?: string;
+  make?: string;
+  model?: string;
+  condition?: string;
+  material?: string;
+  estimatedAge?: string;
+  notes?: string;
+}
+
+export async function identifySystemFromImage(imageBase64: string): Promise<SystemIdentificationResult> {
+  const response = await fetch("/api/ai/identify-system", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ imageBase64 }),
+  });
+  return handleResponse<SystemIdentificationResult>(response);
+}
+
+// Contractor Appointments
+export async function getAppointments(homeId: number): Promise<ContractorAppointment[]> {
+  const response = await fetch(`/api/home/${homeId}/appointments`);
+  return handleResponse<ContractorAppointment[]>(response);
+}
+
+export async function createAppointment(homeId: number, data: {
+  title: string;
+  scheduledDate?: string;
+  status?: string;
+  estimatedCost?: string;
+  notes?: string;
+  taskId?: number;
+}): Promise<ContractorAppointment> {
+  const response = await fetch(`/api/home/${homeId}/appointments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<ContractorAppointment>(response);
+}
+
+export async function updateAppointment(id: number, data: Partial<ContractorAppointment>): Promise<ContractorAppointment> {
+  const response = await fetch(`/api/appointments/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<ContractorAppointment>(response);
+}
+
+export async function deleteAppointment(id: number): Promise<void> {
+  const response = await fetch(`/api/appointments/${id}`, {
+    method: "DELETE",
+  });
+  return handleResponse<void>(response);
+}
+
+// Notification Preferences
+export async function getNotificationPreferences(): Promise<NotificationPreferences> {
+  const response = await fetch("/api/notifications/preferences");
+  return handleResponse<NotificationPreferences>(response);
+}
+
+export async function updateNotificationPreferences(data: Partial<NotificationPreferences>): Promise<NotificationPreferences> {
+  const response = await fetch("/api/notifications/preferences", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<NotificationPreferences>(response);
 }
