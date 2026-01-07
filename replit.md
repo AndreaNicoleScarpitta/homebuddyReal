@@ -16,18 +16,20 @@ Home Buddy is a home maintenance assistant web application with OAuth authentica
 - PWA with service worker and manifest for installability
 
 ## Recent Changes
+- 2026-01-07: Corrective and capability hardening pass:
+  - Fixed AddSystemWizard form state isolation bug (form resets on dialog open)
+  - Added success step 4 with checkmark, "Done" and "Add Another System" buttons
+  - Extended schema with Asset vs Service distinction (entityType, contractStartDate, cadence fields)
+  - Extended schema with recurring task support (isRecurring, recurrenceCadence, parentTaskId, assignedContractorId, fundId, completedAt)
+  - Added purpose field to funds (shown first in UI) with optional asset scoping (scopedSystemId)
+  - Created EditFundDialog for post-creation fund editing
+  - Created Profile page with user info and moved notification settings from Dashboard
+  - Improved chat: expanding Textarea input, rich text rendering for assistant messages (bold, italics, headings, lists)
+  - Cleaned up Contact page: removed email support and response time cards
 - 2026-01-04: Updated AI system prompt with comprehensive operating instructions covering response structure, safety escalation, tone guidelines, budget handling, provider research rules, and photo analysis
 - 2026-01-04: Added photo upload to chat with Vision API, consent modal, Terms page, and high-risk topic filtering
 - 2026-01-04: Added onboarding tour for new users with tooltips, spotlight highlights, and guided steps through key features (home status, quick stats, maintenance plan, budget, inspections, assistant)
-- 2026-01-04: Major UX overhaul implementing comprehensive audit findings:
-  - Replaced numeric Home Health Score with tier-based status (Healthy/Watch/Needs Attention)
-  - De-templated Budget page to focus on "Repair Readiness" and coverage
-  - Toned down Assistant with calm, professional, anxiety-centered greeting
-  - Enhanced Inspections with "Why this matters" expandable explanations
-  - Grouped findings by Fix Now / Plan Soon / Address Later
-  - Added Angi provider research integration points (optional, non-pushy)
-  - Improved navigation with emotional sublabels (What needs attention, etc.)
-  - Better empty states with value props and reassurance messaging
+- 2026-01-04: Major UX overhaul implementing comprehensive audit findings
 - 2026-01-04: Added PWA manifest, service worker, app icons, and Play Store submission guide
 - 2026-01-04: Added AI chat with streaming, environment validation, email notifications, authorization tests, fixed nested anchor tag hydration errors
 
