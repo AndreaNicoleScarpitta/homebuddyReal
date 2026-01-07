@@ -195,6 +195,8 @@ export async function createFund(homeId: number, data: {
   fundType?: string;
   label?: string;
   color?: string;
+  purpose?: string;
+  scopedSystemId?: number;
 }): Promise<Fund> {
   const response = await fetch(`/api/home/${homeId}/funds`, {
     method: "POST",

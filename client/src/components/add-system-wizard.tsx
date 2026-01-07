@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,6 +91,34 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const initialFormData = {
+    category: "",
+    name: "",
+    installYear: "",
+    condition: "Unknown",
+    notes: "",
+    make: "",
+    model: "",
+    material: "",
+    energyRating: "",
+    provider: "",
+    treatmentType: "",
+    recurrenceInterval: "",
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      setStep(1);
+      setFormData(initialFormData);
+      setShowHints(false);
+      setIsAnalyzing(false);
+      setSavedSystemName("");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  }, [isOpen]);
   
   const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -152,6 +180,8 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
     }
   };
 
+  const [savedSystemName, setSavedSystemName] = useState("");
+
   const createMutation = useMutation({
     mutationFn: (data: typeof formData) => createSystem(homeId, {
       category: data.category,
@@ -170,8 +200,8 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
     } as any),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["systems", homeId] });
-      toast({ title: "System added", description: `${formData.name} has been added to your home.` });
-      handleClose();
+      setSavedSystemName(formData.name);
+      setStep(4); // Show success state
     },
     onError: () => {
       toast({ title: "Error", description: "Could not add system.", variant: "destructive" });
@@ -179,12 +209,6 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
   });
 
   const handleClose = () => {
-    setStep(1);
-    setFormData({ 
-      category: "", name: "", installYear: "", condition: "Unknown", notes: "",
-      make: "", model: "", material: "", energyRating: "", provider: "", treatmentType: "", recurrenceInterval: ""
-    });
-    setShowHints(false);
     onClose();
   };
 
@@ -207,11 +231,12 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add Home System</DialogTitle>
+          <DialogTitle>{step === 4 ? "Success!" : "Add Home System"}</DialogTitle>
           <DialogDescription>
             {step === 1 && "Choose the type of system you want to add."}
             {step === 2 && "Add details about your system."}
             {step === 3 && "Review and save."}
+            {step === 4 && "Your system has been added."}
           </DialogDescription>
         </DialogHeader>
 
@@ -554,6 +579,35 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
                     Add System
                   </>
                 )}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div className="space-y-6 py-4">
+            <div className="flex flex-col items-center text-center">
+              <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
+                <Check className="h-8 w-8 text-green-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-foreground mb-2">
+                {savedSystemName} Added!
+              </h3>
+              <p className="text-muted-foreground text-sm max-w-xs">
+                Your system has been added to your home profile. You can view and manage it from the dashboard.
+              </p>
+            </div>
+            
+            <div className="flex flex-col gap-2 pt-4">
+              <Button onClick={handleClose} data-testid="button-done-success">
+                Done
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setStep(1)}
+                data-testid="button-add-another"
+              >
+                Add Another System
               </Button>
             </div>
           </div>

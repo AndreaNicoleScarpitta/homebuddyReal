@@ -2,7 +2,7 @@ import { Layout } from "@/components/layout";
 import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, Camera, Loader2, AlertCircle, X, Info, Plus, ListTodo, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
@@ -15,6 +15,105 @@ import { PhotoConsentModal, usePhotoConsent } from "@/components/photo-consent-m
 import { AddSystemWizard } from "@/components/add-system-wizard";
 import { Link } from "wouter";
 import logoImage from "@assets/generated_images/orange_house_logo_with_grey_gear..png";
+
+function renderRichText(text: string): JSX.Element {
+  const lines = text.split('\n');
+  const elements: JSX.Element[] = [];
+  let listItems: string[] = [];
+  let inList = false;
+
+  const processInlineMarkdown = (line: string): JSX.Element[] => {
+    const parts: JSX.Element[] = [];
+    let remaining = line;
+    let keyIndex = 0;
+
+    while (remaining) {
+      const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+      const italicMatch = remaining.match(/(?<!\*)\*([^*]+?)\*(?!\*)/);
+      const codeMatch = remaining.match(/`([^`]+)`/);
+
+      if (boldMatch && (!italicMatch || boldMatch.index! <= italicMatch.index!) && (!codeMatch || boldMatch.index! <= codeMatch.index!)) {
+        if (boldMatch.index! > 0) {
+          parts.push(<span key={keyIndex++}>{remaining.slice(0, boldMatch.index)}</span>);
+        }
+        parts.push(<strong key={keyIndex++} className="font-semibold">{boldMatch[1]}</strong>);
+        remaining = remaining.slice(boldMatch.index! + boldMatch[0].length);
+      } else if (italicMatch && (!codeMatch || italicMatch.index! <= codeMatch.index!)) {
+        if (italicMatch.index! > 0) {
+          parts.push(<span key={keyIndex++}>{remaining.slice(0, italicMatch.index)}</span>);
+        }
+        parts.push(<em key={keyIndex++}>{italicMatch[1]}</em>);
+        remaining = remaining.slice(italicMatch.index! + italicMatch[0].length);
+      } else if (codeMatch) {
+        if (codeMatch.index! > 0) {
+          parts.push(<span key={keyIndex++}>{remaining.slice(0, codeMatch.index)}</span>);
+        }
+        parts.push(<code key={keyIndex++} className="bg-muted px-1 py-0.5 rounded text-sm font-mono">{codeMatch[1]}</code>);
+        remaining = remaining.slice(codeMatch.index! + codeMatch[0].length);
+      } else {
+        parts.push(<span key={keyIndex++}>{remaining}</span>);
+        break;
+      }
+    }
+    return parts;
+  };
+
+  const flushList = () => {
+    if (listItems.length > 0) {
+      elements.push(
+        <ul key={`list-${elements.length}`} className="list-disc list-inside space-y-1 my-2">
+          {listItems.map((item, i) => (
+            <li key={i}>{processInlineMarkdown(item)}</li>
+          ))}
+        </ul>
+      );
+      listItems = [];
+    }
+    inList = false;
+  };
+
+  lines.forEach((line, i) => {
+    const trimmedLine = line.trim();
+    
+    if (trimmedLine.startsWith('### ')) {
+      flushList();
+      elements.push(
+        <h4 key={i} className="font-semibold text-foreground mt-3 mb-1">{processInlineMarkdown(trimmedLine.slice(4))}</h4>
+      );
+    } else if (trimmedLine.startsWith('## ')) {
+      flushList();
+      elements.push(
+        <h3 key={i} className="font-bold text-foreground mt-3 mb-1.5 text-base">{processInlineMarkdown(trimmedLine.slice(3))}</h3>
+      );
+    } else if (trimmedLine.startsWith('# ')) {
+      flushList();
+      elements.push(
+        <h2 key={i} className="font-bold text-foreground mt-4 mb-2 text-lg">{processInlineMarkdown(trimmedLine.slice(2))}</h2>
+      );
+    } else if (/^[-*]\s/.test(trimmedLine)) {
+      inList = true;
+      listItems.push(trimmedLine.slice(2));
+    } else if (/^\d+\.\s/.test(trimmedLine)) {
+      if (!inList || listItems.length === 0) {
+        flushList();
+        inList = true;
+      }
+      listItems.push(trimmedLine.replace(/^\d+\.\s/, ''));
+    } else if (trimmedLine === '') {
+      flushList();
+      elements.push(<div key={i} className="h-2" />);
+    } else {
+      flushList();
+      elements.push(
+        <p key={i} className="leading-relaxed">{processInlineMarkdown(line)}</p>
+      );
+    }
+  });
+
+  flushList();
+
+  return <div className="space-y-1">{elements}</div>;
+}
 
 export default function Chat() {
   const [input, setInput] = useState("");
@@ -333,7 +432,9 @@ export default function Chat() {
                             : "bg-white border text-foreground rounded-tl-none"
                         }`}
                       >
-                        <div className="whitespace-pre-wrap">{msg.content}</div>
+                        <div className={msg.role === "assistant" ? "" : "whitespace-pre-wrap"}>
+                        {msg.role === "assistant" ? renderRichText(msg.content) : msg.content}
+                      </div>
                         {msg.role === "assistant" && (
                           <div className="mt-3 pt-2 border-t border-muted/30 text-xs text-muted-foreground italic">
                             This is general guidance only. Consult a professional for your specific situation.
@@ -357,7 +458,7 @@ export default function Chat() {
                         Home Buddy
                       </span>
                       <div className="p-4 rounded-2xl shadow-sm text-sm leading-relaxed bg-white border text-foreground rounded-tl-none">
-                        <div className="whitespace-pre-wrap">{streamingMessage}</div>
+                        <div>{renderRichText(streamingMessage)}</div>
                         <span className="inline-block w-2 h-4 bg-primary/50 animate-pulse ml-1" />
                       </div>
                     </div>
@@ -412,7 +513,7 @@ export default function Chat() {
               </div>
             )}
             
-            <div className="relative flex items-center gap-2">
+            <div className="relative flex items-end gap-2">
               <input
                 type="file"
                 accept="image/*"
@@ -437,13 +538,19 @@ export default function Chat() {
                 </TooltipTrigger>
                 <TooltipContent>Add a photo for analysis</TooltipContent>
               </Tooltip>
-              <Input
+              <Textarea
                 placeholder={selectedImage ? "Ask about this photo..." : "Ask about maintenance, repairs, or costs..."}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !isStreaming && handleSend()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !isStreaming) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
                 disabled={isStreaming}
-                className="flex-1 rounded-full px-4 border-muted-foreground/20 focus-visible:ring-primary/20"
+                className="flex-1 min-h-[44px] max-h-32 px-4 py-2.5 border-muted-foreground/20 focus-visible:ring-primary/20 resize-none overflow-auto rounded-2xl"
+                rows={1}
                 data-testid="input-message"
               />
               <Tooltip>

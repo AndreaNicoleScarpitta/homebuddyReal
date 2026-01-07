@@ -1,5 +1,5 @@
 import { Layout } from "@/components/layout";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getHome, getFunds, getTasks, getExpenses, createFund, updateFund, deleteFund } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,11 +100,18 @@ function FundCard({ fund, onEdit }: { fund: Fund; onEdit: () => void }) {
           </div>
         </div>
       </CardHeader>
-      {fund.label && (
-        <CardContent className="pt-0">
-          <p className="text-xs text-muted-foreground italic bg-muted/50 p-2 rounded">
-            "{fund.label}"
-          </p>
+      {(fund.purpose || fund.label) && (
+        <CardContent className="pt-0 space-y-2">
+          {fund.purpose && (
+            <p className="text-sm text-foreground bg-primary/5 p-2 rounded">
+              {fund.purpose}
+            </p>
+          )}
+          {fund.label && (
+            <p className="text-xs text-muted-foreground italic bg-muted/50 p-2 rounded">
+              "{fund.label}"
+            </p>
+          )}
         </CardContent>
       )}
     </Card>
@@ -174,6 +181,7 @@ function AffordabilityIndicator({ task, totalAvailable }: { task: MaintenanceTas
 
 function AddFundDialog({ homeId, onSuccess }: { homeId: number; onSuccess: () => void }) {
   const [open, setOpen] = useState(false);
+  const [purpose, setPurpose] = useState("");
   const [name, setName] = useState("");
   const [balance, setBalance] = useState("");
   const [monthlyContribution, setMonthlyContribution] = useState("");
@@ -189,6 +197,7 @@ function AddFundDialog({ homeId, onSuccess }: { homeId: number; onSuccess: () =>
         description: "Your new fund has been set up. You're taking a great step toward organized home care!",
       });
       setOpen(false);
+      setPurpose("");
       setName("");
       setBalance("");
       setMonthlyContribution("");
@@ -209,6 +218,7 @@ function AddFundDialog({ homeId, onSuccess }: { homeId: number; onSuccess: () =>
     if (!name || !balance) return;
     createFundMutation.mutate({
       name,
+      purpose: purpose || undefined,
       balance: Math.round(parseFloat(balance) * 100),
       monthlyContribution: monthlyContribution ? Math.round(parseFloat(monthlyContribution) * 100) : 0,
       fundType,
@@ -232,6 +242,20 @@ function AddFundDialog({ homeId, onSuccess }: { homeId: number; onSuccess: () =>
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="fund-purpose">What is this fund for?</Label>
+            <Textarea
+              id="fund-purpose"
+              placeholder="e.g., Saving for a new roof in 2025, Emergency repairs fund, General home maintenance"
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
+              className="resize-none"
+              rows={2}
+              data-testid="input-fund-purpose"
+            />
+            <p className="text-xs text-muted-foreground">Describe the goal or purpose of this fund</p>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="fund-name">Fund Name</Label>
             <Input
@@ -321,8 +345,206 @@ function AddFundDialog({ homeId, onSuccess }: { homeId: number; onSuccess: () =>
   );
 }
 
+function EditFundDialog({ 
+  fund, 
+  open, 
+  onOpenChange, 
+  onSuccess 
+}: { 
+  fund: Fund | null; 
+  open: boolean; 
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const [purpose, setPurpose] = useState("");
+  const [name, setName] = useState("");
+  const [balance, setBalance] = useState("");
+  const [monthlyContribution, setMonthlyContribution] = useState("");
+  const [fundType, setFundType] = useState("general");
+  const [label, setLabel] = useState("");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (fund && open) {
+      setPurpose(fund.purpose || "");
+      setName(fund.name);
+      setBalance(String(fund.balance / 100));
+      setMonthlyContribution(fund.monthlyContribution ? String(fund.monthlyContribution / 100) : "");
+      setFundType(fund.fundType || "general");
+      setLabel(fund.label || "");
+    }
+  }, [fund, open]);
+
+  const updateFundMutation = useMutation({
+    mutationFn: (data: Parameters<typeof updateFund>[1]) => updateFund(fund!.id, data),
+    onSuccess: () => {
+      toast({ title: "Fund updated", description: "Your changes have been saved." });
+      queryClient.invalidateQueries({ queryKey: ["funds"] });
+      onOpenChange(false);
+      onSuccess();
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteFundMutation = useMutation({
+    mutationFn: () => deleteFund(fund!.id),
+    onSuccess: () => {
+      toast({ title: "Fund deleted", description: "The fund has been removed." });
+      queryClient.invalidateQueries({ queryKey: ["funds"] });
+      onOpenChange(false);
+      onSuccess();
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleSave = () => {
+    if (!name || !balance) return;
+    updateFundMutation.mutate({
+      name,
+      purpose: purpose || undefined,
+      balance: Math.round(parseFloat(balance) * 100),
+      monthlyContribution: monthlyContribution ? Math.round(parseFloat(monthlyContribution) * 100) : 0,
+      fundType,
+      label: label || undefined,
+    });
+  };
+
+  const handleDelete = () => {
+    if (confirm("Are you sure you want to delete this fund? This action cannot be undone.")) {
+      deleteFundMutation.mutate();
+    }
+  };
+
+  if (!fund) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-heading">Edit Fund</DialogTitle>
+          <DialogDescription>
+            Update the details of your fund.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="edit-fund-purpose">What is this fund for?</Label>
+            <Textarea
+              id="edit-fund-purpose"
+              placeholder="e.g., Saving for a new roof in 2025, Emergency repairs fund"
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
+              className="resize-none"
+              rows={2}
+              data-testid="input-edit-fund-purpose"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-fund-name">Fund Name</Label>
+            <Input
+              id="edit-fund-name"
+              placeholder="e.g., Roof Reserve, HVAC Fund"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              data-testid="input-edit-fund-name"
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="edit-fund-balance">Current Balance</Label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="edit-fund-balance"
+                type="number"
+                placeholder="500"
+                className="pl-9"
+                value={balance}
+                onChange={(e) => setBalance(e.target.value)}
+                data-testid="input-edit-fund-balance"
+              />
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="edit-fund-contribution">Monthly Contribution</Label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="edit-fund-contribution"
+                type="number"
+                placeholder="100"
+                className="pl-9"
+                value={monthlyContribution}
+                onChange={(e) => setMonthlyContribution(e.target.value)}
+                data-testid="input-edit-fund-contribution"
+              />
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="edit-fund-type">Fund Type</Label>
+            <Select value={fundType} onValueChange={setFundType}>
+              <SelectTrigger data-testid="select-edit-fund-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="general">General repairs</SelectItem>
+                <SelectItem value="dedicated">Specific project</SelectItem>
+                <SelectItem value="emergency">Emergency buffer</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="edit-fund-label">Note to Yourself</Label>
+            <Textarea
+              id="edit-fund-label"
+              placeholder="e.g., 'Don't touch unless critical'"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              className="resize-none"
+              rows={2}
+              data-testid="input-edit-fund-label"
+            />
+          </div>
+        </div>
+        
+        <div className="flex justify-between gap-3">
+          <Button 
+            variant="destructive" 
+            onClick={handleDelete}
+            disabled={deleteFundMutation.isPending}
+            data-testid="button-delete-fund"
+          >
+            Delete
+          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button 
+              onClick={handleSave} 
+              disabled={!name || !balance || updateFundMutation.isPending}
+              data-testid="button-save-fund"
+            >
+              {updateFundMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Budget() {
   const queryClient = useQueryClient();
+  const [editingFund, setEditingFund] = useState<Fund | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const { data: home, isLoading: homeLoading } = useQuery({
     queryKey: ["home"],
@@ -567,7 +789,10 @@ export default function Budget() {
                 <FundCard 
                   key={fund.id} 
                   fund={fund} 
-                  onEdit={() => {/* TODO: Edit fund modal */}} 
+                  onEdit={() => {
+                    setEditingFund(fund);
+                    setEditDialogOpen(true);
+                  }} 
                 />
               ))}
               
@@ -676,6 +901,13 @@ export default function Budget() {
           </Card>
         )}
       </div>
+      
+      <EditFundDialog
+        fund={editingFund}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSuccess={handleRefresh}
+      />
     </Layout>
   );
 }

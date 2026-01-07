@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, MessageSquare, Mail, Wallet, Menu, LogOut, FileText, ClipboardList } from "lucide-react";
+import { Home, MessageSquare, Mail, Wallet, Menu, LogOut, FileText, ClipboardList, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
@@ -17,6 +17,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/budget", icon: Wallet, label: "Budget", sublabel: "What you can afford", tourId: "nav-budget" },
     { href: "/inspections", icon: FileText, label: "Inspections", sublabel: "What's wrong", tourId: "nav-inspections" },
     { href: "/chat", icon: MessageSquare, label: "Assistant", sublabel: "Get guidance", tourId: "nav-assistant" },
+    { href: "/profile", icon: User, label: "Profile", sublabel: "Your settings", tourId: "nav-profile" },
     { href: "/contact", icon: Mail, label: "Contact", sublabel: "Reach us", tourId: "nav-contact" },
   ];
 

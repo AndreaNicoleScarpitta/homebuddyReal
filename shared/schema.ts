@@ -63,24 +63,39 @@ export type SystemCategory = typeof systemCategories[number];
 export const systemConditions = ["Great", "Good", "Fair", "Poor", "Unknown"] as const;
 export type SystemCondition = typeof systemConditions[number];
 
-// Systems table - stores home systems with category-specific metadata
+// Entity type enum - distinguishes ASSET systems from SERVICE relationships
+export const entityTypes = ["asset", "service"] as const;
+export type EntityType = typeof entityTypes[number];
+
+// Service cadence options
+export const serviceCadences = ["weekly", "biweekly", "monthly", "quarterly", "biannual", "annual", "one-time", "as-needed"] as const;
+export type ServiceCadence = typeof serviceCadences[number];
+
+// Systems table - stores home systems (ASSETS) and service relationships (SERVICES)
+// ASSETS: installed things (HVAC, roof, windows, etc.) with install year, condition, make/model
+// SERVICES: ongoing services (pest control, landscaping, cleaners) with contract start, cadence, contractor
 export const systems = pgTable("systems", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  entityType: varchar("entity_type", { length: 20 }).default("asset"), // asset or service
   category: varchar("category", { length: 50 }).default("Other"),
   name: varchar("name", { length: 100 }).notNull(),
   make: varchar("make", { length: 100 }),
   model: varchar("model", { length: 100 }),
-  installYear: integer("install_year"),
-  lastServiceDate: timestamp("last_service_date"),
+  installYear: integer("install_year"), // ASSET only
+  lastServiceDate: timestamp("last_service_date"), // both: last maintenance for asset, last visit for service
   nextServiceDate: timestamp("next_service_date"),
-  condition: varchar("condition", { length: 50 }).default("Unknown"),
+  condition: varchar("condition", { length: 50 }).default("Unknown"), // ASSET only
   warrantyExpiry: timestamp("warranty_expiry"),
   material: varchar("material", { length: 100 }),
   energyRating: varchar("energy_rating", { length: 50 }),
   provider: varchar("provider", { length: 255 }),
   treatmentType: varchar("treatment_type", { length: 100 }),
   recurrenceInterval: varchar("recurrence_interval", { length: 50 }),
+  contractStartDate: timestamp("contract_start_date"), // SERVICE only: when contract/relationship began
+  cadence: varchar("cadence", { length: 50 }), // SERVICE only: service frequency (weekly, monthly, etc.)
+  contractorId: integer("contractor_id"), // SERVICE only: attached contractor
+  relatedAssetId: integer("related_asset_id"), // SERVICE only: linked asset if applicable (e.g., HVAC service -> HVAC asset)
   statusReason: text("status_reason"),
   metadata: text("metadata"),
   notes: text("notes"),
@@ -92,6 +107,7 @@ export const systems = pgTable("systems", {
 }, (table) => [
   index("systems_home_id_idx").on(table.homeId),
   index("systems_category_idx").on(table.category),
+  index("systems_entity_type_idx").on(table.entityType),
 ]);
 
 export const insertSystemSchema = createInsertSchema(systems).omit({ id: true, createdAt: true, updatedAt: true });
@@ -118,13 +134,20 @@ export const maintenanceTasks = pgTable("maintenance_tasks", {
   actualCost: integer("actual_cost"), // in cents
   difficulty: varchar("difficulty", { length: 50 }),
   safetyWarning: text("safety_warning"),
-  createdFrom: varchar("created_from", { length: 50 }).default("manual"), // manual, chat, inspection, import
+  createdFrom: varchar("created_from", { length: 50 }).default("manual"), // manual, chat, inspection, import, best-practice
+  isRecurring: boolean("is_recurring").default(false),
+  recurrenceCadence: varchar("recurrence_cadence", { length: 50 }), // weekly, monthly, quarterly, biannual, annual
+  parentTaskId: integer("parent_task_id"), // for recurring task instances, links to original recurring task
+  assignedContractorId: integer("assigned_contractor_id"), // attached contractor for this task
+  fundId: integer("fund_id"), // optional: linked fund for cost tracking
+  completedAt: timestamp("completed_at"), // when task was marked complete
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("maintenance_tasks_home_id_idx").on(table.homeId),
   index("maintenance_tasks_urgency_idx").on(table.urgency),
   index("maintenance_tasks_system_id_idx").on(table.relatedSystemId),
+  index("maintenance_tasks_contractor_idx").on(table.assignedContractorId),
 ]);
 
 export const insertMaintenanceTaskSchema = createInsertSchema(maintenanceTasks).omit({ id: true, createdAt: true, updatedAt: true });
@@ -173,16 +196,19 @@ export type ChatMessage = typeof chatMessages.$inferSelect;
 export const funds = pgTable("funds", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  purpose: text("purpose"), // Fund purpose/description - this should be shown first in UI
   name: varchar("name", { length: 100 }).notNull(),
   balance: integer("balance").notNull().default(0), // in cents
   monthlyContribution: integer("monthly_contribution").default(0), // in cents
   fundType: varchar("fund_type", { length: 50 }).default("general"), // general, emergency, dedicated
   label: text("label"), // optional mental label like "Do not touch unless critical"
   color: varchar("color", { length: 20 }).default("#f97316"), // for visual distinction
+  scopedSystemId: integer("scoped_system_id"), // optional: fund is scoped to this asset/system
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("funds_home_id_idx").on(table.homeId),
+  index("funds_scoped_system_idx").on(table.scopedSystemId),
 ]);
 
 export const insertFundSchema = createInsertSchema(funds).omit({ id: true, createdAt: true, updatedAt: true });

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, MessageSquare, Send, CheckCircle2 } from "lucide-react";
+import { Send, CheckCircle2 } from "lucide-react";
 
 async function submitContactForm(data: {
   name: string;
@@ -102,43 +102,6 @@ export default function Contact() {
             Have a question or feedback? We'd love to hear from you.
           </p>
         </header>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Mail className="h-5 w-5 text-primary" />
-                Email Support
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                For general inquiries and support, you can also reach us at:
-              </p>
-              <a 
-                href="mailto:andrew.scarpitta@gmail.com" 
-                className="text-primary hover:underline font-medium"
-                data-testid="link-email"
-              >
-                andrew.scarpitta@gmail.com
-              </a>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <MessageSquare className="h-5 w-5 text-primary" />
-                Response Time
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                We typically respond within 24-48 hours during business days.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
 
         <Card>
           <CardHeader>
