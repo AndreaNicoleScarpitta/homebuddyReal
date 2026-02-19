@@ -129,7 +129,7 @@ export default function Terms() {
         </Card>
 
         <div className="text-center text-sm text-muted-foreground pb-8">
-          <p>Questions? Contact us at support@homebuddy.app</p>
+          <p>Questions? Contact us at drew@homebuddy.space</p>
         </div>
       </div>
     </Layout>

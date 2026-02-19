@@ -48,7 +48,7 @@ export async function sendContactFormNotification(
   email: string,
   message: string
 ): Promise<boolean> {
-  const adminEmail = process.env.ADMIN_EMAIL || "andrew.scarpitta@gmail.com";
+  const adminEmail = process.env.ADMIN_EMAIL || "drew@homebuddy.space";
   
   return sendEmail({
     to: adminEmail,
