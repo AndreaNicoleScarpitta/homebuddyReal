@@ -4,7 +4,7 @@
 Home Buddy is a home maintenance assistant web application with OAuth authentication, home profile management, AI-powered maintenance task tracking, chat assistant interface, and comprehensive budget/funds tracking. Now configured as a Progressive Web App (PWA) ready for browser installation and potential Google Play Store submission.
 
 ## Current State
-- Full authentication system with Replit Auth
+- Social login authentication (Google, Facebook, Instagram via Passport.js)
 - Complete database schema with all tables
 - All API routes with structured logging and error handling
 - Authorization checks on all routes (users can only access their own data)
@@ -14,8 +14,19 @@ Home Buddy is a home maintenance assistant web application with OAuth authentica
 - Environment validation at startup (fail-fast on missing required vars)
 - Unit tests with Vitest (36 passing tests)
 - PWA with service worker and manifest for installability
+- Legal Terms & Conditions page accessible without authentication
 
 ## Recent Changes
+- 2026-02-21: Authentication overhaul:
+  - Replaced Replit Auth (OIDC) with social login via Passport.js (Google, Facebook, Instagram)
+  - Added provider and providerId fields to users table
+  - Updated all API routes from req.user.claims.sub to req.user.id
+  - New login page with social provider buttons (Google, Facebook, Instagram)
+  - Cleaned up landing page: single sign-in button, removed duplicate CTAs
+  - Replaced Home icon with half-house-half-gear logo
+  - Expanded Terms & Conditions page with comprehensive legal sections
+  - Terms page accessible to unauthenticated users
+  - Added /api/auth/providers endpoint for dynamic provider availability
 - 2026-01-07: Corrective and capability hardening pass:
   - Fixed AddSystemWizard form state isolation bug (form resets on dialog open)
   - Added success step 4 with checkmark, "Done" and "Add Another System" buttons
@@ -35,8 +46,14 @@ Home Buddy is a home maintenance assistant web application with OAuth authentica
 
 ## Architecture
 
+### Authentication
+- Social login via Passport.js (Google OAuth 2.0, Facebook Login)
+- Instagram login routes through Facebook/Meta OAuth
+- Session-based auth with PostgreSQL session store (connect-pg-simple)
+- Auth files: `server/replit_integrations/auth/`
+
 ### Database Tables
-- users (Replit Auth)
+- users (social auth with provider/providerId)
 - homes (user's home profile)
 - systems (HVAC, plumbing, etc.)
 - maintenanceTasks (maintenance items)
@@ -60,6 +77,10 @@ Home Buddy is a home maintenance assistant web application with OAuth authentica
 
 ### Required
 - DATABASE_URL - PostgreSQL connection (auto-provided)
+
+### Social Login (required for auth)
+- GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET - Google OAuth login
+- FACEBOOK_APP_ID, FACEBOOK_APP_SECRET - Facebook/Instagram login
 
 ### Optional (features disabled if not set)
 - AI_INTEGRATIONS_OPENAI_API_KEY - AI chat (auto-provided by Replit)

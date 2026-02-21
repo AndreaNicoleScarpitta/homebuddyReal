@@ -12,12 +12,29 @@ import Dashboard from "@/pages/dashboard";
 import Chat from "@/pages/chat";
 import Onboarding from "@/pages/onboarding";
 import Landing from "@/pages/landing";
+import Login from "@/pages/login";
 import Budget from "@/pages/budget";
 import Contact from "@/pages/contact";
 import Inspections from "@/pages/inspections";
-import Terms from "@/pages/terms";
+import Terms, { TermsContent } from "@/pages/terms";
 import MaintenanceLog from "@/pages/maintenance-log";
 import Profile from "@/pages/profile";
+
+function PublicTermsPage() {
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="border-b bg-card sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center gap-2">
+          <img src="/images/home-buddy-icon.png" alt="Home Buddy" className="h-8 w-8 rounded-lg object-cover" />
+          <span className="text-xl font-heading font-bold">Home Buddy</span>
+        </div>
+      </header>
+      <div className="max-w-5xl mx-auto p-4 md:p-8">
+        <TermsContent />
+      </div>
+    </div>
+  );
+}
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -58,7 +75,13 @@ function Router() {
   }
   
   if (!isAuthenticated) {
-    return <Landing />;
+    return (
+      <Switch>
+        <Route path="/login" component={Login} />
+        <Route path="/terms" component={PublicTermsPage} />
+        <Route component={Landing} />
+      </Switch>
+    );
   }
   
   return (

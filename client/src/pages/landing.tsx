@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { Home, Calendar, MessageSquare, Shield, ArrowRight, Sparkles } from "lucide-react";
+import { Calendar, MessageSquare, Shield, ArrowRight, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function Landing() {
   const handleLogin = () => {
-    window.location.href = "/api/login";
+    window.location.href = "/login";
   };
 
   const features = [
@@ -27,9 +27,11 @@ export default function Landing() {
       <header className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-md border-b border-border/40">
         <div className="container mx-auto px-6 h-16 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <Home className="h-4 w-4 text-white" />
-            </div>
+            <img
+              src="/images/home-buddy-icon.png"
+              alt="Home Buddy"
+              className="h-8 w-8 rounded-lg object-cover"
+            />
             <span className="text-xl font-heading font-bold">Home Buddy</span>
           </div>
           <Button onClick={handleLogin} variant="outline" className="font-medium" data-testid="button-login">
@@ -139,31 +141,17 @@ export default function Landing() {
                   </motion.div>
                 ))}
               </div>
-              
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                className="text-center mt-12"
-              >
-                <Button 
-                  onClick={handleLogin} 
-                  size="lg" 
-                  className="h-12 px-8"
-                  data-testid="button-cta-login"
-                >
-                  Start Managing Your Home
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </motion.div>
             </div>
           </div>
         </section>
       </main>
 
       <footer className="border-t border-border/40 py-8">
-        <div className="container mx-auto px-6 text-center text-sm text-muted-foreground">
-          © 2026 Home Buddy. Your trusted home maintenance assistant.
+        <div className="container mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
+          <span>&copy; 2026 Home Buddy. Your trusted home maintenance assistant.</span>
+          <a href="/terms" className="underline hover:text-foreground" data-testid="link-footer-terms">
+            Terms & Conditions
+          </a>
         </div>
       </footer>
     </div>

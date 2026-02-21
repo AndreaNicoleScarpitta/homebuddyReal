@@ -59,7 +59,7 @@ export async function registerRoutes(
   // Home routes
   app.get("/api/home", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       logInfo("home.get", "Fetching home for user", { userId });
       const home = await storage.getHome(userId);
       
@@ -78,7 +78,7 @@ export async function registerRoutes(
   
   app.post("/api/home", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const homeData = insertHomeSchema.parse({ ...req.body, userId });
       const home = await storage.createHome(homeData);
       logInfo("home.create", "Home created successfully", { homeId: home.id, userId });
@@ -91,7 +91,7 @@ export async function registerRoutes(
   app.patch("/api/home/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const home = await storage.updateHome(id, userId, req.body);
       logInfo("home.update", "Home updated successfully", { homeId: id, userId });
       res.json(home);
@@ -157,7 +157,7 @@ export async function registerRoutes(
   app.get("/api/home/:homeId/systems", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -171,7 +171,7 @@ export async function registerRoutes(
   app.post("/api/home/:homeId/systems", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -188,7 +188,7 @@ export async function registerRoutes(
   app.get("/api/home/:homeId/tasks", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -202,7 +202,7 @@ export async function registerRoutes(
   app.post("/api/home/:homeId/tasks", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -218,7 +218,7 @@ export async function registerRoutes(
   app.patch("/api/tasks/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyTaskOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -233,7 +233,7 @@ export async function registerRoutes(
   app.delete("/api/tasks/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyTaskOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -249,7 +249,7 @@ export async function registerRoutes(
   app.get("/api/home/:homeId/log-entries", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -263,7 +263,7 @@ export async function registerRoutes(
   app.post("/api/home/:homeId/log-entries", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -279,7 +279,7 @@ export async function registerRoutes(
   app.patch("/api/log-entries/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyLogEntryOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -294,7 +294,7 @@ export async function registerRoutes(
   app.delete("/api/log-entries/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyLogEntryOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -310,7 +310,7 @@ export async function registerRoutes(
   app.get("/api/home/:homeId/chat", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -324,7 +324,7 @@ export async function registerRoutes(
   app.post("/api/home/:homeId/chat", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -377,7 +377,7 @@ export async function registerRoutes(
   app.get("/api/home/:homeId/funds", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -391,7 +391,7 @@ export async function registerRoutes(
   app.post("/api/home/:homeId/funds", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -407,7 +407,7 @@ export async function registerRoutes(
   app.patch("/api/funds/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyFundOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -422,7 +422,7 @@ export async function registerRoutes(
   app.delete("/api/funds/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyFundOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -438,7 +438,7 @@ export async function registerRoutes(
   app.get("/api/funds/:fundId/allocations", isAuthenticated, async (req: any, res) => {
     try {
       const fundId = parseInt(req.params.fundId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyFundOwnership(fundId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -452,7 +452,7 @@ export async function registerRoutes(
   app.get("/api/tasks/:taskId/allocations", isAuthenticated, async (req: any, res) => {
     try {
       const taskId = parseInt(req.params.taskId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyTaskOwnership(taskId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -466,7 +466,7 @@ export async function registerRoutes(
   app.post("/api/allocations", isAuthenticated, async (req: any, res) => {
     try {
       const allocationData = insertFundAllocationSchema.parse(req.body);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyFundOwnership(allocationData.fundId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -481,7 +481,7 @@ export async function registerRoutes(
   app.patch("/api/allocations/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyAllocationOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -496,7 +496,7 @@ export async function registerRoutes(
   app.delete("/api/allocations/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyAllocationOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -512,7 +512,7 @@ export async function registerRoutes(
   app.get("/api/home/:homeId/expenses", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -526,7 +526,7 @@ export async function registerRoutes(
   app.get("/api/funds/:fundId/expenses", isAuthenticated, async (req: any, res) => {
     try {
       const fundId = parseInt(req.params.fundId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyFundOwnership(fundId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -540,7 +540,7 @@ export async function registerRoutes(
   app.post("/api/expenses", isAuthenticated, async (req: any, res) => {
     try {
       const expenseData = insertExpenseSchema.parse(req.body);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyFundOwnership(expenseData.fundId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -555,7 +555,7 @@ export async function registerRoutes(
   app.patch("/api/expenses/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyExpenseOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -570,7 +570,7 @@ export async function registerRoutes(
   app.delete("/api/expenses/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyExpenseOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -616,7 +616,7 @@ export async function registerRoutes(
   app.get("/api/home/:homeId/reports", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -630,7 +630,7 @@ export async function registerRoutes(
   app.get("/api/reports/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyReportOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -648,7 +648,7 @@ export async function registerRoutes(
   app.post("/api/home/:homeId/reports", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -664,7 +664,7 @@ export async function registerRoutes(
   app.post("/api/reports/:id/analyze", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyReportOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -710,7 +710,7 @@ export async function registerRoutes(
   app.delete("/api/reports/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyReportOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -734,7 +734,7 @@ export async function registerRoutes(
   // Notification Preferences routes
   app.get("/api/notifications/preferences", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       let prefs = await storage.getNotificationPreferences(userId);
       if (!prefs) {
         prefs = await storage.createNotificationPreferences({ userId });
@@ -747,7 +747,7 @@ export async function registerRoutes(
   
   app.patch("/api/notifications/preferences", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const data = insertNotificationPreferencesSchema.partial().parse(req.body);
       const prefs = await storage.updateNotificationPreferences(userId, data);
       logInfo("notifications.update", "Preferences updated", { userId });
@@ -761,7 +761,7 @@ export async function registerRoutes(
   app.get("/api/home/:homeId/appointments", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -775,7 +775,7 @@ export async function registerRoutes(
   app.post("/api/home/:homeId/appointments", isAuthenticated, async (req: any, res) => {
     try {
       const homeId = parseInt(req.params.homeId);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -791,7 +791,7 @@ export async function registerRoutes(
   app.patch("/api/appointments/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyAppointmentOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
@@ -807,7 +807,7 @@ export async function registerRoutes(
   app.delete("/api/appointments/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       if (!await storage.verifyAppointmentOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
