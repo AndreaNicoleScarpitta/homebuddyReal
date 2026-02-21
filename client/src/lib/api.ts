@@ -117,7 +117,19 @@ export interface V2Report {
   summary?: string | null;
   issuesFound?: number;
   createdAt?: string;
-  findings?: Array<{ id: string; reportId: string; state: string }>;
+  findings?: Array<{
+    id: string;
+    reportId: string;
+    state: string;
+    title?: string;
+    description?: string;
+    severity?: string | null;
+    urgency?: string | null;
+    category?: string | null;
+    location?: string | null;
+    estimatedCost?: string | null;
+    diyLevel?: string | null;
+  }>;
 }
 
 // ---------------------------------------------------------------------------

@@ -397,7 +397,7 @@ function AddLogEntryDialog({ isOpen, onClose, homeId, task, systems }: AddLogEnt
         cost: data.cost ? Math.round(parseFloat(data.cost) * 100) : undefined,
         provider: data.provider || undefined,
         notes: data.notes || undefined,
-        taskId: task?.id,
+        taskId: task?.id ? parseInt(task.id) || undefined : undefined,
       });
 
       if (task) {

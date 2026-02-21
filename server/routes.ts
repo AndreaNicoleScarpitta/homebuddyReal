@@ -19,6 +19,9 @@ import {
   insertFundAllocationSchema,
   insertExpenseSchema,
   insertContactMessageSchema,
+  type InsertContactMessage,
+  type InsertFundAllocation,
+  type InsertExpense,
   insertInspectionReportSchema,
   insertContractorAppointmentSchema,
   insertNotificationPreferencesSchema,
@@ -531,7 +534,7 @@ export async function registerRoutes(
   
   app.post("/api/allocations", isAuthenticated, async (req: any, res) => {
     try {
-      const allocationData = insertFundAllocationSchema.parse(req.body);
+      const allocationData = insertFundAllocationSchema.parse(req.body) as InsertFundAllocation;
       const userId = req.user.id;
       if (!await storage.verifyFundOwnership(allocationData.fundId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
@@ -607,7 +610,7 @@ export async function registerRoutes(
   
   app.post("/api/expenses", isAuthenticated, async (req: any, res) => {
     try {
-      const expenseData = insertExpenseSchema.parse(req.body);
+      const expenseData = insertExpenseSchema.parse(req.body) as InsertExpense;
       const userId = req.user.id;
       if (!await storage.verifyFundOwnership(expenseData.fundId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
@@ -655,13 +658,13 @@ export async function registerRoutes(
   // Contact form route (public - no auth required)
   app.post("/api/contact", async (req, res) => {
     try {
-      const messageData = insertContactMessageSchema.parse(req.body);
+      const messageData = insertContactMessageSchema.parse(req.body) as InsertContactMessage;
       const message = await storage.createContactMessage(messageData);
       
       logInfo("contact.create", "Contact message received", { 
         name: messageData.name, 
         email: messageData.email,
-        subject: messageData.subject 
+        subject: messageData.subject ?? undefined
       });
       
       sendContactFormNotification(

@@ -42,7 +42,7 @@ async function getAccessToken(): Promise<string> {
   
   if (!response.ok) {
     const error = await response.text();
-    logError("usps.auth", "Failed to get USPS access token", new Error(error));
+    logError("usps.auth", new Error(error));
     throw new Error("Failed to authenticate with USPS");
   }
   
@@ -86,7 +86,7 @@ export async function verifyAddress(
     
     if (!response.ok) {
       const errorText = await response.text();
-      logError("usps.verify", "USPS verification failed", new Error(errorText));
+      logError("usps.verify", new Error(errorText));
       
       if (response.status === 404) {
         return { verified: false, error: "Address not found" };
@@ -107,7 +107,7 @@ export async function verifyAddress(
       address: data.address
     };
   } catch (error) {
-    logError("usps.verify", "USPS verification error", error instanceof Error ? error : new Error(String(error)));
+    logError("usps.verify", error instanceof Error ? error : new Error(String(error)));
     return {
       verified: false,
       error: error instanceof Error ? error.message : "Verification failed"

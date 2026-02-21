@@ -852,6 +852,7 @@ v2Router.get("/reports/:reportId", async (req: Request, res: Response) => {
       id: f.finding_id,
       reportId,
       state: f.state,
+      ...(f.card || {}),
     }));
 
     res.json({

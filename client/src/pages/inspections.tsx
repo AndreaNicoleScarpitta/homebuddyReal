@@ -36,6 +36,7 @@ interface InspectionFinding {
   title?: string;
   description?: string;
   severity?: string | null;
+  urgency?: string | null;
   category?: string | null;
   location?: string | null;
   estimatedCost?: string | null;
@@ -117,7 +118,7 @@ function getWhyThisMatters(category: string | null, severity: string | null): st
 
 function FindingCard({ finding }: { finding: InspectionFinding }) {
   const [showWhy, setShowWhy] = useState(false);
-  const whyText = getWhyThisMatters(finding.category, finding.severity);
+  const whyText = getWhyThisMatters(finding.category ?? null, finding.severity ?? null);
   
   return (
     <div className="p-4 rounded-lg bg-secondary/30 border border-border/50 space-y-3">

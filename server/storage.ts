@@ -625,7 +625,7 @@ export class DatabaseStorage implements IStorage {
 
       await tx.delete(homes).where(eq(homes.userId, userId));
       await tx.delete(notificationPreferences).where(eq(notificationPreferences.userId, userId));
-      await tx.delete(contactMessages).where(eq(contactMessages.userId, userId));
+      // contactMessages table has no userId column — skip (messages are public submissions)
     });
   }
 }

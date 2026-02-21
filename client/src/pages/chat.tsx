@@ -17,14 +17,14 @@ import { Link } from "wouter";
 import logoImage from "@assets/generated_images/orange_house_logo_with_grey_gear..png";
 import { trackEvent } from "@/lib/analytics";
 
-function renderRichText(text: string): JSX.Element {
+function renderRichText(text: string): React.JSX.Element {
   const lines = text.split('\n');
-  const elements: JSX.Element[] = [];
+  const elements: React.JSX.Element[] = [];
   let listItems: string[] = [];
   let inList = false;
 
-  const processInlineMarkdown = (line: string): JSX.Element[] => {
-    const parts: JSX.Element[] = [];
+  const processInlineMarkdown = (line: string): React.JSX.Element[] => {
+    const parts: React.JSX.Element[] = [];
     let remaining = line;
     let keyIndex = 0;
 
