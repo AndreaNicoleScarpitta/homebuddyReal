@@ -17,6 +17,16 @@ Home Buddy is a home maintenance assistant web application with OAuth authentica
 - Legal Terms & Conditions page accessible without authentication
 
 ## Recent Changes
+- 2026-02-21: Milestone 2 — Command + Projection Pipeline:
+  - Created server/eventing/types.ts with full event type catalog and Zod schemas
+  - Created server/eventing/eventStore.ts with append(), readStream(), readFromSeq(), getCurrentVersion()
+  - Created server/eventing/idempotency.ts middleware requiring Idempotency-Key on mutations
+  - Created server/eventing/commandBus.ts with transactional command dispatch
+  - Created server/projections/applyEvent.ts with projection reducers for all aggregate types
+  - Created server/projections/rebuild.ts with full replay capability
+  - Created server/routes_v2.ts with /v2 endpoints (homes, systems, reports, findings, tasks, notifications, chat, assistant)
+  - Added 12 Vitest tests for idempotency, optimistic concurrency, assistant gating, and projection sync
+  - Updated rebuildProjections.ts CLI to use the rebuild module
 - 2026-02-21: Milestone 1 — Event Log Foundation:
   - Created event_log table with envelope fields, idempotency + concurrency unique constraints
   - Created 10 projection tables (home, system, report, finding, task, notification_pref, assistant_action, chat_session, chat_message, checkpoint)
