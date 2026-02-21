@@ -255,6 +255,7 @@ export async function registerRoutes(
     }
   });
   
+  const updateTaskSchema = insertMaintenanceTaskSchema.partial();
   app.patch("/api/tasks/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -262,7 +263,8 @@ export async function registerRoutes(
       if (!await storage.verifyTaskOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
-      const task = await storage.updateTask(id, req.body);
+      const validated = updateTaskSchema.parse(req.body);
+      const task = await storage.updateTask(id, validated);
       logInfo("tasks.update", "Task updated successfully", { taskId: id });
       res.json(task);
     } catch (error) {
@@ -316,6 +318,7 @@ export async function registerRoutes(
     }
   });
   
+  const updateLogEntrySchema = insertMaintenanceLogEntrySchema.partial();
   app.patch("/api/log-entries/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -323,7 +326,8 @@ export async function registerRoutes(
       if (!await storage.verifyLogEntryOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
-      const entry = await storage.updateLogEntry(id, req.body);
+      const validated = updateLogEntrySchema.parse(req.body);
+      const entry = await storage.updateLogEntry(id, validated);
       logInfo("logEntries.update", "Log entry updated successfully", { entryId: id });
       res.json(entry);
     } catch (error) {
@@ -464,6 +468,7 @@ export async function registerRoutes(
     }
   });
   
+  const updateFundSchema = insertFundSchema.partial();
   app.patch("/api/funds/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -471,7 +476,8 @@ export async function registerRoutes(
       if (!await storage.verifyFundOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
-      const fund = await storage.updateFund(id, req.body);
+      const validated = updateFundSchema.parse(req.body);
+      const fund = await storage.updateFund(id, validated);
       logInfo("funds.update", "Fund updated successfully", { fundId: id });
       res.json(fund);
     } catch (error) {
@@ -538,6 +544,7 @@ export async function registerRoutes(
     }
   });
   
+  const updateAllocationSchema = insertFundAllocationSchema.partial();
   app.patch("/api/allocations/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -545,7 +552,8 @@ export async function registerRoutes(
       if (!await storage.verifyAllocationOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
-      const allocation = await storage.updateAllocation(id, req.body);
+      const validated = updateAllocationSchema.parse(req.body);
+      const allocation = await storage.updateAllocation(id, validated);
       logInfo("allocations.update", "Allocation updated successfully", { allocationId: id });
       res.json(allocation);
     } catch (error) {
@@ -612,6 +620,7 @@ export async function registerRoutes(
     }
   });
   
+  const updateExpenseSchema = insertExpenseSchema.partial();
   app.patch("/api/expenses/:id", isAuthenticated, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -619,7 +628,8 @@ export async function registerRoutes(
       if (!await storage.verifyExpenseOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
-      const expense = await storage.updateExpense(id, req.body);
+      const validated = updateExpenseSchema.parse(req.body);
+      const expense = await storage.updateExpense(id, validated);
       logInfo("expenses.update", "Expense updated successfully", { expenseId: id });
       res.json(expense);
     } catch (error) {

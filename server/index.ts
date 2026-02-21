@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { v2Router } from "./routes_v2";
 import { serveStatic } from "./static";
@@ -72,7 +73,28 @@ app.use((req, res, next) => {
   // Setup auth BEFORE registering other routes
   await setupAuth(app);
   registerAuthRoutes(app);
-  
+
+  const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests, please try again later" },
+    skip: (req) => req.method === "GET",
+  });
+
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many login attempts, please try again later" },
+  });
+
+  app.use("/api", apiLimiter);
+  app.use("/v2", apiLimiter);
+  app.use("/api/auth", authLimiter);
+
   app.use("/v2", v2Router);
   await registerRoutes(httpServer, app);
 

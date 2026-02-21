@@ -56,48 +56,61 @@ const taskTransitions: Record<string, Set<string>> = {
     EventTypes.TaskApproved,
     EventTypes.TaskRejected,
     EventTypes.TaskSkipped,
+    EventTypes.TaskUpdated,
   ]),
   approved: new Set([
     EventTypes.TaskScheduled,
     EventTypes.TaskStarted,
     EventTypes.TaskSkipped,
     EventTypes.TaskOverdueMarked,
+    EventTypes.TaskUpdated,
   ]),
   scheduled: new Set([
     EventTypes.TaskStarted,
     EventTypes.TaskSkipped,
     EventTypes.TaskOverdueMarked,
+    EventTypes.TaskUpdated,
   ]),
   in_progress: new Set([
     EventTypes.TaskCompleted,
     EventTypes.TaskSkipped,
+    EventTypes.TaskUpdated,
   ]),
   overdue: new Set([
     EventTypes.TaskStarted,
     EventTypes.TaskCompleted,
     EventTypes.TaskSkipped,
+    EventTypes.TaskUpdated,
   ]),
 };
 
 const reportTransitions: Record<string, Set<string>> = {
   uploaded: new Set([
     EventTypes.InspectionReportAnalysisQueued,
+    EventTypes.InspectionReportDeleted,
   ]),
   queued: new Set([
     EventTypes.InspectionReportAnalyzedDraft,
     EventTypes.InspectionReportAnalysisFailed,
     EventTypes.RetryRequested,
+    EventTypes.InspectionReportDeleted,
   ]),
   draft_ready: new Set([
     EventTypes.InspectionReportNeedsReview,
     EventTypes.InspectionReportPublished,
+    EventTypes.InspectionReportDeleted,
   ]),
   needs_review: new Set([
     EventTypes.InspectionReportPublished,
     EventTypes.InspectionReportAnalysisFailed,
+    EventTypes.InspectionReportDeleted,
   ]),
   failed: new Set([
     EventTypes.InspectionReportAnalysisQueued,
+    EventTypes.InspectionReportDeleted,
+  ]),
+  published: new Set([
+    EventTypes.InspectionReportDeleted,
   ]),
 };
 

@@ -561,7 +561,7 @@ export class DatabaseStorage implements IStorage {
   async deleteAllUserData(userId: string): Promise<void> {
     await db.transaction(async (tx) => {
       const userHomes = await tx.select().from(homes).where(eq(homes.userId, userId));
-      const homeIds = userHomes.map(h => h.id);
+      const legacyHomeIds = userHomes.map(h => h.id);
 
       for (const home of userHomes) {
         await tx.delete(chatMessages).where(eq(chatMessages.homeId, home.id));
@@ -583,33 +583,44 @@ export class DatabaseStorage implements IStorage {
         await tx.delete(contractorAppointments).where(eq(contractorAppointments.homeId, home.id));
       }
 
-      if (homeIds.length > 0) {
-        for (const homeId of homeIds) {
-          const homeUuid = String(homeId);
-          await tx.execute(sql`DELETE FROM projection_chat_message WHERE home_id = ${homeUuid}`);
-          await tx.execute(sql`DELETE FROM projection_chat_session WHERE home_id = ${homeUuid}`);
-          await tx.execute(sql`DELETE FROM projection_task WHERE home_id = ${homeUuid}`);
-          await tx.execute(sql`DELETE FROM projection_finding WHERE home_id = ${homeUuid}`);
-          await tx.execute(sql`DELETE FROM projection_report WHERE home_id = ${homeUuid}`);
-          await tx.execute(sql`DELETE FROM projection_system WHERE home_id = ${homeUuid}`);
-          await tx.execute(sql`DELETE FROM projection_assistant_action WHERE home_id = ${homeUuid}`);
-          await tx.execute(sql`DELETE FROM projection_notification_pref WHERE home_id = ${homeUuid}`);
-          await tx.execute(sql`DELETE FROM projection_checkpoint WHERE home_id = ${homeUuid}`);
-          await tx.execute(sql`DELETE FROM projection_home WHERE id = ${homeUuid}`);
-        }
+      const v2HomeRows = await tx.execute(sql`
+        SELECT home_id FROM projection_home WHERE user_id = ${userId}
+      `);
+      const v2HomeIds = v2HomeRows.rows.map((r: any) => r.home_id as string);
 
-        await tx.execute(sql`ALTER TABLE event_log DISABLE TRIGGER trg_event_log_immutable`);
-        for (const homeId of homeIds) {
-          const homeUuid = String(homeId);
-          await tx.execute(sql`DELETE FROM event_log WHERE aggregate_id::text = ${homeUuid}`);
-        }
-        await tx.execute(sql`DELETE FROM event_log WHERE actor_id = ${userId}`);
-        await tx.execute(sql`ALTER TABLE event_log ENABLE TRIGGER trg_event_log_immutable`);
+      for (const homeId of v2HomeIds) {
+        await tx.execute(sql`
+          DELETE FROM projection_chat_message
+          WHERE session_id IN (SELECT session_id FROM projection_chat_session WHERE home_id = ${homeId})
+        `);
+        await tx.execute(sql`DELETE FROM projection_chat_session WHERE home_id = ${homeId}`);
+        await tx.execute(sql`DELETE FROM projection_task WHERE home_id = ${homeId}`);
+        await tx.execute(sql`
+          DELETE FROM projection_finding
+          WHERE report_id IN (SELECT report_id FROM projection_report WHERE home_id = ${homeId})
+        `);
+        await tx.execute(sql`DELETE FROM projection_report WHERE home_id = ${homeId}`);
+        await tx.execute(sql`DELETE FROM projection_system WHERE home_id = ${homeId}`);
+        await tx.execute(sql`DELETE FROM projection_assistant_action WHERE home_id = ${homeId}`);
+        await tx.execute(sql`DELETE FROM projection_notification_pref WHERE home_id = ${homeId}`);
+        await tx.execute(sql`DELETE FROM projection_home WHERE home_id = ${homeId}`);
+      }
 
-        for (const homeId of homeIds) {
-          const homeUuid = String(homeId);
-          await tx.execute(sql`DELETE FROM job_queue WHERE data->>'homeId' = ${homeUuid}`);
-        }
+      await tx.execute(sql`ALTER TABLE event_log DISABLE TRIGGER trg_event_log_immutable`);
+      await tx.execute(sql`DELETE FROM event_log WHERE actor_id = ${userId}`);
+      for (const homeId of v2HomeIds) {
+        await tx.execute(sql`DELETE FROM event_log WHERE aggregate_id = ${homeId}`);
+        await tx.execute(sql`
+          DELETE FROM event_log WHERE aggregate_id IN (
+            SELECT DISTINCT aggregate_id FROM event_log
+            WHERE data->>'homeId' = ${homeId}
+          )
+        `);
+      }
+      await tx.execute(sql`ALTER TABLE event_log ENABLE TRIGGER trg_event_log_immutable`);
+
+      for (const homeId of v2HomeIds) {
+        await tx.execute(sql`DELETE FROM job_queue WHERE data->>'homeId' = ${homeId}`);
       }
 
       await tx.delete(homes).where(eq(homes.userId, userId));

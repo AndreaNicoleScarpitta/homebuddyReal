@@ -51,6 +51,105 @@ function getUserId(req: Request): string {
 }
 
 // ---------------------------------------------------------------------------
+// Ownership verification helpers — prevent IDOR on v2 aggregates
+// ---------------------------------------------------------------------------
+
+async function verifyHomeOwnership(homeId: string, userId: string): Promise<boolean> {
+  const result = await db.execute(sql`
+    SELECT user_id FROM projection_home WHERE home_id = ${homeId}
+  `);
+  if (result.rows.length === 0) return true;
+  return (result.rows[0] as { user_id: string }).user_id === userId;
+}
+
+async function verifyHomeOwnershipStrict(homeId: string, userId: string): Promise<boolean> {
+  const result = await db.execute(sql`
+    SELECT user_id FROM projection_home WHERE home_id = ${homeId}
+  `);
+  if (result.rows.length === 0) return false;
+  return (result.rows[0] as { user_id: string }).user_id === userId;
+}
+
+async function verifySystemOwnership(systemId: string, userId: string): Promise<string | null> {
+  const result = await db.execute(sql`
+    SELECT s.home_id, h.user_id
+    FROM projection_system s
+    LEFT JOIN projection_home h ON h.home_id = s.home_id
+    WHERE s.system_id = ${systemId}
+  `);
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0] as { home_id: string; user_id: string | null };
+  if (!row.user_id) return row.home_id;
+  return row.user_id === userId ? row.home_id : null;
+}
+
+async function verifyTaskOwnership(taskId: string, userId: string): Promise<string | null> {
+  const result = await db.execute(sql`
+    SELECT t.home_id, h.user_id
+    FROM projection_task t
+    LEFT JOIN projection_home h ON h.home_id = t.home_id
+    WHERE t.task_id = ${taskId}
+  `);
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0] as { home_id: string; user_id: string | null };
+  if (!row.user_id) return row.home_id;
+  return row.user_id === userId ? row.home_id : null;
+}
+
+async function verifyReportOwnership(reportId: string, userId: string): Promise<string | null> {
+  const result = await db.execute(sql`
+    SELECT r.home_id, h.user_id
+    FROM projection_report r
+    LEFT JOIN projection_home h ON h.home_id = r.home_id
+    WHERE r.report_id = ${reportId}
+  `);
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0] as { home_id: string; user_id: string | null };
+  if (!row.user_id) return row.home_id;
+  return row.user_id === userId ? row.home_id : null;
+}
+
+async function verifyFindingOwnership(findingId: string, userId: string): Promise<string | null> {
+  const result = await db.execute(sql`
+    SELECT f.report_id, r.home_id, h.user_id
+    FROM projection_finding f
+    JOIN projection_report r ON r.report_id = f.report_id
+    LEFT JOIN projection_home h ON h.home_id = r.home_id
+    WHERE f.finding_id = ${findingId}
+  `);
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0] as { report_id: string; home_id: string; user_id: string | null };
+  if (!row.user_id) return row.home_id;
+  return row.user_id === userId ? row.home_id : null;
+}
+
+async function verifyChatSessionOwnership(sessionId: string, userId: string): Promise<boolean> {
+  const result = await db.execute(sql`
+    SELECT cs.home_id, h.user_id
+    FROM projection_chat_session cs
+    LEFT JOIN projection_home h ON h.home_id = cs.home_id
+    WHERE cs.session_id = ${sessionId}
+  `);
+  if (result.rows.length === 0) return false;
+  const row = result.rows[0] as { user_id: string | null };
+  if (!row.user_id) return true;
+  return row.user_id === userId;
+}
+
+async function verifyAssistantActionOwnership(actionId: string, userId: string): Promise<boolean> {
+  const result = await db.execute(sql`
+    SELECT a.home_id, h.user_id
+    FROM projection_assistant_action a
+    LEFT JOIN projection_home h ON h.home_id = a.home_id
+    WHERE a.assistant_action_id = ${actionId}
+  `);
+  if (result.rows.length === 0) return false;
+  const row = result.rows[0] as { user_id: string | null };
+  if (!row.user_id) return true;
+  return row.user_id === userId;
+}
+
+// ---------------------------------------------------------------------------
 // Helper: transactional append + apply
 // ---------------------------------------------------------------------------
 async function appendAndApply(
@@ -95,23 +194,61 @@ function snakeToCamel(obj: Record<string, unknown>): Record<string, unknown> {
 
 v2Router.get("/events", async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const fromSeq = Number(req.query.fromSeq ?? 0);
     const limit = Math.min(Number(req.query.limit ?? 100), 1000);
+    const userHomes = await db.execute(sql`
+      SELECT home_id FROM projection_home WHERE user_id = ${userId}
+    `);
+    const homeIds = userHomes.rows.map((r: any) => r.home_id as string);
+    if (homeIds.length === 0) {
+      res.json({ events: [] });
+      return;
+    }
     const events = await db.transaction(async (tx) => readFromSeq(tx, fromSeq, limit));
-    res.json({ events });
+    const filtered = (events as any[]).filter((e: any) => {
+      if (e.actor_id === userId) return true;
+      if (homeIds.includes(e.aggregate_id)) return true;
+      const data = e.data as Record<string, unknown> | undefined;
+      if (data?.homeId && homeIds.includes(data.homeId as string)) return true;
+      return false;
+    });
+    res.json({ events: filtered });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    handleError(res, err);
   }
 });
 
 v2Router.get("/events/stream/:aggregateType/:aggregateId", async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
+    const { aggregateType, aggregateId } = req.params;
+    let authorized = false;
+    if (aggregateType === "home") {
+      authorized = await verifyHomeOwnershipStrict(aggregateId, userId);
+    } else if (aggregateType === "system") {
+      authorized = (await verifySystemOwnership(aggregateId, userId)) !== null;
+    } else if (aggregateType === "task") {
+      authorized = (await verifyTaskOwnership(aggregateId, userId)) !== null;
+    } else if (aggregateType === "inspection_report") {
+      authorized = (await verifyReportOwnership(aggregateId, userId)) !== null;
+    } else if (aggregateType === "finding") {
+      authorized = (await verifyFindingOwnership(aggregateId, userId)) !== null;
+    } else if (aggregateType === "chat_session") {
+      authorized = await verifyChatSessionOwnership(aggregateId, userId);
+    } else if (aggregateType === "assistant_action") {
+      authorized = await verifyAssistantActionOwnership(aggregateId, userId);
+    }
+    if (!authorized) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const events = await db.transaction(async (tx) =>
-      readStream(tx, req.params.aggregateType, req.params.aggregateId),
+      readStream(tx, aggregateType, aggregateId),
     );
     res.json({ events });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    handleError(res, err);
   }
 });
 
@@ -344,7 +481,12 @@ v2Router.post("/homes/:homeId/systems", async (req: Request, res: Response) => {
 v2Router.patch("/systems/:systemId", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
     const { systemId } = req.params;
+    if (!(await verifySystemOwnership(systemId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "system", systemId);
       return appendAndApply(tx, {
@@ -367,15 +509,20 @@ v2Router.patch("/systems/:systemId", async (req: Request, res: Response) => {
 v2Router.delete("/systems/:systemId", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
     const { systemId } = req.params;
+    if (!(await verifySystemOwnership(systemId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "system", systemId);
       return appendAndApply(tx, {
         aggregateType: "system",
         aggregateId: systemId,
         expectedVersion: ver,
-        eventType: EventTypes.SystemStatusOverridden,
-        data: { overrideHealthState: "deleted", reason: "User deleted" },
+        eventType: EventTypes.SystemDeleted,
+        data: { reason: "User deleted" },
         meta: {},
         actor,
         idempotencyKey: req.idempotencyKey!,
@@ -390,7 +537,12 @@ v2Router.delete("/systems/:systemId", async (req: Request, res: Response) => {
 v2Router.post("/systems/:systemId/override-health", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
     const { systemId } = req.params;
+    if (!(await verifySystemOwnership(systemId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "system", systemId);
       return appendAndApply(tx, {
@@ -482,6 +634,12 @@ v2Router.get("/homes/:homeId/tasks", async (req: Request, res: Response) => {
 v2Router.post("/tasks", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
+    const homeId = req.body.homeId;
+    if (homeId && !(await verifyHomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const taskId = crypto.randomUUID();
     const result = await db.transaction(async (tx) =>
       appendAndApply(tx, {
@@ -504,7 +662,12 @@ v2Router.post("/tasks", async (req: Request, res: Response) => {
 v2Router.patch("/tasks/:taskId", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
     const { taskId } = req.params;
+    if (!(await verifyTaskOwnership(taskId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
 
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "task", taskId);
@@ -536,9 +699,9 @@ v2Router.patch("/tasks/:taskId", async (req: Request, res: Response) => {
         aggregateType: "task",
         aggregateId: taskId,
         expectedVersion: ver,
-        eventType: EventTypes.TaskCreated,
+        eventType: EventTypes.TaskUpdated,
         data: req.body,
-        meta: { update: true },
+        meta: {},
         actor,
         idempotencyKey: req.idempotencyKey!,
       });
@@ -552,7 +715,12 @@ v2Router.patch("/tasks/:taskId", async (req: Request, res: Response) => {
 v2Router.delete("/tasks/:taskId", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
     const { taskId } = req.params;
+    if (!(await verifyTaskOwnership(taskId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "task", taskId);
       return guardedAppendAndApply(tx, {
@@ -585,7 +753,12 @@ for (const [action, eventType] of Object.entries(taskTransitions)) {
   v2Router.post(`/tasks/:taskId/${action}`, async (req: Request, res: Response) => {
     try {
       const actor = getActor(req);
+      const userId = getUserId(req);
       const { taskId } = req.params;
+      if (!(await verifyTaskOwnership(taskId, userId))) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
       const result = await db.transaction(async (tx) => {
         const ver = await getCurrentVersion(tx, "task", taskId);
         return guardedAppendAndApply(tx, {
@@ -649,7 +822,12 @@ v2Router.get("/homes/:homeId/reports", async (req: Request, res: Response) => {
 
 v2Router.get("/reports/:reportId", async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const { reportId } = req.params;
+    if (!(await verifyReportOwnership(reportId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
 
     const reportResult = await db.execute(sql`
       SELECT report_id, home_id, state, file_hash, storage_ref, draft, published, error, updated_at
@@ -717,7 +895,12 @@ v2Router.post("/homes/:homeId/reports", async (req: Request, res: Response) => {
 v2Router.post("/reports/:reportId/queue-analysis", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
     const { reportId } = req.params;
+    if (!(await verifyReportOwnership(reportId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "inspection_report", reportId);
       return guardedAppendAndApply(tx, {
@@ -740,7 +923,12 @@ v2Router.post("/reports/:reportId/queue-analysis", async (req: Request, res: Res
 v2Router.post("/reports/:reportId/publish", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
     const { reportId } = req.params;
+    if (!(await verifyReportOwnership(reportId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "inspection_report", reportId);
       return guardedAppendAndApply(tx, {
@@ -763,15 +951,20 @@ v2Router.post("/reports/:reportId/publish", async (req: Request, res: Response) 
 v2Router.delete("/reports/:reportId", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
     const { reportId } = req.params;
+    if (!(await verifyReportOwnership(reportId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "inspection_report", reportId);
       return guardedAppendAndApply(tx, {
         aggregateType: "inspection_report",
         aggregateId: reportId,
         expectedVersion: ver,
-        eventType: EventTypes.InspectionReportAnalysisFailed,
-        data: { error: "User deleted", attemptNumber: 0 },
+        eventType: EventTypes.InspectionReportDeleted,
+        data: { reason: "User deleted" },
         meta: {},
         actor,
         idempotencyKey: req.idempotencyKey!,
@@ -790,7 +983,12 @@ v2Router.delete("/reports/:reportId", async (req: Request, res: Response) => {
 v2Router.post("/findings/:findingId/ignore", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
     const { findingId } = req.params;
+    if (!(await verifyFindingOwnership(findingId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "finding", findingId);
       return guardedAppendAndApply(tx, {
@@ -813,7 +1011,12 @@ v2Router.post("/findings/:findingId/ignore", async (req: Request, res: Response)
 v2Router.post("/findings/:findingId/delete", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
     const { findingId } = req.params;
+    if (!(await verifyFindingOwnership(findingId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "finding", findingId);
       return guardedAppendAndApply(tx, {
@@ -836,7 +1039,12 @@ v2Router.post("/findings/:findingId/delete", async (req: Request, res: Response)
 v2Router.post("/findings/:findingId/create-task", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
     const { findingId } = req.params;
+    if (!(await verifyFindingOwnership(findingId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const taskId = crypto.randomUUID();
 
     const result = await db.transaction(async (tx) => {
@@ -1015,6 +1223,12 @@ v2Router.get("/homes/:homeId/chat", async (req: Request, res: Response) => {
 v2Router.post("/chat/sessions", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
+    const homeId = req.body.homeId;
+    if (homeId && !(await verifyHomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const sessionId = crypto.randomUUID();
     const result = await db.transaction(async (tx) =>
       appendAndApply(tx, {
@@ -1022,7 +1236,7 @@ v2Router.post("/chat/sessions", async (req: Request, res: Response) => {
         aggregateId: sessionId,
         expectedVersion: 0,
         eventType: EventTypes.ChatSessionCreated,
-        data: { homeId: req.body.homeId },
+        data: { homeId },
         meta: {},
         actor,
         idempotencyKey: req.idempotencyKey!,
@@ -1038,7 +1252,12 @@ v2Router.post("/chat/sessions", async (req: Request, res: Response) => {
 v2Router.post("/chat/sessions/:sessionId/messages", async (req: Request, res: Response) => {
   try {
     const actor = getActor(req);
+    const userId = getUserId(req);
     const { sessionId } = req.params;
+    if (!(await verifyChatSessionOwnership(sessionId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const messageId = crypto.randomUUID();
 
     const result = await db.transaction(async (tx) => {
@@ -1074,7 +1293,12 @@ v2Router.post("/chat/sessions/:sessionId/messages", async (req: Request, res: Re
 
 v2Router.get("/chat/sessions/:sessionId", async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const { sessionId } = req.params;
+    if (!(await verifyChatSessionOwnership(sessionId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const session = await db.execute(sql`
       SELECT * FROM projection_chat_session WHERE session_id = ${sessionId}
     `);
@@ -1089,7 +1313,7 @@ v2Router.get("/chat/sessions/:sessionId", async (req: Request, res: Response) =>
     `);
     res.json({ session: session.rows[0], messages: messages.rows });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    handleError(res, err);
   }
 });
 
@@ -1148,15 +1372,23 @@ function handleError(res: Response, err: unknown): void {
       currentState: err.currentState,
       eventType: err.eventType,
       aggregateType: err.aggregateType,
-      aggregateId: err.aggregateId,
     });
     return;
   }
   const error = err as Error & { status?: number; code?: string };
   if (error.code === "23505") {
-    res.status(409).json({ error: "Conflict: optimistic concurrency violation", details: error.message });
+    res.status(409).json({ error: "Conflict: this operation was already processed" });
+    return;
+  }
+  if (error.code?.startsWith("23")) {
+    res.status(400).json({ error: "Invalid data: a database constraint was violated" });
+    return;
+  }
+  if (error.code?.startsWith("22")) {
+    res.status(400).json({ error: "Invalid input format" });
     return;
   }
   const status = error.status ?? 500;
-  res.status(status).json({ error: error.message });
+  const message = status >= 500 ? "Internal server error" : error.message;
+  res.status(status).json({ error: message });
 }

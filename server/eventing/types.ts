@@ -41,6 +41,7 @@ export const EventTypes = {
   SystemAttributesUpserted: "SystemAttributesUpserted",
   SystemHealthEvaluated: "SystemHealthEvaluated",
   SystemStatusOverridden: "SystemStatusOverridden",
+  SystemDeleted: "SystemDeleted",
   OverrideCleared: "OverrideCleared",
 
   InspectionReportUploaded: "InspectionReportUploaded",
@@ -49,12 +50,14 @@ export const EventTypes = {
   InspectionReportNeedsReview: "InspectionReportNeedsReview",
   InspectionReportPublished: "InspectionReportPublished",
   InspectionReportAnalysisFailed: "InspectionReportAnalysisFailed",
+  InspectionReportDeleted: "InspectionReportDeleted",
 
   FindingIgnored: "FindingIgnored",
   FindingDeleted: "FindingDeleted",
   FindingTaskCreated: "FindingTaskCreated",
 
   TaskCreated: "TaskCreated",
+  TaskUpdated: "TaskUpdated",
   TaskApproved: "TaskApproved",
   TaskRejected: "TaskRejected",
   TaskScheduled: "TaskScheduled",

@@ -106,6 +106,12 @@ export async function applyEvent(tx: DrizzleTx, event: EventRow): Promise<void> 
       `);
       break;
 
+    case EventTypes.SystemDeleted:
+      await tx.execute(sql`
+        DELETE FROM projection_system WHERE system_id = ${id}
+      `);
+      break;
+
     // ----- Inspection Report -----
     case EventTypes.InspectionReportUploaded:
       await tx.execute(sql`
@@ -176,6 +182,15 @@ export async function applyEvent(tx: DrizzleTx, event: EventRow): Promise<void> 
       `);
       break;
 
+    case EventTypes.InspectionReportDeleted:
+      await tx.execute(sql`
+        DELETE FROM projection_finding WHERE report_id = ${id}
+      `);
+      await tx.execute(sql`
+        DELETE FROM projection_report WHERE report_id = ${id}
+      `);
+      break;
+
     // ----- Finding -----
     case EventTypes.FindingIgnored:
       await tx.execute(sql`
@@ -217,6 +232,20 @@ export async function applyEvent(tx: DrizzleTx, event: EventRow): Promise<void> 
         )
         ON CONFLICT (task_id) DO UPDATE
         SET state = 'proposed', last_event_seq = ${seq}, updated_at = now()
+      `);
+      break;
+
+    case EventTypes.TaskUpdated:
+      await tx.execute(sql`
+        UPDATE projection_task
+        SET title = COALESCE(${(data.title as string) ?? null}, projection_task.title),
+            due_at = COALESCE(${(data.dueAt as string) ?? null}::timestamptz, projection_task.due_at),
+            estimates = CASE WHEN ${JSON.stringify(data.estimates ?? null)}::jsonb IS NOT NULL
+                        THEN ${JSON.stringify(data.estimates ?? null)}::jsonb
+                        ELSE projection_task.estimates END,
+            last_event_seq = ${seq},
+            updated_at = now()
+        WHERE task_id = ${id}
       `);
       break;
 
