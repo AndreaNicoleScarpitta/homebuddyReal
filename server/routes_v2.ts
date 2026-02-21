@@ -13,6 +13,7 @@ import { append, readStream, readFromSeq, getCurrentVersion } from "./eventing/e
 import { requireIdempotencyKey } from "./eventing/idempotency";
 import { applyEvent } from "./projections/applyEvent";
 import { EventTypes, type Actor } from "./eventing/types";
+import { validateTransition, TransitionError } from "./domain/stateMachine";
 
 export const v2Router = Router();
 
@@ -236,7 +237,7 @@ v2Router.post("/reports/:reportId/queue-analysis", async (req: Request, res: Res
     const { reportId } = req.params;
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "inspection_report", reportId);
-      return appendAndApply(tx, {
+      return guardedAppendAndApply(tx, {
         aggregateType: "inspection_report",
         aggregateId: reportId,
         expectedVersion: ver,
@@ -259,7 +260,7 @@ v2Router.post("/reports/:reportId/publish", async (req: Request, res: Response) 
     const { reportId } = req.params;
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "inspection_report", reportId);
-      return appendAndApply(tx, {
+      return guardedAppendAndApply(tx, {
         aggregateType: "inspection_report",
         aggregateId: reportId,
         expectedVersion: ver,
@@ -286,7 +287,7 @@ v2Router.post("/findings/:findingId/ignore", async (req: Request, res: Response)
     const { findingId } = req.params;
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "finding", findingId);
-      return appendAndApply(tx, {
+      return guardedAppendAndApply(tx, {
         aggregateType: "finding",
         aggregateId: findingId,
         expectedVersion: ver,
@@ -309,7 +310,7 @@ v2Router.post("/findings/:findingId/delete", async (req: Request, res: Response)
     const { findingId } = req.params;
     const result = await db.transaction(async (tx) => {
       const ver = await getCurrentVersion(tx, "finding", findingId);
-      return appendAndApply(tx, {
+      return guardedAppendAndApply(tx, {
         aggregateType: "finding",
         aggregateId: findingId,
         expectedVersion: ver,
@@ -334,7 +335,7 @@ v2Router.post("/findings/:findingId/create-task", async (req: Request, res: Resp
 
     const result = await db.transaction(async (tx) => {
       const findingVer = await getCurrentVersion(tx, "finding", findingId);
-      const findingResult = await appendAndApply(tx, {
+      const findingResult = await guardedAppendAndApply(tx, {
         aggregateType: "finding",
         aggregateId: findingId,
         expectedVersion: findingVer,
@@ -408,7 +409,7 @@ for (const [action, eventType] of Object.entries(taskTransitions)) {
       const { taskId } = req.params;
       const result = await db.transaction(async (tx) => {
         const ver = await getCurrentVersion(tx, "task", taskId);
-        return appendAndApply(tx, {
+        return guardedAppendAndApply(tx, {
           aggregateType: "task",
           aggregateId: taskId,
           expectedVersion: ver,
@@ -579,27 +580,21 @@ v2Router.post("/assistant/actions/:assistantActionId/approve", async (req: Reque
     const { assistantActionId } = req.params;
 
     const result = await db.transaction(async (tx) => {
-      // Gate: must be in PROPOSED state
+      // Fetch proposed_commands before the guard validates + transitions state
       const row = await tx.execute(sql`
-        SELECT state, proposed_commands
+        SELECT proposed_commands
         FROM projection_assistant_action
         WHERE assistant_action_id = ${assistantActionId}
       `);
       if (row.rows.length === 0) {
         throw Object.assign(new Error("Assistant action not found"), { status: 404 });
       }
-      const action = row.rows[0] as { state: string; proposed_commands: unknown[] };
-      if (action.state !== "proposed") {
-        throw Object.assign(
-          new Error(`Cannot approve action in state '${action.state}'; must be 'proposed'`),
-          { status: 409 },
-        );
-      }
+      const action = row.rows[0] as { proposed_commands: unknown[] };
 
       const ver = await getCurrentVersion(tx, "assistant_action", assistantActionId);
 
-      // 1) Append AssistantActionApproved
-      const approveResult = await appendAndApply(tx, {
+      // 1) Guarded approve — validates state='proposed' via state machine
+      const approveResult = await guardedAppendAndApply(tx, {
         aggregateType: "assistant_action",
         aggregateId: assistantActionId,
         expectedVersion: ver,
@@ -660,22 +655,15 @@ v2Router.post("/assistant/actions/:assistantActionId/reject", async (req: Reques
 
     const result = await db.transaction(async (tx) => {
       const row = await tx.execute(sql`
-        SELECT state FROM projection_assistant_action
+        SELECT assistant_action_id FROM projection_assistant_action
         WHERE assistant_action_id = ${assistantActionId}
       `);
       if (row.rows.length === 0) {
         throw Object.assign(new Error("Assistant action not found"), { status: 404 });
       }
-      const action = row.rows[0] as { state: string };
-      if (action.state !== "proposed") {
-        throw Object.assign(
-          new Error(`Cannot reject action in state '${action.state}'; must be 'proposed'`),
-          { status: 409 },
-        );
-      }
 
       const ver = await getCurrentVersion(tx, "assistant_action", assistantActionId);
-      return appendAndApply(tx, {
+      return guardedAppendAndApply(tx, {
         aggregateType: "assistant_action",
         aggregateId: assistantActionId,
         expectedVersion: ver,
@@ -694,9 +682,62 @@ v2Router.post("/assistant/actions/:assistantActionId/reject", async (req: Reques
 });
 
 // ---------------------------------------------------------------------------
+// Helper: fetch current aggregate state from projection tables
+// ---------------------------------------------------------------------------
+
+async function getAggregateState(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  aggregateType: string,
+  aggregateId: string,
+): Promise<string | null> {
+  let result;
+  switch (aggregateType) {
+    case "task":
+      result = await tx.execute(sql`SELECT state FROM projection_task WHERE task_id = ${aggregateId}`);
+      break;
+    case "inspection_report":
+      result = await tx.execute(sql`SELECT state FROM projection_report WHERE report_id = ${aggregateId}`);
+      break;
+    case "finding":
+      result = await tx.execute(sql`SELECT state FROM projection_finding WHERE finding_id = ${aggregateId}`);
+      break;
+    case "assistant_action":
+      result = await tx.execute(sql`SELECT state FROM projection_assistant_action WHERE assistant_action_id = ${aggregateId}`);
+      break;
+    default:
+      return null;
+  }
+  if (result.rows.length === 0) return null;
+  return (result.rows[0] as { state: string }).state;
+}
+
+/**
+ * Guard wrapper: fetch current state, validate transition, then append+apply.
+ * For creation events (no existing aggregate), currentState will be null.
+ */
+async function guardedAppendAndApply(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  input: Parameters<typeof append>[1],
+) {
+  const currentState = await getAggregateState(tx, input.aggregateType, input.aggregateId);
+  validateTransition(input.aggregateType, input.aggregateId, currentState, input.eventType);
+  return appendAndApply(tx, input);
+}
+
+// ---------------------------------------------------------------------------
 // Error handler — translates status-bearing errors into HTTP responses
 // ---------------------------------------------------------------------------
 function handleError(res: Response, err: unknown): void {
+  if (err instanceof TransitionError) {
+    res.status(409).json({
+      error: err.message,
+      currentState: err.currentState,
+      eventType: err.eventType,
+      aggregateType: err.aggregateType,
+      aggregateId: err.aggregateId,
+    });
+    return;
+  }
   const error = err as Error & { status?: number; code?: string };
   if (error.code === "23505") {
     res.status(409).json({ error: "Conflict: optimistic concurrency violation", details: error.message });

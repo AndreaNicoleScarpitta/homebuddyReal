@@ -314,6 +314,13 @@ describe("projection sync", () => {
     let task = await pool.query(`SELECT state FROM projection_task WHERE task_id = $1`, [taskId]);
     expect(task.rows[0].state).toBe("approved");
 
+    // Start (required by state machine before complete)
+    const start = await v2("POST", `/tasks/${taskId}/start`, {}, `lifecycle-start-${crypto.randomUUID()}`);
+    expect(start.status).toBe(200);
+
+    task = await pool.query(`SELECT state FROM projection_task WHERE task_id = $1`, [taskId]);
+    expect(task.rows[0].state).toBe("in_progress");
+
     // Complete
     const complete = await v2("POST", `/tasks/${taskId}/complete`, {}, `lifecycle-complete-${crypto.randomUUID()}`);
     expect(complete.status).toBe(200);

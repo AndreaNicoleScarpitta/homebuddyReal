@@ -17,6 +17,13 @@ Home Buddy is a home maintenance assistant web application with OAuth authentica
 - Legal Terms & Conditions page accessible without authentication
 
 ## Recent Changes
+- 2026-02-21: Milestone 3 — State-Machine Guards:
+  - Created server/domain/stateMachine.ts with transition maps for Task, InspectionReport, Finding, and AssistantAction aggregates
+  - validateTransition() and TransitionError enforce valid lifecycle transitions at write time
+  - Wired guardedAppendAndApply() into all stateful v2 mutation endpoints (tasks, reports, findings, assistant actions)
+  - Updated handleError to return structured 409 responses with currentState, eventType, aggregateType
+  - Added 16 Vitest tests (10 unit + 6 DB integration) covering valid/invalid transitions
+  - Updated existing command-pipeline test to respect state machine (approved → started → completed)
 - 2026-02-21: Milestone 2 — Command + Projection Pipeline:
   - Created server/eventing/types.ts with full event type catalog and Zod schemas
   - Created server/eventing/eventStore.ts with append(), readStream(), readFromSeq(), getCurrentVersion()
