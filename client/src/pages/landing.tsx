@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
-import { Calendar, MessageSquare, ArrowRight, Sparkles, Wallet, CheckCircle2 } from "lucide-react";
+import { Calendar, MessageSquare, ArrowRight, Sparkles, Wallet } from "lucide-react";
+
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { DashboardDemo, ChatDemo, BudgetDemo } from "@/components/landing-demos";
@@ -66,48 +67,15 @@ export default function Landing() {
                   Never miss a maintenance task. Get personalized guidance, safety alerts, and expert recommendations tailored to your home.
                 </p>
                 
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pt-4">
-                  <Button
-                    size="lg"
-                    className="h-14 px-8 text-lg font-medium shadow-lg shadow-primary/25 cursor-pointer"
-                    onClick={() => navigate("/signup")}
-                    data-testid="button-hero-login"
-                  >
-                    Get Started Free
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Button>
-                  <span className="text-sm text-muted-foreground">No credit card required</span>
-                </div>
               </motion.div>
 
               <motion.div
                 initial={{ opacity: 0, x: 40 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.7, delay: 0.2 }}
-                className="hidden lg:block relative"
+                className="hidden lg:block"
               >
-                <div className="relative rounded-2xl overflow-hidden shadow-2xl shadow-primary/10 border border-border/40 ring-1 ring-black/5">
-                  <img
-                    src="/images/app-dashboard-preview.png"
-                    alt="Home Buddy Dashboard"
-                    className="w-full h-auto transition-transform duration-500 hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-background/20 to-transparent pointer-events-none" />
-                </div>
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.8 }}
-                  className="absolute -bottom-6 -left-6 bg-card rounded-xl shadow-lg border border-border/40 p-4 flex items-center gap-3"
-                >
-                  <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-950/40 flex items-center justify-center">
-                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Tasks Completed</p>
-                    <p className="text-xs text-muted-foreground">12 this month</p>
-                  </div>
-                </motion.div>
+                <DashboardDemo />
               </motion.div>
             </div>
           </div>
