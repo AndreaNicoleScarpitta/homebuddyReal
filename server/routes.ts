@@ -11,19 +11,26 @@ import { ZodError, z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import {
   insertHomeSchema,
+  type InsertHome,
   insertSystemSchema,
+  type InsertSystem,
   insertMaintenanceTaskSchema,
+  type InsertMaintenanceTask,
   insertMaintenanceLogEntrySchema,
+  type InsertMaintenanceLogEntry,
   insertChatMessageSchema,
   insertFundSchema,
+  type InsertFund,
   insertFundAllocationSchema,
+  type InsertFundAllocation,
   insertExpenseSchema,
+  type InsertExpense,
   insertContactMessageSchema,
   type InsertContactMessage,
-  type InsertFundAllocation,
-  type InsertExpense,
   insertInspectionReportSchema,
+  type InsertInspectionReport,
   insertContractorAppointmentSchema,
+  type InsertContractorAppointment,
   insertNotificationPreferencesSchema,
 } from "@shared/schema";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -147,7 +154,7 @@ export async function registerRoutes(
   app.post("/api/home", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const homeData = insertHomeSchema.parse({ ...req.body, userId });
+      const homeData = insertHomeSchema.parse({ ...req.body, userId }) as unknown as InsertHome;
       const home = await storage.createHome(homeData);
       logInfo("home.create", "Home created successfully", { homeId: home.id, userId });
       res.json(home);
@@ -246,7 +253,7 @@ export async function registerRoutes(
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
-      const systemData = insertSystemSchema.parse({ ...req.body, homeId });
+      const systemData = insertSystemSchema.parse({ ...req.body, homeId }) as unknown as InsertSystem;
       const system = await storage.createSystem(systemData);
       logInfo("systems.create", "System created successfully", { systemId: system.id, homeId });
       res.json(system);
@@ -279,7 +286,7 @@ export async function registerRoutes(
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
-      const taskData = insertMaintenanceTaskSchema.parse({ ...req.body, homeId });
+      const taskData = insertMaintenanceTaskSchema.parse({ ...req.body, homeId }) as unknown as InsertMaintenanceTask;
       const task = await storage.createTask(taskData);
       logInfo("tasks.create", "Task created successfully", { taskId: task.id, homeId });
       res.json(task);
@@ -349,7 +356,7 @@ export async function registerRoutes(
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
-      const entryData = insertMaintenanceLogEntrySchema.parse({ ...req.body, homeId });
+      const entryData = insertMaintenanceLogEntrySchema.parse({ ...req.body, homeId }) as unknown as InsertMaintenanceLogEntry;
       const entry = await storage.createLogEntry(entryData);
       logInfo("logEntries.create", "Log entry created successfully", { entryId: entry.id, homeId });
       res.json(entry);
@@ -507,7 +514,7 @@ export async function registerRoutes(
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
-      const fundData = insertFundSchema.parse({ ...req.body, homeId });
+      const fundData = insertFundSchema.parse({ ...req.body, homeId }) as unknown as InsertFund;
       const fund = await storage.createFund(fundData);
       logInfo("funds.create", "Fund created successfully", { fundId: fund.id, homeId });
       res.json(fund);
@@ -583,7 +590,7 @@ export async function registerRoutes(
   
   app.post("/api/allocations", isAuthenticated, async (req: any, res) => {
     try {
-      const allocationData = insertFundAllocationSchema.parse(req.body) as InsertFundAllocation;
+      const allocationData = insertFundAllocationSchema.parse(req.body) as unknown as InsertFundAllocation;
       const userId = req.user.id;
       if (!await storage.verifyFundOwnership(allocationData.fundId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
@@ -663,7 +670,7 @@ export async function registerRoutes(
   
   app.post("/api/expenses", isAuthenticated, async (req: any, res) => {
     try {
-      const expenseData = insertExpenseSchema.parse(req.body) as InsertExpense;
+      const expenseData = insertExpenseSchema.parse(req.body) as unknown as InsertExpense;
       const userId = req.user.id;
       if (!await storage.verifyFundOwnership(expenseData.fundId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
@@ -713,7 +720,7 @@ export async function registerRoutes(
   // Contact form route (public - no auth required)
   app.post("/api/contact", async (req, res) => {
     try {
-      const messageData = insertContactMessageSchema.parse(req.body) as InsertContactMessage;
+      const messageData = insertContactMessageSchema.parse(req.body) as unknown as InsertContactMessage;
       const sanitizedData: InsertContactMessage = {
         ...messageData,
         name: sanitizeText(messageData.name),
@@ -790,7 +797,7 @@ export async function registerRoutes(
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
-      const reportData = insertInspectionReportSchema.parse({ ...req.body, homeId });
+      const reportData = insertInspectionReportSchema.parse({ ...req.body, homeId }) as unknown as InsertInspectionReport;
       const report = await storage.createInspectionReport(reportData);
       logInfo("reports.create", "Report created successfully", { reportId: report.id });
       res.json(report);
@@ -831,7 +838,7 @@ export async function registerRoutes(
             summary: "Inspection analysis complete. 3 issues identified - 1 moderate, 2 minor. Estimated total repair cost: $570-1,700.",
             issuesFound: sampleFindings.length,
             analyzedAt: new Date(),
-          });
+          } as any);
           
           logInfo("reports.analyze", "Report analyzed successfully", { reportId: id, findingsCount: sampleFindings.length });
         } catch (err) {
@@ -921,7 +928,7 @@ export async function registerRoutes(
       if (!await storage.verifyHomeOwnership(homeId, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
-      const appointmentData = insertContractorAppointmentSchema.parse({ ...req.body, homeId });
+      const appointmentData = insertContractorAppointmentSchema.parse({ ...req.body, homeId }) as unknown as InsertContractorAppointment;
       const appointment = await storage.createAppointment(appointmentData);
       logInfo("appointments.create", "Appointment created", { appointmentId: appointment.id });
       res.json(appointment);
@@ -938,7 +945,7 @@ export async function registerRoutes(
       if (!await storage.verifyAppointmentOwnership(id, userId)) {
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
-      const updateData = insertContractorAppointmentSchema.omit({ homeId: true }).partial().parse(req.body);
+      const updateData = (insertContractorAppointmentSchema as any).omit({ homeId: true }).partial().parse(req.body) as Partial<InsertContractorAppointment>;
       const appointment = await storage.updateAppointment(id, updateData);
       logInfo("appointments.update", "Appointment updated", { appointmentId: id });
       res.json(appointment);

@@ -153,7 +153,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createHome(homeData: InsertHome): Promise<Home> {
-    const [home] = await db.insert(homes).values(homeData).returning();
+    const [home] = await db.insert(homes).values(homeData as any).returning();
     return home;
   }
   
@@ -175,7 +175,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createSystem(systemData: InsertSystem): Promise<System> {
-    const [system] = await db.insert(systems).values(systemData).returning();
+    const [system] = await db.insert(systems).values(systemData as any).returning();
     return system;
   }
   
@@ -207,7 +207,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createTask(taskData: InsertMaintenanceTask): Promise<MaintenanceTask> {
-    const [task] = await db.insert(maintenanceTasks).values(taskData).returning();
+    const [task] = await db.insert(maintenanceTasks).values(taskData as any).returning();
     return task;
   }
   
@@ -239,7 +239,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createLogEntry(entryData: InsertMaintenanceLogEntry): Promise<MaintenanceLogEntry> {
-    const [entry] = await db.insert(maintenanceLogEntries).values(entryData).returning();
+    const [entry] = await db.insert(maintenanceLogEntries).values(entryData as any).returning();
     return entry;
   }
   
@@ -272,7 +272,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createChatMessage(messageData: InsertChatMessage): Promise<ChatMessage> {
-    const [message] = await db.insert(chatMessages).values(messageData).returning();
+    const [message] = await db.insert(chatMessages).values(messageData as any).returning();
     return message;
   }
   
@@ -287,7 +287,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createFund(fundData: InsertFund): Promise<Fund> {
-    const [fund] = await db.insert(funds).values(fundData).returning();
+    const [fund] = await db.insert(funds).values(fundData as any).returning();
     return fund;
   }
   
@@ -325,7 +325,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createAllocation(allocationData: InsertFundAllocation): Promise<FundAllocation> {
-    const [allocation] = await db.insert(fundAllocations).values(allocationData).returning();
+    const [allocation] = await db.insert(fundAllocations).values(allocationData as any).returning();
     return allocation;
   }
   
@@ -367,7 +367,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createExpense(expenseData: InsertExpense): Promise<Expense> {
-    const [expense] = await db.insert(expenses).values(expenseData).returning();
+    const [expense] = await db.insert(expenses).values(expenseData as any).returning();
     return expense;
   }
   
@@ -386,7 +386,7 @@ export class DatabaseStorage implements IStorage {
   
   // Contact Messages
   async createContactMessage(messageData: InsertContactMessage): Promise<ContactMessage> {
-    const [message] = await db.insert(contactMessages).values(messageData).returning();
+    const [message] = await db.insert(contactMessages).values(messageData as any).returning();
     return message;
   }
   
@@ -442,7 +442,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createInspectionReport(reportData: InsertInspectionReport): Promise<InspectionReport> {
-    const [report] = await db.insert(inspectionReports).values(reportData).returning();
+    const [report] = await db.insert(inspectionReports).values(reportData as any).returning();
     return report;
   }
   
@@ -469,7 +469,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createFinding(findingData: InsertInspectionFinding): Promise<InspectionFinding> {
-    const [finding] = await db.insert(inspectionFindings).values(findingData).returning();
+    const [finding] = await db.insert(inspectionFindings).values(findingData as any).returning();
     return finding;
   }
   
@@ -507,7 +507,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createAppointment(appointmentData: InsertContractorAppointment): Promise<ContractorAppointment> {
-    const [appointment] = await db.insert(contractorAppointments).values(appointmentData).returning();
+    const [appointment] = await db.insert(contractorAppointments).values(appointmentData as any).returning();
     return appointment;
   }
   
@@ -537,7 +537,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createNotificationPreferences(prefsData: InsertNotificationPreferences): Promise<NotificationPreferences> {
-    const [prefs] = await db.insert(notificationPreferences).values(prefsData).returning();
+    const [prefs] = await db.insert(notificationPreferences).values(prefsData as any).returning();
     return prefs;
   }
   

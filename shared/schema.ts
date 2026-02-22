@@ -40,8 +40,9 @@ export const homes = pgTable("homes", {
   index("homes_user_id_idx").on(table.userId),
 ]);
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertHomeSchema = createInsertSchema(homes).omit({ id: true, createdAt: true, updatedAt: true });
-export type InsertHome = z.infer<typeof insertHomeSchema>;
+export type InsertHome = Omit<typeof homes.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
 export type Home = typeof homes.$inferSelect;
 
 // System categories enum
@@ -112,8 +113,9 @@ export const systems = pgTable("systems", {
   index("systems_entity_type_idx").on(table.entityType),
 ]);
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertSystemSchema = createInsertSchema(systems).omit({ id: true, createdAt: true, updatedAt: true });
-export type InsertSystem = z.infer<typeof insertSystemSchema>;
+export type InsertSystem = Omit<typeof systems.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
 export type System = typeof systems.$inferSelect;
 
 // Task statuses
@@ -152,8 +154,9 @@ export const maintenanceTasks = pgTable("maintenance_tasks", {
   index("maintenance_tasks_contractor_idx").on(table.assignedContractorId),
 ]);
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertMaintenanceTaskSchema = createInsertSchema(maintenanceTasks).omit({ id: true, createdAt: true, updatedAt: true });
-export type InsertMaintenanceTask = z.infer<typeof insertMaintenanceTaskSchema>;
+export type InsertMaintenanceTask = Omit<typeof maintenanceTasks.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
 export type MaintenanceTask = typeof maintenanceTasks.$inferSelect;
 
 // Maintenance log entries - tracks completed maintenance work
@@ -175,8 +178,9 @@ export const maintenanceLogEntries = pgTable("maintenance_log_entries", {
   index("maintenance_log_date_idx").on(table.date),
 ]);
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertMaintenanceLogEntrySchema = createInsertSchema(maintenanceLogEntries).omit({ id: true, createdAt: true });
-export type InsertMaintenanceLogEntry = z.infer<typeof insertMaintenanceLogEntrySchema>;
+export type InsertMaintenanceLogEntry = Omit<typeof maintenanceLogEntries.$inferInsert, 'id' | 'createdAt'>;
 export type MaintenanceLogEntry = typeof maintenanceLogEntries.$inferSelect;
 
 // Chat messages table
@@ -195,8 +199,9 @@ export const chatMessages = pgTable("chat_messages", {
   index("chat_messages_home_id_idx").on(table.homeId),
 ]);
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ id: true, createdAt: true });
-export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
+export type InsertChatMessage = Omit<typeof chatMessages.$inferInsert, 'id' | 'createdAt'>;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 
 // Funds table - stores user's budget funds/buckets
@@ -218,8 +223,9 @@ export const funds = pgTable("funds", {
   index("funds_scoped_system_idx").on(table.scopedSystemId),
 ]);
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertFundSchema = createInsertSchema(funds).omit({ id: true, createdAt: true, updatedAt: true });
-export type InsertFund = z.infer<typeof insertFundSchema>;
+export type InsertFund = Omit<typeof funds.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
 export type Fund = typeof funds.$inferSelect;
 
 // Fund allocations table - tracks money earmarked for specific tasks
@@ -237,8 +243,9 @@ export const fundAllocations = pgTable("fund_allocations", {
   index("fund_allocations_task_id_idx").on(table.taskId),
 ]);
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertFundAllocationSchema = createInsertSchema(fundAllocations).omit({ id: true, createdAt: true, updatedAt: true });
-export type InsertFundAllocation = z.infer<typeof insertFundAllocationSchema>;
+export type InsertFundAllocation = Omit<typeof fundAllocations.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
 export type FundAllocation = typeof fundAllocations.$inferSelect;
 
 // Expenses table - tracks actual spending
@@ -257,8 +264,9 @@ export const expenses = pgTable("expenses", {
   index("expenses_task_id_idx").on(table.taskId),
 ]);
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true, createdAt: true });
-export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+export type InsertExpense = Omit<typeof expenses.$inferInsert, 'id' | 'createdAt'>;
 export type Expense = typeof expenses.$inferSelect;
 
 // Contact messages table - stores contact form submissions
@@ -272,10 +280,11 @@ export const contactMessages = pgTable("contact_messages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertContactMessageSchema = createInsertSchema(contactMessages).omit({ id: true, createdAt: true, status: true }).extend({
   email: z.string().email("Please provide a valid email address"),
 });
-export type InsertContactMessage = z.infer<typeof insertContactMessageSchema>;
+export type InsertContactMessage = Omit<typeof contactMessages.$inferInsert, 'id' | 'createdAt' | 'status'>;
 export type ContactMessage = typeof contactMessages.$inferSelect;
 
 // Inspection reports table - stores uploaded inspection reports
@@ -296,8 +305,9 @@ export const inspectionReports = pgTable("inspection_reports", {
   index("inspection_reports_home_id_idx").on(table.homeId),
 ]);
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertInspectionReportSchema = createInsertSchema(inspectionReports).omit({ id: true, createdAt: true, analyzedAt: true });
-export type InsertInspectionReport = z.infer<typeof insertInspectionReportSchema>;
+export type InsertInspectionReport = Omit<typeof inspectionReports.$inferInsert, 'id' | 'createdAt' | 'analyzedAt'>;
 export type InspectionReport = typeof inspectionReports.$inferSelect;
 
 // Inspection findings table - stores individual findings from reports
@@ -318,8 +328,9 @@ export const inspectionFindings = pgTable("inspection_findings", {
   index("inspection_findings_report_id_idx").on(table.reportId),
 ]);
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertInspectionFindingSchema = createInsertSchema(inspectionFindings).omit({ id: true, createdAt: true });
-export type InsertInspectionFinding = z.infer<typeof insertInspectionFindingSchema>;
+export type InsertInspectionFinding = Omit<typeof inspectionFindings.$inferInsert, 'id' | 'createdAt'>;
 export type InspectionFinding = typeof inspectionFindings.$inferSelect;
 
 // Contractors table - stores saved contractor references (Angie's List integration)
@@ -341,8 +352,9 @@ export const contractors = pgTable("contractors", {
   index("contractors_service_type_idx").on(table.serviceType),
 ]);
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertContractorSchema = createInsertSchema(contractors).omit({ id: true, createdAt: true, updatedAt: true });
-export type InsertContractor = z.infer<typeof insertContractorSchema>;
+export type InsertContractor = Omit<typeof contractors.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
 export type Contractor = typeof contractors.$inferSelect;
 
 // Contractor appointments - tracks scheduled/completed work with contractors
@@ -365,8 +377,9 @@ export const contractorAppointments = pgTable("contractor_appointments", {
   index("contractor_appointments_status_idx").on(table.status),
 ]);
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertContractorAppointmentSchema = createInsertSchema(contractorAppointments).omit({ id: true, createdAt: true, updatedAt: true });
-export type InsertContractorAppointment = z.infer<typeof insertContractorAppointmentSchema>;
+export type InsertContractorAppointment = Omit<typeof contractorAppointments.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
 export type ContractorAppointment = typeof contractorAppointments.$inferSelect;
 
 // User notification preferences
@@ -383,8 +396,9 @@ export const notificationPreferences = pgTable("notification_preferences", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// @ts-expect-error drizzle-zod omit type inference
 export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences).omit({ id: true, createdAt: true, updatedAt: true });
-export type InsertNotificationPreferences = z.infer<typeof insertNotificationPreferencesSchema>;
+export type InsertNotificationPreferences = Omit<typeof notificationPreferences.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
 export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
 
 // Relations

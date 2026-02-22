@@ -27,7 +27,7 @@ if (process.env.NODE_ENV !== "production") {
     const testUserId = req.headers["x-test-user-id"];
     if (testUserId && !req.user) {
       (req as any).user = { id: parseInt(String(testUserId), 10) || 1 };
-      req.isAuthenticated = () => true;
+      (req as any).isAuthenticated = () => true;
     }
     next();
   });
