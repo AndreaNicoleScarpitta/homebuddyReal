@@ -1,12 +1,12 @@
 # Home Buddy - Home Maintenance Assistant
 
 ## Overview
-Home Buddy is a home maintenance assistant web application designed to simplify home management. It features OAuth authentication, comprehensive home profile management, AI-powered maintenance task tracking, a chat assistant, and detailed budget and funds tracking. It is configured as a Progressive Web App (PWA) for installability across devices. The project aims to provide a reliable, anxiety-aware tool for homeowners to manage their properties efficiently.
+Home Buddy is a home maintenance assistant web application designed to simplify home management. It features OAuth authentication, comprehensive home profile management, AI-powered maintenance task tracking, a chat assistant with session history, document storage via object storage, and inspection report management. It is configured as a Progressive Web App (PWA) for installability across devices. The project aims to provide a reliable, anxiety-aware tool for homeowners to manage their properties efficiently.
 
 ## User Preferences
 - Design: "Modern Utility" aesthetic with construction orange (#f97316)
 - Typography: Plus Jakarta Sans (headings), Inter (UI)
-- UX: Emotional design, no-shame budgeting approach, anxiety-aware
+- UX: Emotional design, anxiety-aware
 - Style: Minimalist, no cards, split-hero layouts, pill-style components
 - Tone: Calm professional, not "friendly startup" - empathetic but grounded
 - AI Messaging: Always include disclaimers that estimates are ranges, user is in control
@@ -19,7 +19,8 @@ Core features include:
 - **Authentication**: Passport.js for OAuth, session-based with PostgreSQL session store.
 - **Data Management**: Event-sourced architecture for critical aggregates (Homes, Systems, Tasks, Reports, Findings, Assistant Actions). Data immutability enforced on the event log.
 - **API**: Versioned API endpoints (`/v2`) with idempotency keys, state machine guards, and ownership verification for data security.
-- **AI Integration**: AI chat with streaming responses (GPT-4o), vision API capabilities for photo analysis, and privacy controls for data storage opt-out.
+- **AI Integration**: AI chat with streaming responses (GPT-4o), vision API capabilities for photo analysis, privacy controls for data storage opt-out, and chat session management with history sidebar.
+- **Document Storage**: Object storage integration (GCS) for home documents (insurance, warranties, permits, receipts) with presigned URL upload flow.
 - **Background Processing**: A job queue system handles asynchronous tasks like report analysis, digest generation, and reconciliation checks for overdue tasks.
 - **PWA Capabilities**: Service worker, manifest, and app icons for installability and offline access.
 - **Security**: Comprehensive security hardening including input sanitization, security headers (Helmet), rate limiting (express-rate-limit), and robust error handling to prevent data leakage.
