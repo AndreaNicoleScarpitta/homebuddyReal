@@ -82,6 +82,7 @@ function Router() {
     return (
       <Switch>
         <Route path="/login" component={Login} />
+        <Route path="/signup" component={Login} />
         <Route path="/terms" component={PublicTermsPage} />
         <Route component={Landing} />
       </Switch>
