@@ -1,7 +1,8 @@
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Home, Shield, LogIn } from "lucide-react";
 import { motion } from "framer-motion";
 import { trackEvent } from "@/lib/analytics";
+import { cn } from "@/lib/utils";
 
 export default function Login() {
   return (
@@ -39,20 +40,19 @@ export default function Login() {
           </div>
 
           <div className="space-y-3">
-            <Button
-              asChild
-              className="w-full h-14 text-base font-medium gap-3 justify-center"
+            <a
+              href="/api/login"
+              target="_top"
+              onClick={() => trackEvent('login_attempt', 'auth', 'replit')}
+              className={cn(
+                buttonVariants({ size: "default" }),
+                "w-full h-14 text-base font-medium gap-3 justify-center no-underline"
+              )}
+              data-testid="button-login"
             >
-              <a
-                href="/api/login"
-                target="_top"
-                onClick={() => trackEvent('login_attempt', 'auth', 'replit')}
-                data-testid="button-login"
-              >
-                <LogIn className="h-5 w-5" />
-                Sign In
-              </a>
-            </Button>
+              <LogIn className="h-5 w-5" />
+              Sign In
+            </a>
 
             <p className="text-center text-xs text-muted-foreground">
               Sign in with Google, GitHub, Apple, or email

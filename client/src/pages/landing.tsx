@@ -1,7 +1,7 @@
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Calendar, MessageSquare, Shield, ArrowRight, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
-import { Link } from "wouter";
+import { cn } from "@/lib/utils";
 
 export default function Landing() {
   const features = [
@@ -31,11 +31,13 @@ export default function Landing() {
             />
             <span className="text-xl font-heading font-bold">Home Buddy</span>
           </div>
-          <Button asChild variant="outline" className="font-medium">
-            <Link href="/login" data-testid="button-login">
-              Sign In
-            </Link>
-          </Button>
+          <a
+            href="/login"
+            className={cn(buttonVariants({ variant: "outline" }), "font-medium")}
+            data-testid="button-login"
+          >
+            Sign In
+          </a>
         </div>
       </header>
 
@@ -67,16 +69,17 @@ export default function Landing() {
                 </p>
                 
                 <div className="flex items-center gap-4 pt-4">
-                  <Button 
-                    asChild
-                    size="lg" 
-                    className="h-14 px-8 text-lg font-medium shadow-lg shadow-primary/25"
+                  <a
+                    href="/login"
+                    className={cn(
+                      buttonVariants({ size: "lg" }),
+                      "h-14 px-8 text-lg font-medium shadow-lg shadow-primary/25 no-underline"
+                    )}
+                    data-testid="button-hero-login"
                   >
-                    <Link href="/login" data-testid="button-hero-login">
-                      Get Started Free
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </Link>
-                  </Button>
+                    Get Started Free
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </a>
                   <span className="text-sm text-muted-foreground">No credit card required</span>
                 </div>
               </motion.div>
