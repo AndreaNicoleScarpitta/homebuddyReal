@@ -1,0 +1,164 @@
+You are a Staff Product Designer + Full-Stack Engineer improving the existing Home Buddy app. Your task: add a **Systems Inventory + Review** capability so homeowners can easily see what systems they’ve added, how many of each, and quickly review or add systems without confusion.
+
+This is an EXTENSION of the existing “Systems Section” on the Dashboard. Do NOT redesign navigation, onboarding, or the overall IA.
+
+GOAL
+Right now users can add systems but cannot assess or manage them. Fix this by providing:
+1) a clear summary of how many systems exist by type
+2) a frictionless “review existing vs add new” decision when selecting a system type
+3) a dedicated, easy place to view all systems and their details
+
+CONSTRAINTS (NON-NEGOTIABLE)
+- Do NOT add a new global navigation item unless an existing one can be reused.
+- Preserve current Dashboard as the hub.
+- Preserve existing Systems section, but enhance it.
+- Maximum 2 clicks from Dashboard to view any system instance details.
+- Reuse existing card/list components, typography, spacing, and button styles.
+- Mobile-first and dark-mode compatible.
+- Do not introduce new required data fields.
+- Follow existing error/toast patterns.
+
+FEATURES TO ADD
+
+1) SYSTEMS INVENTORY SUMMARY (Dashboard → Systems Section)
+On the Dashboard Systems section, add a compact inventory header:
+- “Your Systems” + total count
+- Per-system-type counts (e.g., HVAC (2), Plumbing (1), Electrical (1), Roof (1), Appliances (3))
+Display as small chips or inline pills using existing design tokens.
+
+Behavior:
+- If count is 0 for a type, show it as “Add” not a number (optional).
+- Clicking a type should route into the type’s “Instances” view (see below).
+
+2) SYSTEM TYPE “INSTANCES” VIEW (Review vs Add)
+When a user selects a system TYPE (e.g., HVAC), do NOT immediately jump to “Add new”.
+Instead show:
+
+A) If 0 instances exist:
+- Empty state with short explanation
+- Primary CTA: [Add HVAC System]
+
+B) If 1+ instances exist:
+- Show list of existing instances (cards)
+- At top: “You have X HVAC systems”
+- Primary CTA: [Add Another HVAC System]
+- Secondary: [Review All] (if list is truncated)
+
+Each instance card must show a scan-friendly summary:
+- Name (Auto-generated or user-editable)
+- Key fields (brand/model/age where available)
+- Last updated
+- Quick actions: [Review] and optional [Edit]
+
+This accomplishes “prompted to review existing or add new”.
+
+3) SYSTEMS DIRECTORY (Easy way to view ALL systems)
+Provide one consolidated “All Systems” view that lists every system instance across types.
+
+Placement requirement:
+- Prefer placing this as a link/button at the top of the Dashboard Systems section:
+  [View All Systems]
+This opens a directory page/view.
+
+Directory Requirements:
+- Filter by type (chips)
+- Search by keyword (brand/model/nickname)
+- Sort: most recently updated (default), type, oldest
+- Each row/card shows:
+  - Type icon
+  - Instance name
+  - Key attributes
+  - Count of related tasks (if available)
+  - Link: [Open]
+
+Do NOT make this a new nav item unless absolutely necessary. If you must add it, add it as a sub-item under the existing Dashboard/Overview, not a new top-level section.
+
+4) SYSTEM DETAIL VIEW (Instance Detail Page)
+When the user clicks a specific instance, show a detail page that aggregates “information related to it”:
+
+Required sections:
+- Overview card (type, nickname, location in home optional, brand/model/age)
+- Generated maintenance tasks (list) with statuses
+- Recent maintenance history entries related to this system (if relationship exists; otherwise show a placeholder + “Link to system” option)
+- Documents linked to this system (if relationship exists; otherwise allow attaching)
+- Notes field (optional, user-owned)
+
+Keep scope tight:
+- Do NOT build an entire CMMS.
+- Just make systems reviewable and actionable.
+
+DATA MODEL / BACKEND REQUIREMENTS
+
+A) System instances must be first-class objects.
+If the app currently stores only “system type” without instances, refactor with minimal migration:
+SystemInstance:
+- id
+- home_id
+- type (enum)
+- nickname (optional)
+- brand (optional)
+- model (optional)
+- install_year or age (optional)
+- created_at
+- updated_at
+
+B) Counting:
+- Add API endpoints (or extend existing) to return:
+  - counts by type
+  - instances list by type
+  - all instances directory list
+Make sure endpoints are scoped to the authenticated user’s home_id.
+
+C) Relationships (optional but recommended):
+- tasks can reference system_instance_id
+- history entries can reference system_instance_id
+- documents can reference system_instance_id
+If adding these links is too heavy right now, add them as nullable fields with no breaking changes.
+
+UX LOGIC REQUIREMENTS (EXACT)
+- Selecting a system type ALWAYS goes to the instances view.
+- Instances view ALWAYS offers:
+  - Review existing (list)
+  - Add new of that type (CTA)
+- All Systems Directory provides a fast overview of everything.
+
+EDGE CASES
+- Multiple homes not supported? Then ensure you’re using the current home context.
+- No systems added: show a helpful empty state and suggest the first 3 common systems to add.
+- If an instance has missing metadata, display “Not provided” quietly.
+- Avoid forcing users into “brand/model/age” if they don’t know it.
+
+ANALYTICS (GA4) - GENERIC ONLY
+- systems_directory_opened
+- system_type_opened (type)
+- system_instance_opened (type)
+- system_instance_add_started (type)
+- system_instance_created (type)
+Do NOT include any user-entered values.
+
+DELIVERABLES
+1) UX flow update snippet (Dashboard → Systems → Type Instances → Instance Detail)
+2) UI components:
+   - SystemsSummaryCounts
+   - SystemTypeInstancesView
+   - AllSystemsDirectoryView
+   - SystemInstanceDetailView
+3) Backend:
+   - SystemInstance schema + migrations (safe for existing users)
+   - API endpoints for counts + lists
+4) Tests:
+   - Counts match created instances
+   - Selecting type with 0 shows empty state + add CTA
+   - Selecting type with 1+ shows list + add CTA
+   - Directory lists all instances
+
+IMPLEMENTATION ORDER
+1) Add SystemInstance model + migration
+2) Update add system flow to create instances
+3) Build counts API + Dashboard summary
+4) Build type instances view (review vs add)
+5) Build All Systems directory
+6) Build instance detail aggregation
+
+START NOW
+Inspect current Systems section implementation and data model, then implement the above with minimal disruption and consistent styling.

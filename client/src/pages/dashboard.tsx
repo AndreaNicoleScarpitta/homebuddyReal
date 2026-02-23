@@ -3,6 +3,7 @@ import { HomeHealth } from "@/components/home-health";
 import { HomeInfoCard } from "@/components/home-info-card";
 import { MaintenanceCard } from "@/components/maintenance-card";
 import { AddSystemWizard } from "@/components/add-system-wizard";
+import { SystemsSummary } from "@/components/systems-summary";
 import { OnboardingTour, useTourState } from "@/components/onboarding-tour";
 import { ContractorSection } from "@/components/contractor-section";
 import { ContractorSchedule } from "@/components/contractor-schedule";
@@ -400,6 +401,11 @@ export default function Dashboard() {
           </div>
         </section>
         
+        {/* Systems Summary */}
+        <section data-tour="systems-inventory">
+          <SystemsSummary systems={systems} onAddSystem={() => setShowAddSystem(true)} />
+        </section>
+
         {/* Add System Wizard */}
         <AddSystemWizard 
           isOpen={showAddSystem} 

@@ -31,6 +31,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createSystem, identifySystemFromImage } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { trackEvent } from "@/lib/analytics";
 import { systemCategories, systemConditions } from "@shared/schema";
 import { FieldTooltip } from "@/components/field-tooltip";
 
@@ -201,8 +202,9 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
     } as any),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["systems", homeId] });
+      trackEvent("system_instance_created", "systems", formData.category);
       setSavedSystemName(formData.name);
-      setStep(4); // Show success state
+      setStep(4);
     },
     onError: () => {
       toast({ title: "Error", description: "Could not add system.", variant: "destructive" });

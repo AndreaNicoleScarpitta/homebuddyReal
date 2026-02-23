@@ -25,6 +25,8 @@ import Terms, { TermsContent } from "@/pages/terms";
 import MaintenanceLog from "@/pages/maintenance-log";
 import Profile from "@/pages/profile";
 import Documents from "@/pages/documents";
+import Systems from "@/pages/systems";
+import SystemDetail from "@/pages/system-detail";
 
 function PublicTermsPage() {
   return (
@@ -100,6 +102,8 @@ function Router() {
       <Route path="/chat" component={Chat} />
 
       <Route path="/maintenance-log" component={MaintenanceLog} />
+      <Route path="/systems/:id" component={SystemDetail} />
+      <Route path="/systems" component={Systems} />
       <Route path="/inspections" component={Inspections} />
       <Route path="/documents" component={Documents} />
       <Route path="/profile" component={Profile} />
