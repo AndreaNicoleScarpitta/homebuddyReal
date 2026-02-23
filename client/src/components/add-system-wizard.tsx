@@ -26,12 +26,15 @@ import {
   Info,
   Camera,
   Loader2,
-  Sparkles
+  Sparkles,
+  Plus
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createSystem, identifySystemFromImage } from "@/lib/api";
+import type { V2System } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
+import { useLocation } from "wouter";
 import { systemCategories, systemConditions } from "@shared/schema";
 import { FieldTooltip } from "@/components/field-tooltip";
 
@@ -39,6 +42,7 @@ interface AddSystemWizardProps {
   isOpen: boolean;
   onClose: () => void;
   homeId: string | number;
+  existingSystems?: V2System[];
 }
 
 const categoryIcons: Record<string, any> = {
@@ -71,10 +75,11 @@ const categoryHints: Record<string, string> = {
   "Other": "Any other home system you want to track",
 };
 
-export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProps) {
-  const [step, setStep] = useState(1);
+export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [] }: AddSystemWizardProps) {
+  const [step, setStep] = useState<number>(1);
   const [showHints, setShowHints] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [, navigate] = useLocation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     category: "",
@@ -93,6 +98,15 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const countsByType: Record<string, number> = {};
+  for (const cat of systemCategories) {
+    countsByType[cat] = existingSystems.filter(s => s.category === cat).length;
+  }
+
+  const getNextInstanceNumber = (category: string) => {
+    return countsByType[category] + 1;
+  };
 
   const initialFormData = {
     category: "",
@@ -222,8 +236,16 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
   const showsPestFields = (cat: string) => cat === "Pest";
 
   const handleCategorySelect = (category: string) => {
-    setFormData({ ...formData, category, name: formData.name || category });
-    setStep(2);
+    const count = countsByType[category] || 0;
+    const instanceNum = getNextInstanceNumber(category);
+    const autoName = `${category} ${instanceNum}`;
+    setFormData({ ...formData, category, name: autoName });
+    trackEvent("system_instance_add_started", "systems", category);
+    if (count > 0) {
+      setStep(1.5);
+    } else {
+      setStep(2);
+    }
   };
 
   const handleSubmit = () => {
@@ -234,10 +256,11 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{step === 4 ? "Success!" : "Add Home System"}</DialogTitle>
+          <DialogTitle>{step === 4 ? "Success!" : step === 1.5 ? `${formData.category} Systems` : "Add Home System"}</DialogTitle>
           <DialogDescription>
             {step === 1 && "Choose the type of system you want to add."}
-            {step === 2 && "Add details about your system."}
+            {step === 1.5 && `You already have ${countsByType[formData.category]} ${formData.category} system${countsByType[formData.category] > 1 ? "s" : ""}. Would you like to review them or add another?`}
+            {step === 2 && `Adding details for ${formData.name}.`}
             {step === 3 && "Review and save."}
             {step === 4 && "Your system has been added."}
           </DialogDescription>
@@ -270,14 +293,20 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
             <div className="grid grid-cols-3 gap-2">
               {systemCategories.map((category) => {
                 const Icon = categoryIcons[category] || HelpCircle;
+                const count = countsByType[category] || 0;
                 return (
                   <button
                     key={category}
                     onClick={() => handleCategorySelect(category)}
                     disabled={isAnalyzing}
-                    className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
+                    className="relative flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
                     data-testid={`button-category-${category.toLowerCase().replace(/\//g, "-")}`}
                   >
+                    {count > 0 && (
+                      <span className="absolute top-1.5 right-1.5 h-5 min-w-[20px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center" data-testid={`badge-count-${category.toLowerCase().replace(/\//g, "-")}`}>
+                        {count}
+                      </span>
+                    )}
                     <Icon className="h-6 w-6 text-primary" />
                     <span className="text-xs text-center font-medium">{category}</span>
                   </button>
@@ -321,6 +350,50 @@ export function AddSystemWizard({ isOpen, onClose, homeId }: AddSystemWizardProp
               <p className="text-xs text-muted-foreground text-center mt-2">
                 AI will identify the system and auto-fill details
               </p>
+            </div>
+          </div>
+        )}
+
+        {step === 1.5 && (
+          <div className="space-y-4">
+            <div className="space-y-3">
+              {existingSystems
+                .filter(s => s.category === formData.category)
+                .map((sys) => (
+                  <div
+                    key={sys.id}
+                    className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                    data-testid={`card-existing-system-${sys.id}`}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{sys.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {[sys.make, sys.model, sys.condition].filter(Boolean).join(" · ") || "No details"}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        onClose();
+                        navigate(`/systems/${sys.id}`);
+                      }}
+                      data-testid={`button-review-system-${sys.id}`}
+                    >
+                      Review
+                    </Button>
+                  </div>
+                ))}
+            </div>
+            <div className="flex justify-between pt-4 border-t">
+              <Button variant="outline" onClick={() => setStep(1)} data-testid="button-back-to-categories">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back
+              </Button>
+              <Button onClick={() => setStep(2)} data-testid="button-add-new-instance">
+                <Plus className="h-4 w-4 mr-2" />
+                Add New {formData.category}
+              </Button>
             </div>
           </div>
         )}

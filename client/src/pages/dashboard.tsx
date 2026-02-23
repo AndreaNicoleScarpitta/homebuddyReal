@@ -410,7 +410,8 @@ export default function Dashboard() {
         <AddSystemWizard 
           isOpen={showAddSystem} 
           onClose={() => setShowAddSystem(false)} 
-          homeId={home.id} 
+          homeId={home.id}
+          existingSystems={systems}
         />
 
         {/* Quick Add Task Dialog */}
