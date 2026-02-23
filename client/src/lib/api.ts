@@ -155,13 +155,11 @@ export async function getHome(): Promise<V2Home | null> {
 }
 
 export async function createHome(data: {
-  address: string;
-  streetAddress?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  zipPlus4?: string;
-  addressVerified?: boolean;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  zipCode: string;
   builtYear?: number;
   sqFt?: number;
   type?: string;

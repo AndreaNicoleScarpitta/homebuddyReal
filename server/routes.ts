@@ -3,7 +3,6 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { logInfo, logError, logWarn } from "./lib/logger";
-import { verifyAddress, isUSPSConfigured } from "./lib/usps";
 import { streamAIResponse, type AIResponseMeta } from "./lib/ai-chat";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { sendContactFormNotification } from "./lib/email";
@@ -176,59 +175,6 @@ export async function registerRoutes(
     } catch (error) {
       return handleApiError(res, "home.update", error);
     }
-  });
-  
-  // Address verification routes
-  const addressVerifySchema = z.object({
-    streetAddress: z.string().min(1, "Street address is required"),
-    city: z.string().min(1, "City is required"),
-    state: z.string().length(2, "State must be 2 characters"),
-    zipCode: z.string().optional(),
-  });
-  
-  app.post("/api/address/verify", isAuthenticated, async (req, res) => {
-    try {
-      if (!isUSPSConfigured()) {
-        logWarn("address.verify", "USPS API not configured");
-        return res.status(503).json({
-          message: "Address verification is not available",
-          code: "USPS_NOT_CONFIGURED"
-        });
-      }
-      
-      const { streetAddress, city, state, zipCode } = addressVerifySchema.parse(req.body);
-      
-      logInfo("address.verify", "Verifying address", { streetAddress, city, state });
-      
-      const result = await verifyAddress(streetAddress, city, state, zipCode);
-      
-      if (result.verified && result.address) {
-        return res.json({
-          verified: true,
-          address: {
-            streetAddress: result.address.streetAddress,
-            city: result.address.city,
-            state: result.address.state,
-            zipCode: result.address.ZIPCode,
-            zipPlus4: result.address.ZIPPlus4,
-          }
-        });
-      }
-      
-      return res.json({
-        verified: false,
-        error: result.error || "Could not verify address"
-      });
-    } catch (error) {
-      return handleApiError(res, "address.verify", error);
-    }
-  });
-  
-  app.get("/api/address/status", async (_req, res) => {
-    res.json({
-      uspsConfigured: isUSPSConfigured(),
-      googlePlacesConfigured: !!process.env.GOOGLE_PLACES_API_KEY
-    });
   });
   
   // System routes

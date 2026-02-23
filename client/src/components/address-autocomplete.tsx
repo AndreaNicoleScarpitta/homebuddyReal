@@ -1,9 +1,7 @@
 /// <reference types="@types/google.maps" />
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Search, CheckCircle2, AlertCircle, Loader2, MapPin } from "lucide-react";
+import { Loader2, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface AddressComponents {
@@ -50,8 +48,6 @@ export function AddressAutocomplete({
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [verificationStatus, setVerificationStatus] = useState<"idle" | "verifying" | "verified" | "failed">("idle");
-  const [verifiedAddress, setVerifiedAddress] = useState<AddressComponents | null>(null);
   const [googleLoaded, setGoogleLoaded] = useState(false);
   
   const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
@@ -62,7 +58,6 @@ export function AddressAutocomplete({
   useEffect(() => {
     const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
     if (!apiKey) {
-      console.warn("Google Places API key not configured");
       return;
     }
 
@@ -123,7 +118,7 @@ export function AddressAutocomplete({
     setIsLoading(true);
     
     try {
-      const results = await new Promise<PlacePrediction[]>((resolve, reject) => {
+      const results = await new Promise<PlacePrediction[]>((resolve) => {
         autocompleteService.current!.getPlacePredictions(
           {
             input,
@@ -142,8 +137,7 @@ export function AddressAutocomplete({
       
       setPredictions(results);
       setShowDropdown(results.length > 0);
-    } catch (error) {
-      console.error("Error fetching predictions:", error);
+    } catch {
       setPredictions([]);
     } finally {
       setIsLoading(false);
@@ -154,8 +148,6 @@ export function AddressAutocomplete({
     const timer = setTimeout(() => {
       if (inputValue !== value) {
         fetchPredictions(inputValue);
-        setVerificationStatus("idle");
-        setVerifiedAddress(null);
       }
     }, 300);
 
@@ -191,10 +183,8 @@ export function AddressAutocomplete({
       components.fullAddress = prediction.description;
       
       onChange(prediction.description, components);
-      
-      await verifyWithUSPS(components);
-    } catch (error) {
-      console.error("Error getting place details:", error);
+      onVerified?.(true, components);
+    } catch {
       onChange(prediction.description);
     } finally {
       setIsLoading(false);
@@ -242,65 +232,13 @@ export function AddressAutocomplete({
     return result;
   };
 
-  const verifyWithUSPS = async (components: AddressComponents) => {
-    setVerificationStatus("verifying");
-
-    try {
-      const response = await fetch("/api/address/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          streetAddress: components.streetAddress,
-          city: components.city,
-          state: components.state,
-          zipCode: components.zipCode,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.verified && data.address) {
-        const verified: AddressComponents = {
-          streetAddress: data.address.streetAddress,
-          city: data.address.city,
-          state: data.address.state,
-          zipCode: data.address.zipCode,
-          zipPlus4: data.address.zipPlus4,
-          fullAddress: `${data.address.streetAddress}, ${data.address.city}, ${data.address.state} ${data.address.zipCode}`,
-        };
-        setVerifiedAddress(verified);
-        setVerificationStatus("verified");
-        onVerified?.(true, verified);
-      } else {
-        setVerificationStatus("failed");
-        onVerified?.(false);
-      }
-    } catch (error) {
-      console.error("USPS verification error:", error);
-      setVerificationStatus("idle");
-    }
-  };
-
-  const handleManualVerify = async () => {
-    const parts = inputValue.split(",").map(s => s.trim());
-    if (parts.length >= 3) {
-      const components: AddressComponents = {
-        streetAddress: parts[0],
-        city: parts[1],
-        state: parts[2].split(" ")[0],
-        zipCode: parts[2].split(" ")[1] || "",
-        fullAddress: inputValue,
-      };
-      onChange(inputValue, components);
-      await verifyWithUSPS(components);
-    }
-  };
+  if (!googleLoaded) {
+    return null;
+  }
 
   return (
     <div className={cn("relative", className)}>
       <div className="relative">
-        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
         <Input
           ref={inputRef}
           value={inputValue}
@@ -310,44 +248,26 @@ export function AddressAutocomplete({
           }}
           onFocus={() => predictions.length > 0 && setShowDropdown(true)}
           placeholder={placeholder}
-          className={cn("pl-9 h-12 text-lg pr-24", 
-            verificationStatus === "verified" && "border-green-500 focus-visible:ring-green-500"
-          )}
+          className="h-12 text-lg"
           data-testid="input-address"
         />
-        <div className="absolute right-2 top-2 flex items-center gap-1">
-          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-          {verificationStatus === "verifying" && (
-            <Badge variant="secondary" className="text-xs">
-              <Loader2 className="h-3 w-3 animate-spin mr-1" />
-              Verifying
-            </Badge>
-          )}
-          {verificationStatus === "verified" && (
-            <Badge className="bg-green-500 hover:bg-green-600 text-xs">
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              USPS Verified
-            </Badge>
-          )}
-          {verificationStatus === "failed" && (
-            <Badge variant="destructive" className="text-xs">
-              <AlertCircle className="h-3 w-3 mr-1" />
-              Not Verified
-            </Badge>
-          )}
-        </div>
+        {isLoading && (
+          <div className="absolute right-3 top-3">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        )}
       </div>
 
       {showDropdown && predictions.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute z-50 w-full mt-1 bg-white rounded-lg shadow-lg border max-h-64 overflow-auto"
+          className="absolute z-50 w-full mt-1 bg-popover text-popover-foreground rounded-lg shadow-lg border max-h-64 overflow-auto"
         >
           {predictions.map((prediction) => (
             <button
               key={prediction.place_id}
               type="button"
-              className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-start gap-3 border-b last:border-b-0"
+              className="w-full px-4 py-3 text-left hover:bg-muted flex items-start gap-3 border-b last:border-b-0"
               onClick={() => selectPrediction(prediction)}
               data-testid={`address-suggestion-${prediction.place_id}`}
             >
@@ -358,40 +278,6 @@ export function AddressAutocomplete({
               </div>
             </button>
           ))}
-        </div>
-      )}
-
-      {!googleLoaded && inputValue.length > 0 && (
-        <div className="mt-2 flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleManualVerify}
-            disabled={verificationStatus === "verifying"}
-            data-testid="button-verify-address"
-          >
-            {verificationStatus === "verifying" ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-1" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4 mr-1" />
-            )}
-            Verify with USPS
-          </Button>
-        </div>
-      )}
-
-      {verifiedAddress && verificationStatus === "verified" && (
-        <div className="mt-2 p-3 bg-green-50 rounded-lg border border-green-200 text-sm">
-          <div className="font-medium text-green-800 flex items-center gap-1 mb-1">
-            <CheckCircle2 className="h-4 w-4" />
-            USPS Standardized Address
-          </div>
-          <div className="text-green-700">
-            {verifiedAddress.streetAddress}<br />
-            {verifiedAddress.city}, {verifiedAddress.state} {verifiedAddress.zipCode}
-            {verifiedAddress.zipPlus4 && `-${verifiedAddress.zipPlus4}`}
-          </div>
         </div>
       )}
     </div>

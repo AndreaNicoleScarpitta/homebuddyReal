@@ -295,21 +295,60 @@ v2Router.post("/homes", async (req: Request, res: Response) => {
     const userId = getUserId(req);
     const homeId = crypto.randomUUID();
 
+    const addressLine1 = (req.body.addressLine1 as string) || null;
+    const addressLine2 = (req.body.addressLine2 as string) || null;
+    const city = (req.body.city as string) || null;
+    const state = (req.body.state as string) || null;
+    const zipCode = (req.body.zipCode as string) || null;
+
+    if (!addressLine1 || !city || !state || !zipCode) {
+      res.status(400).json({ error: "Address line 1, city, state, and ZIP code are required." });
+      return;
+    }
+    if (state.length !== 2) {
+      res.status(400).json({ error: "State must be a 2-letter abbreviation." });
+      return;
+    }
+    if (!/^\d{5}(-\d{4})?$/.test(zipCode)) {
+      res.status(400).json({ error: "ZIP code must be 5 digits (or ZIP+4 format)." });
+      return;
+    }
+
+    const compositeAddress = [addressLine1, addressLine2, `${city}, ${state} ${zipCode}`]
+      .filter(Boolean)
+      .join(", ");
+
+    const builtYear = req.body.builtYear != null ? Number(req.body.builtYear) : null;
+    const sqFt = req.body.sqFt != null ? Number(req.body.sqFt) : null;
+
+    if (builtYear != null && (isNaN(builtYear) || builtYear < 1600 || builtYear > new Date().getFullYear())) {
+      res.status(400).json({ error: "Year built must be between 1600 and the current year." });
+      return;
+    }
+    if (sqFt != null && (isNaN(sqFt) || sqFt < 100 || sqFt > 100000)) {
+      res.status(400).json({ error: "Square footage must be between 100 and 100,000." });
+      return;
+    }
+
+    const safeBody = { ...req.body };
+    delete safeBody.addressLine1;
+    delete safeBody.addressLine2;
+    delete safeBody.address;
+
     let legacyId: number | null = null;
     const result = await db.transaction(async (tx) => {
       const legacyResult = await tx.execute(sql`
-        INSERT INTO homes (user_id, address, street_address, city, state, zip_code, zip_plus_4, address_verified, built_year, sq_ft, type)
+        INSERT INTO homes (user_id, address, address_line_1, address_line_2, city, state, zip_code, built_year, sq_ft, type)
         VALUES (
           ${userId},
-          ${(req.body.address as string) ?? ""},
-          ${(req.body.streetAddress as string) ?? null},
-          ${(req.body.city as string) ?? null},
-          ${(req.body.state as string) ?? null},
-          ${(req.body.zipCode as string) ?? null},
-          ${(req.body.zipPlus4 as string) ?? null},
-          ${(req.body.addressVerified as boolean) ?? false},
-          ${(req.body.builtYear as number) ?? null},
-          ${(req.body.sqFt as number) ?? null},
+          ${compositeAddress},
+          ${addressLine1},
+          ${addressLine2},
+          ${city},
+          ${state},
+          ${zipCode},
+          ${builtYear},
+          ${sqFt},
           ${(req.body.type as string) ?? null}
         )
         RETURNING id
@@ -321,19 +360,32 @@ v2Router.post("/homes", async (req: Request, res: Response) => {
         aggregateId: homeId,
         expectedVersion: 0,
         eventType: EventTypes.HomeAttributesUpdated,
-        data: { attrs: req.body },
+        data: {
+          attrs: {
+            city,
+            state,
+            zipCode,
+            builtYear,
+            sqFt,
+            type: req.body.type,
+          },
+        },
         meta: { userId, legacyId },
         actor,
         idempotencyKey: req.idempotencyKey!,
       });
     });
 
-    const flatAttrs = snakeToCamel(req.body);
     res.status(201).json({
       id: homeId,
       legacyId,
       userId,
-      ...flatAttrs,
+      city,
+      state,
+      zipCode,
+      builtYear,
+      sqFt,
+      type: req.body.type,
       ...result,
     });
   } catch (err) {

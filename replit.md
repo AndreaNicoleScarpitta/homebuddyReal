@@ -34,7 +34,7 @@ Core features include:
 - **Resend**: For sending email notifications (e.g., contact form submissions).
 - **Angi**: Integrated for contractor research and suggestions (opt-in only).
 - **Google Places API**: Used for address autocomplete functionality.
-- **USPS API**: Utilized for address verification.
+- **USPS API**: Removed — address verification is no longer used.
 - **connect-pg-simple**: PostgreSQL session store.
 - **express-rate-limit**: Middleware for API rate limiting.
 - **pino**: Structured logging library.

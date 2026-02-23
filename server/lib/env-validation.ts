@@ -22,10 +22,6 @@ export function validateEnvironment(): EnvValidationResult {
     result.warnings.push("AI_INTEGRATIONS_OPENAI_API_KEY is not set - AI chat will not work");
   }
 
-  if (!process.env.USPS_CLIENT_ID || !process.env.USPS_CLIENT_SECRET) {
-    result.warnings.push("USPS credentials not set - address verification will be disabled");
-  }
-
   if (!process.env.VITE_GOOGLE_PLACES_API_KEY) {
     result.warnings.push("VITE_GOOGLE_PLACES_API_KEY not set - address autocomplete will be disabled");
   }
@@ -57,10 +53,8 @@ export function logEnvironmentStatus(): void {
   }
 }
 
-export function isFeatureEnabled(feature: "usps" | "googlePlaces" | "ai" | "email"): boolean {
+export function isFeatureEnabled(feature: "googlePlaces" | "ai" | "email"): boolean {
   switch (feature) {
-    case "usps":
-      return !!(process.env.USPS_CLIENT_ID && process.env.USPS_CLIENT_SECRET);
     case "googlePlaces":
       return !!process.env.VITE_GOOGLE_PLACES_API_KEY;
     case "ai":

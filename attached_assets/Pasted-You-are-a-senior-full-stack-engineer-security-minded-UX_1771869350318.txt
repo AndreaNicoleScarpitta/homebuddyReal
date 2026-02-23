@@ -1,0 +1,101 @@
+You are a senior full-stack engineer + security-minded UX fixer working inside the existing Home Buddy app. Your job: FIX the signup/onboarding bugs listed below with minimal surface-area change. Preserve the existing UI patterns, routes, navigation, and auth.
+
+PRIORITIES
+1) Fix the internal server error when creating the home profile.
+2) Update the Address model + UI to structured fields (Address1/Address2/City/State/Zip).
+3) Remove USPS validation entirely.
+4) Add privacy clarity copy: HomeBuddy team cannot access the full address; only generalized location is used. Ensure encryption at rest + transit is used.
+
+CONSTRAINTS
+- Do NOT redesign the onboarding flow (still 3 steps).
+- Do NOT introduce new global nav.
+- Keep “Create My Home Profile” CTA and routing the same.
+- Migrations must be safe for existing users (backfill/migration strategy required).
+- Never log full address values (client or server logs).
+- Keep errors user-friendly (no raw stack traces).
+- Use existing toast/error patterns.
+
+BUGS TO FIX (EXACT)
+A) Onboarding Step 1: Address is currently a single string. It must become:
+- address_line_1 (required)
+- address_line_2 (optional)
+- city (required)
+- state (required, 2-letter)
+- zip (required, 5-digit or ZIP+4)
+Remove any USPS validation logic and UI. Do not call USPS APIs.
+
+B) Onboarding Step 2: “Square footage” and “Year built” must be OPTIONAL.
+- Users must be able to complete onboarding with these fields NULL.
+- Fix the internal server error when “Create My Home Profile” is clicked with these missing.
+- Update backend validation, database constraints, and frontend form validation accordingly.
+- Ensure min/max UI hints remain, but do not block submission if blank.
+
+SECURITY & PRIVACY REQUIREMENTS (NON-NEGOTIABLE)
+1) Privacy disclosure placement:
+- Add a short, calm note under Step 1’s address fields:
+  “Your full address is private. Home Buddy uses it only to personalize your home profile (like local climate and permit guidance). The Home Buddy team can’t view your full address. We only use generalized location (e.g., city/region) for analytics. Data is encrypted in transit and at rest.”
+- Keep tone calm, professional, anxiety-aware. No scary language.
+
+2) Access control:
+- Only the authenticated user can read/write their address fields.
+- Confirm server endpoints enforce ownership checks.
+
+3) Data handling:
+- Never emit address fields to client-side analytics events.
+- Never include address fields in error reports or logs.
+- Ensure encryption at rest is enabled for the database (describe how you confirm it in this environment).
+- Ensure TLS is used (describe how you confirm it).
+If any of these can’t be confirmed due to environment limitations, add a TODO with exact steps to verify.
+
+DATABASE + MIGRATION
+- Implement a migration from the existing “address” string column:
+  - Add new columns for structured address.
+  - Backfill best-effort by parsing existing string when possible; if parsing fails, store old string in address_line_1 and leave others NULL, and mark a flag `address_needs_review=true`.
+  - Keep the old column temporarily for rollback, but stop writing to it going forward.
+  - Provide a second migration plan to drop it later.
+
+API & UI CHANGES
+- Update the onboarding Step 1 form UI to show:
+  Address Line 1
+  Address Line 2 (optional)
+  City
+  State
+  ZIP
+- Add inline validation:
+  - Required fields must be present.
+  - State must be 2 letters.
+  - ZIP must match 12345 or 12345-6789.
+- Do NOT add Google Places autocomplete unless it already exists. If it exists, adapt it to populate the structured fields.
+
+- Update Step 2 UI:
+  - Square Footage (optional)
+  - Year Built (optional)
+  - Remove “required” indicators
+  - Allow empty submission
+
+ERROR FIX DETAILS
+- Find the exact root cause of the internal server error when submitting Step 2.
+- Add a regression test for:
+  - Creating home profile with NULL sq_ft and NULL year_built succeeds
+  - Creating home profile with required address fields succeeds
+  - Attempt with missing required address fields fails with a friendly error
+- Ensure backend returns 4xx for validation errors (not 500).
+
+DELIVERABLES
+1) A short “Fix Summary” list (what changed).
+2) PR-ready code changes:
+   - DB migration(s)
+   - Updated models/ORM schema
+   - Updated API request/response types
+   - Updated onboarding UI components + validations
+3) A concise security checklist confirming:
+   - No address in logs
+   - No address in analytics
+   - Ownership checks enforced
+   - Encryption/TLS confirmation or TODO steps
+4) Tests added and how to run them.
+
+NOW START:
+- Inspect current onboarding flow code.
+- Identify the failing API endpoint for Create My Home Profile.
+- Implement fixes in the smallest, safest sequence: (1) make fields optional and stop 500s, (2) address structure + migrations + UI update, (3) remove USPS validation.
