@@ -153,6 +153,11 @@ app.use((req, res, next) => {
     throw err;
   });
 
+  app.get("/downloads/Home-Buddy-UX-Workflow.pdf", (_req, res) => {
+    const pdfPath = `${process.cwd()}/public/Home-Buddy-UX-Workflow.pdf`;
+    res.download(pdfPath, "Home-Buddy-UX-Workflow.pdf");
+  });
+
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
