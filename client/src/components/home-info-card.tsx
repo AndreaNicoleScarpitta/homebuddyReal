@@ -6,10 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Home, MapPin, Calendar, Maximize, Bed, Bath, ExternalLink, Pencil, Ruler, DollarSign, Zap } from "lucide-react";
+import { Home, MapPin, Calendar, Maximize, Bed, Bath, ExternalLink, Pencil, Ruler, DollarSign, Zap, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { updateHome } from "@/lib/api";
+import { updateHome, fetchZillowData } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import type { V2Home, V2System } from "@/lib/api";
 import { CircuitMapDialog } from "@/components/circuit-map";
@@ -57,6 +57,8 @@ export function HomeInfoCard({ home, systems }: HomeInfoCardProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  const [fetchingZillow, setFetchingZillow] = useState(false);
+
   const updateMutation = useMutation({
     mutationFn: (data: Partial<HomeType>) => updateHome(home.id, data),
     onSuccess: () => {
@@ -68,6 +70,32 @@ export function HomeInfoCard({ home, systems }: HomeInfoCardProps) {
       toast({ title: "Error", description: "Could not update home info.", variant: "destructive" });
     },
   });
+
+  const handleFetchZillow = async () => {
+    if (!editData.zillowUrl) return;
+    setFetchingZillow(true);
+    try {
+      const data = await fetchZillowData(editData.zillowUrl);
+      let fieldsUpdated = 0;
+      const updates: Partial<typeof editData> = {};
+      if (data.beds && !editData.beds) { updates.beds = data.beds.toString(); fieldsUpdated++; }
+      if (data.baths && !editData.baths) { updates.baths = data.baths.toString(); fieldsUpdated++; }
+      if (data.sqFt && !editData.sqFt) { updates.sqFt = data.sqFt.toString(); fieldsUpdated++; }
+      if (data.builtYear && !editData.builtYear) { updates.builtYear = data.builtYear.toString(); fieldsUpdated++; }
+      if (data.homeValueEstimate && !editData.homeValueEstimate) { updates.homeValueEstimate = data.homeValueEstimate.toString(); fieldsUpdated++; }
+      setEditData(prev => ({ ...prev, ...updates }));
+      toast({
+        title: fieldsUpdated > 0 ? "Details fetched" : "No new details found",
+        description: fieldsUpdated > 0
+          ? `Filled in ${fieldsUpdated} field${fieldsUpdated > 1 ? "s" : ""} from Zillow. Review and save when ready.`
+          : "The URL was parsed but no additional property details were found. Zillow URLs typically contain address info only.",
+      });
+    } catch (err: any) {
+      toast({ title: "Couldn't fetch details", description: err.message || "Please check the URL and try again.", variant: "destructive" });
+    } finally {
+      setFetchingZillow(false);
+    }
+  };
 
   const handleSave = () => {
     const errors: string[] = [];
@@ -291,14 +319,29 @@ export function HomeInfoCard({ home, systems }: HomeInfoCardProps) {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="zillowUrl">Zillow URL (optional)</Label>
-                    <Input
-                      id="zillowUrl"
-                      type="url"
-                      placeholder="https://zillow.com/homedetails/..."
-                      value={editData.zillowUrl}
-                      onChange={(e) => setEditData({ ...editData, zillowUrl: e.target.value })}
-                      data-testid="input-zillow-url"
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        id="zillowUrl"
+                        type="url"
+                        placeholder="https://zillow.com/homedetails/..."
+                        value={editData.zillowUrl}
+                        onChange={(e) => setEditData({ ...editData, zillowUrl: e.target.value })}
+                        data-testid="input-zillow-url"
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleFetchZillow}
+                        disabled={!editData.zillowUrl || fetchingZillow}
+                        data-testid="button-fetch-zillow"
+                        className="whitespace-nowrap"
+                      >
+                        {fetchingZillow ? <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Fetching...</> : "Fetch Details"}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Paste a Zillow listing URL to auto-fill property details</p>
                   </div>
                 </div>
               </ScrollArea>

@@ -344,7 +344,7 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <OnboardingTour key={tourKey} isOpen={showTour} onComplete={completeTour} />
+      <OnboardingTour key={tourKey} isOpen={showTour} onComplete={() => { completeTour(); setShowAddSystem(true); }} />
       
       <div className="space-y-10">
         {/* Header */}
@@ -416,7 +416,7 @@ export default function Dashboard() {
         </section>
         
         {/* Systems Summary */}
-        <section data-tour="systems-inventory">
+        <section data-tour="systems-section">
           <SystemsSummary systems={systems} onAddSystem={() => setShowAddSystem(true)} />
         </section>
 

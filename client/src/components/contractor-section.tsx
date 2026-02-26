@@ -24,11 +24,10 @@ const serviceTypeMapping: Record<string, string> = {
   "Other": "home-improvement",
 };
 
-function buildAngiesListUrl(serviceType: string, zipCode?: string): string {
-  const mappedCategory = serviceTypeMapping[serviceType];
-  const category = mappedCategory || encodeURIComponent(serviceType.toLowerCase().replace(/\s+/g, "-"));
-  const base = `https://www.angi.com/companylist/${category}.htm`;
-  return zipCode ? `${base}?zip=${zipCode}` : base;
+function buildAngiSearchUrl(serviceType: string, zipCode?: string): string {
+  const params = new URLSearchParams({ search_query: serviceType });
+  if (zipCode) params.set("postal_code", zipCode);
+  return `https://www.angi.com/search/?${params.toString()}`;
 }
 
 export function ContractorSection({ homeId, pendingTasks = [], zipCode }: ContractorSectionProps) {
@@ -63,7 +62,7 @@ export function ContractorSection({ homeId, pendingTasks = [], zipCode }: Contra
               {urgentTasks.slice(0, 3).map((task) => (
                 <a
                   key={task.id}
-                  href={buildAngiesListUrl(task.category || "Other", zipCode)}
+                  href={buildAngiSearchUrl(task.category || "Other", zipCode)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-between p-3 rounded-lg border hover:border-blue-300 hover:bg-blue-50/50 transition-colors group"
@@ -94,14 +93,14 @@ export function ContractorSection({ homeId, pendingTasks = [], zipCode }: Contra
               No urgent pro-only tasks right now
             </p>
             <a
-              href="https://www.angi.com"
+              href={buildAngiSearchUrl("home improvement", zipCode)}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline"
               data-testid="link-browse-angi"
             >
               <Search className="h-4 w-4" />
-              Browse all services on Angi
+              Search for contractors on Angi
             </a>
           </div>
         )}
@@ -113,7 +112,7 @@ export function ContractorSection({ homeId, pendingTasks = [], zipCode }: Contra
               {uniqueCategories.slice(0, 4).map((cat) => (
                 <a
                   key={cat}
-                  href={buildAngiesListUrl(cat, zipCode)}
+                  href={buildAngiSearchUrl(cat, zipCode)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"

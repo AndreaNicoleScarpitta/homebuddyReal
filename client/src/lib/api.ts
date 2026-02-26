@@ -181,6 +181,28 @@ export async function updateHome(id: string | number, data: Partial<V2Home>): Pr
   return handleResponse<V2Home>(response);
 }
 
+export interface ZillowData {
+  beds?: number | null;
+  baths?: number | null;
+  sqFt?: number | null;
+  builtYear?: number | null;
+  homeValueEstimate?: number | null;
+  streetAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+}
+
+export async function fetchZillowData(url: string): Promise<ZillowData> {
+  const response = await fetch("/api/zillow/lookup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  const result = await handleResponse<{ data: ZillowData }>(response);
+  return result.data;
+}
+
 // ---------------------------------------------------------------------------
 // Systems API (v2)
 // ---------------------------------------------------------------------------

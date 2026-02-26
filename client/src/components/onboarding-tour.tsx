@@ -47,6 +47,12 @@ const desktopTourSteps: TourStep[] = [
     content: "Ask questions about repairs, get cost estimates, or understand what work involves. We give you ranges, not quotes—so you can make informed decisions.",
     placement: "right",
   },
+  {
+    target: "[data-tour='systems-section']",
+    title: "Ready to Start?",
+    content: "Add your first home system to begin building your maintenance plan. We'll help you track its condition and schedule upkeep.",
+    placement: "top",
+  },
 ];
 
 const mobileTourSteps: TourStep[] = [
@@ -66,6 +72,12 @@ const mobileTourSteps: TourStep[] = [
     target: "[data-tour='maintenance-plan']",
     title: "Your Maintenance Plan",
     content: "Tasks are organized by urgency: Fix Now, Plan Soon, and Address Later. This helps you prioritize without feeling overwhelmed.",
+    placement: "top",
+  },
+  {
+    target: "[data-tour='systems-section']",
+    title: "Ready to Start?",
+    content: "Add your first home system to begin building your maintenance plan. We'll help you track its condition and schedule upkeep.",
     placement: "top",
   },
 ];
@@ -284,7 +296,7 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
                 onClick={handleNext}
                 data-testid="button-next-step"
               >
-                {isLastStep ? "Get Started" : "Next"}
+                {isLastStep ? "Add First System" : "Next"}
                 {!isLastStep && <ChevronRight className="h-4 w-4 ml-1" />}
               </Button>
             </div>

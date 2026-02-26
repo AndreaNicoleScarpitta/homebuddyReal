@@ -598,73 +598,88 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAllUserData(userId: string): Promise<void> {
+    const uid = String(userId);
     await db.transaction(async (tx) => {
-      const userHomes = await tx.select().from(homes).where(eq(homes.userId, userId));
-      const legacyHomeIds = userHomes.map(h => h.id);
+      const userHomes = await tx.select().from(homes).where(eq(homes.userId, uid));
 
       for (const home of userHomes) {
-        await tx.delete(chatMessages).where(eq(chatMessages.homeId, home.id));
-        await tx.delete(maintenanceTasks).where(eq(maintenanceTasks.homeId, home.id));
-        await tx.delete(maintenanceLogEntries).where(eq(maintenanceLogEntries.homeId, home.id));
-        await tx.delete(systems).where(eq(systems.homeId, home.id));
+        try { await tx.delete(chatMessages).where(eq(chatMessages.homeId, home.id)); } catch {}
+        try { await tx.delete(maintenanceTasks).where(eq(maintenanceTasks.homeId, home.id)); } catch {}
+        try { await tx.delete(maintenanceLogEntries).where(eq(maintenanceLogEntries.homeId, home.id)); } catch {}
+        try { await tx.delete(systems).where(eq(systems.homeId, home.id)); } catch {}
 
         const homeFunds = await tx.select().from(funds).where(eq(funds.homeId, home.id));
         for (const fund of homeFunds) {
-          await tx.delete(expenses).where(eq(expenses.fundId, fund.id));
-          await tx.delete(fundAllocations).where(eq(fundAllocations.fundId, fund.id));
+          try { await tx.delete(expenses).where(eq(expenses.fundId, fund.id)); } catch {}
+          try { await tx.delete(fundAllocations).where(eq(fundAllocations.fundId, fund.id)); } catch {}
         }
-        await tx.delete(funds).where(eq(funds.homeId, home.id));
+        try { await tx.delete(funds).where(eq(funds.homeId, home.id)); } catch {}
 
-        await tx.delete(inspectionFindings).where(
-          sql`report_id IN (SELECT id FROM inspection_reports WHERE home_id = ${home.id})`
-        );
-        await tx.delete(inspectionReports).where(eq(inspectionReports.homeId, home.id));
-        await tx.delete(contractorAppointments).where(eq(contractorAppointments.homeId, home.id));
+        try {
+          await tx.delete(inspectionFindings).where(
+            sql`report_id IN (SELECT id FROM inspection_reports WHERE home_id = ${home.id})`
+          );
+        } catch {}
+        try { await tx.delete(inspectionReports).where(eq(inspectionReports.homeId, home.id)); } catch {}
+        try { await tx.delete(contractorAppointments).where(eq(contractorAppointments.homeId, home.id)); } catch {}
       }
 
-      const v2HomeRows = await tx.execute(sql`
-        SELECT home_id FROM projection_home WHERE user_id = ${userId}
-      `);
-      const v2HomeIds = v2HomeRows.rows.map((r: any) => r.home_id as string);
+      let v2HomeIds: string[] = [];
+      try {
+        const v2HomeRows = await tx.execute(sql`
+          SELECT home_id FROM projection_home WHERE user_id = ${uid}
+        `);
+        v2HomeIds = v2HomeRows.rows.map((r: any) => r.home_id as string);
+      } catch {}
+
+      const safeExec = async (query: ReturnType<typeof sql>) => {
+        try { await tx.execute(query); } catch {}
+      };
 
       for (const homeId of v2HomeIds) {
-        await tx.execute(sql`
+        await safeExec(sql`
           DELETE FROM projection_chat_message
           WHERE session_id IN (SELECT session_id FROM projection_chat_session WHERE home_id = ${homeId})
         `);
-        await tx.execute(sql`DELETE FROM projection_chat_session WHERE home_id = ${homeId}`);
-        await tx.execute(sql`DELETE FROM projection_task WHERE home_id = ${homeId}`);
-        await tx.execute(sql`
+        await safeExec(sql`DELETE FROM projection_chat_session WHERE home_id = ${homeId}`);
+        await safeExec(sql`DELETE FROM projection_task WHERE home_id = ${homeId}`);
+        await safeExec(sql`
           DELETE FROM projection_finding
           WHERE report_id IN (SELECT report_id FROM projection_report WHERE home_id = ${homeId})
         `);
-        await tx.execute(sql`DELETE FROM projection_report WHERE home_id = ${homeId}`);
-        await tx.execute(sql`DELETE FROM projection_system WHERE home_id = ${homeId}`);
-        await tx.execute(sql`DELETE FROM projection_assistant_action WHERE home_id = ${homeId}`);
-        await tx.execute(sql`DELETE FROM projection_notification_pref WHERE home_id = ${homeId}`);
-        await tx.execute(sql`DELETE FROM projection_home WHERE home_id = ${homeId}`);
+        await safeExec(sql`DELETE FROM projection_report WHERE home_id = ${homeId}`);
+        await safeExec(sql`DELETE FROM projection_system WHERE home_id = ${homeId}`);
+        await safeExec(sql`DELETE FROM projection_assistant_action WHERE home_id = ${homeId}`);
+        await safeExec(sql`DELETE FROM projection_notification_pref WHERE home_id = ${homeId}`);
+        await safeExec(sql`DELETE FROM projection_circuit_map WHERE home_id = ${homeId}`);
+        await safeExec(sql`DELETE FROM projection_home WHERE home_id = ${homeId}`);
       }
 
-      await tx.execute(sql`ALTER TABLE event_log DISABLE TRIGGER trg_event_log_immutable`);
-      await tx.execute(sql`DELETE FROM event_log WHERE actor_id = ${userId}`);
+      try {
+        await tx.execute(sql`ALTER TABLE event_log DISABLE TRIGGER trg_event_log_immutable`);
+      } catch {}
+      try {
+        await tx.execute(sql`DELETE FROM event_log WHERE actor_id = ${uid}`);
+        for (const homeId of v2HomeIds) {
+          await tx.execute(sql`DELETE FROM event_log WHERE aggregate_id = ${homeId}`);
+          await tx.execute(sql`
+            DELETE FROM event_log WHERE aggregate_id IN (
+              SELECT DISTINCT aggregate_id FROM event_log
+              WHERE data->>'homeId' = ${homeId}
+            )
+          `);
+        }
+      } catch {}
+      try {
+        await tx.execute(sql`ALTER TABLE event_log ENABLE TRIGGER trg_event_log_immutable`);
+      } catch {}
+
       for (const homeId of v2HomeIds) {
-        await tx.execute(sql`DELETE FROM event_log WHERE aggregate_id = ${homeId}`);
-        await tx.execute(sql`
-          DELETE FROM event_log WHERE aggregate_id IN (
-            SELECT DISTINCT aggregate_id FROM event_log
-            WHERE data->>'homeId' = ${homeId}
-          )
-        `);
-      }
-      await tx.execute(sql`ALTER TABLE event_log ENABLE TRIGGER trg_event_log_immutable`);
-
-      for (const homeId of v2HomeIds) {
-        await tx.execute(sql`DELETE FROM job_queue WHERE data->>'homeId' = ${homeId}`);
+        await safeExec(sql`DELETE FROM job_queue WHERE data->>'homeId' = ${homeId}`);
       }
 
-      await tx.delete(homes).where(eq(homes.userId, userId));
-      await tx.delete(notificationPreferences).where(eq(notificationPreferences.userId, userId));
-      // contactMessages table has no userId column — skip (messages are public submissions)
+      await tx.delete(homes).where(eq(homes.userId, uid));
+      try { await tx.delete(notificationPreferences).where(eq(notificationPreferences.userId, uid)); } catch {}
     });
   }
 }

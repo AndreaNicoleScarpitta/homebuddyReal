@@ -82,7 +82,7 @@ export default function MaintenanceLog() {
   const { data: logEntries = [], isLoading: entriesLoading } = useQuery({
     queryKey: ["logEntries", home?.id],
     queryFn: () => getLogEntries(home!.legacyId!),
-    enabled: !!home?.id,
+    enabled: !!home?.id && !!home?.legacyId,
   });
 
   const pendingTasks = tasks.filter(t => t.status === "pending" || t.status === "scheduled");
@@ -93,9 +93,27 @@ export default function MaintenanceLog() {
     return acc;
   }, {} as Record<string, V2System>);
 
+  const markDoneMutation = useMutation({
+    mutationFn: async (task: V2Task) => {
+      return updateTask(task.id, { status: "completed" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      toast({ title: "Done!", description: "Task marked as complete." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not complete task.", variant: "destructive" });
+    },
+  });
+
   const handleCompleteTask = (task: V2Task) => {
     setSelectedTask(task);
     setShowAddEntry(true);
+  };
+
+  const handleMarkDone = (task: V2Task) => {
+    trackEvent('click', 'maintenance_log', 'mark_done');
+    markDoneMutation.mutate(task);
   };
 
   const totalSpent = logEntries.reduce((sum, e) => sum + (e.cost || 0), 0);
@@ -225,15 +243,27 @@ export default function MaintenanceLog() {
                         </p>
                       </div>
                     </div>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => { trackEvent('click', 'maintenance_log', 'complete_task'); handleCompleteTask(task); }}
-                      data-testid={`button-complete-task-${task.id}`}
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-1" />
-                      Complete
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleMarkDone(task)}
+                        disabled={markDoneMutation.isPending}
+                        data-testid={`button-mark-done-${task.id}`}
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-1" />
+                        Mark Done
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="ghost"
+                        onClick={() => { trackEvent('click', 'maintenance_log', 'complete_task'); handleCompleteTask(task); }}
+                        data-testid={`button-complete-task-${task.id}`}
+                      >
+                        <FileText className="h-4 w-4 mr-1" />
+                        Log Details
+                      </Button>
+                    </div>
                   </div>
                 ))}
                 {pendingTasks.length > 5 && (
@@ -337,7 +367,8 @@ export default function MaintenanceLog() {
       <AddLogEntryDialog
         isOpen={showAddEntry}
         onClose={() => { setShowAddEntry(false); setSelectedTask(null); }}
-        homeId={home?.legacyId || 0}
+        homeId={home?.id || ""}
+        legacyHomeId={home?.legacyId || null}
         task={selectedTask}
         systems={systems}
       />
@@ -348,12 +379,13 @@ export default function MaintenanceLog() {
 interface AddLogEntryDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  homeId: number;
+  homeId: string;
+  legacyHomeId: number | null;
   task: V2Task | null;
   systems: V2System[];
 }
 
-function AddLogEntryDialog({ isOpen, onClose, homeId, task, systems }: AddLogEntryDialogProps) {
+function AddLogEntryDialog({ isOpen, onClose, homeId, legacyHomeId, task, systems }: AddLogEntryDialogProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   
@@ -390,25 +422,23 @@ function AddLogEntryDialog({ isOpen, onClose, homeId, task, systems }: AddLogEnt
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const entry = await createLogEntry(homeId, {
-        title: data.title,
-        date: new Date(data.date).toISOString(),
-        systemId: data.systemId ? parseInt(data.systemId) : undefined,
-        cost: data.cost ? Math.round(parseFloat(data.cost) * 100) : undefined,
-        provider: data.provider || undefined,
-        notes: data.notes || undefined,
-        taskId: task?.id ? parseInt(task.id) || undefined : undefined,
-      });
+      if (legacyHomeId) {
+        await createLogEntry(legacyHomeId, {
+          title: data.title,
+          date: new Date(data.date).toISOString(),
+          cost: data.cost ? Math.round(parseFloat(data.cost) * 100) : undefined,
+          provider: data.provider || undefined,
+          notes: data.notes || undefined,
+        });
+      }
 
       if (task) {
         await updateTask(task.id, { status: "completed" });
       }
-
-      return entry;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["logEntries", homeId] });
-      queryClient.invalidateQueries({ queryKey: ["tasks", homeId] });
+      queryClient.invalidateQueries({ queryKey: ["logEntries"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
       toast({ title: "Logged!", description: "Maintenance work has been recorded." });
       onClose();
       setFormData({

@@ -665,6 +665,66 @@ export async function registerRoutes(
     }
   });
   
+  app.post("/api/zillow/lookup", isAuthenticated, async (req: any, res) => {
+    try {
+      const { url } = req.body;
+      if (!url || typeof url !== "string") {
+        return res.status(400).json({ error: "Zillow URL is required" });
+      }
+
+      const zillowPattern = /zillow\.com\/(homedetails|homes)\//i;
+      if (!zillowPattern.test(url)) {
+        return res.status(400).json({ error: "Please provide a valid Zillow listing URL" });
+      }
+
+      const pathMatch = url.match(/\/(?:homedetails|homes)\/([^/?#]+)/);
+      const slug = pathMatch ? pathMatch[1] : "";
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const prompt = `Extract property data from this Zillow URL slug: "${slug}"
+
+Zillow URL slugs follow this pattern: "Street-Address-City-State-Zip"
+For example: "123-Main-St-Springfield-IL-62701" means 123 Main St, Springfield, IL 62701
+
+Parse whatever you can from the slug. Return a JSON object with these fields (use null for anything you can't determine):
+{
+  "beds": number or null,
+  "baths": number or null,
+  "sqFt": number or null,
+  "builtYear": number or null,
+  "homeValueEstimate": number or null,
+  "streetAddress": string or null,
+  "city": string or null,
+  "state": string or null (2-letter abbreviation),
+  "zipCode": string or null
+}
+
+Note: beds, baths, sqFt, builtYear, and homeValueEstimate typically aren't in the URL — set those to null.
+Only return the JSON object, no other text.`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0,
+        max_tokens: 300,
+      });
+
+      const content = completion.choices[0]?.message?.content || "{}";
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+
+      logInfo("zillow.lookup", "Zillow URL parsed", { url: url.substring(0, 80) });
+      res.json({ data: parsed });
+    } catch (error) {
+      return handleApiError(res, "zillow.lookup", error);
+    }
+  });
+
   // Contact form route (public - no auth required)
   app.post("/api/contact", async (req, res) => {
     try {

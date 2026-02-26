@@ -18,8 +18,7 @@ export function ProviderResearch({
 }: ProviderResearchProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   
-  const searchQuery = encodeURIComponent(`${repairType || category} repair`);
-  const angiUrl = `https://www.angi.com/search/${searchQuery}`;
+  const angiUrl = `https://www.angi.com/search/?search_query=${encodeURIComponent(`${repairType || category} repair`)}`;
   
   if (variant === "collapsed") {
     return (
@@ -134,8 +133,7 @@ export function ProviderPrompt({
   fundsAvailable?: number;
   onDismiss?: () => void;
 }) {
-  const searchQuery = encodeURIComponent(`${category} repair`);
-  const angiUrl = `https://www.angi.com/search/${searchQuery}`;
+  const angiUrl = `https://www.angi.com/search/?search_query=${encodeURIComponent(`${category} repair`)}`;
   
   const costNum = estimatedCost ? parseInt(estimatedCost.replace(/[^0-9]/g, '')) * 100 : 0;
   const canAfford = fundsAvailable ? costNum <= fundsAvailable : true;
