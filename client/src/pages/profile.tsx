@@ -6,12 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { User, MapPin, Home, Save, Shield, Trash2, Wrench } from "lucide-react";
+import { User, MapPin, Home, Shield, Trash2, Wrench } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getHome, updateHome, getNotificationPreferences, updateNotificationPreferences } from "@/lib/api";
+import { getHome, getNotificationPreferences, updateNotificationPreferences } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { useState, useEffect } from "react";
 import { trackEvent } from "@/lib/analytics";
 import {
   AlertDialog,
@@ -104,9 +103,6 @@ export default function Profile() {
     queryFn: getHome,
   });
 
-  const [formData, setFormData] = useState({
-    address: "",
-  });
 
   const { data: privacy, isLoading: privacyLoading } = useQuery({
     queryKey: ["privacy"],
@@ -156,30 +152,6 @@ export default function Profile() {
     },
   });
 
-  useEffect(() => {
-    if (home) {
-      setFormData({
-        address: home.address || "",
-      });
-    }
-  }, [home]);
-
-  const updateMutation = useMutation({
-    mutationFn: (data: { address?: string }) =>
-      updateHome(home!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["home"] });
-      toast({ title: "Profile updated", description: "Your changes have been saved." });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Could not update profile.", variant: "destructive" });
-    },
-  });
-
-  const handleSave = () => {
-    trackEvent('save_profile', 'profile', 'update_home_info');
-    updateMutation.mutate(formData);
-  };
 
   if (isLoading) {
     return (
@@ -247,22 +219,15 @@ export default function Profile() {
                 </Label>
                 <Input
                   id="address"
-                  placeholder="123 Main Street, City, State"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  value={home?.address || "Not set"}
+                  disabled
+                  className="bg-muted"
                   data-testid="input-address"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Your address is set from your home profile on the Overview page
+                </p>
               </div>
-
-              <Button
-                onClick={handleSave}
-                disabled={updateMutation.isPending}
-                className="w-full sm:w-auto"
-                data-testid="button-save-profile"
-              >
-                <Save className="h-4 w-4 mr-2" />
-                {updateMutation.isPending ? "Saving..." : "Save Changes"}
-              </Button>
             </CardContent>
           </Card>
 

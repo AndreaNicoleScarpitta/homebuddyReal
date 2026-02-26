@@ -10,19 +10,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Plus, 
-  Calendar, 
-  DollarSign, 
   Wrench, 
   CheckCircle2,
   Clock,
-  Building,
   FileText,
   ClipboardList,
   AlertTriangle,
-  ArrowRight,
   CalendarClock,
   CalendarCheck,
-  CalendarX
+  CalendarX,
+  UserCheck,
+  HardHat
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -31,7 +29,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getHome, getTasks, getSystems, getLogEntries, createLogEntry, updateTask } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { format, formatDistanceToNow, isPast, isToday, isFuture, addDays, differenceInDays } from "date-fns";
+import { format, formatDistanceToNow, isPast, isToday, isFuture, differenceInDays } from "date-fns";
 import type { V2Task, V2System } from "@/lib/api";
 import type { MaintenanceLogEntry } from "@shared/schema";
 import { trackEvent } from "@/lib/analytics";
@@ -134,12 +132,10 @@ function diyColor(diy?: string | null) {
   }
 }
 
-function TaskRow({ task, systemsById, onMarkDone, onLogDetails, isMarkingDone }: {
+function TaskRow({ task, systemsById, onComplete }: {
   task: V2Task;
   systemsById: Record<string, V2System>;
-  onMarkDone: (task: V2Task) => void;
-  onLogDetails: (task: V2Task) => void;
-  isMarkingDone: boolean;
+  onComplete: (task: V2Task) => void;
 }) {
   const dueDate = task.dueDate ? new Date(task.dueDate) : null;
   const isOverdue = dueDate && isPast(dueDate) && !isToday(dueDate);
@@ -211,29 +207,16 @@ function TaskRow({ task, systemsById, onMarkDone, onLogDetails, isMarkingDone }:
           <span className="text-xs text-muted-foreground hidden md:block">{task.estimatedCost}</span>
         )}
         {!isCompleted && (
-          <div className="flex gap-1">
-            <Button 
-              size="sm" 
-              variant="outline"
-              className="h-7 text-xs"
-              onClick={() => onMarkDone(task)}
-              disabled={isMarkingDone}
-              data-testid={`button-mark-done-${task.id}`}
-            >
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              Done
-            </Button>
-            <Button 
-              size="sm" 
-              variant="ghost"
-              className="h-7 text-xs"
-              onClick={() => onLogDetails(task)}
-              data-testid={`button-log-details-${task.id}`}
-            >
-              <FileText className="h-3 w-3 mr-1" />
-              Log
-            </Button>
-          </div>
+          <Button 
+            size="sm" 
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => onComplete(task)}
+            data-testid={`button-complete-${task.id}`}
+          >
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Complete
+          </Button>
         )}
       </div>
     </div>
@@ -298,30 +281,12 @@ export default function MaintenanceLog() {
     return acc;
   }, {} as Record<string, V2System>);
 
-  const markDoneMutation = useMutation({
-    mutationFn: async (task: V2Task) => {
-      return updateTask(task.id, { status: "completed" });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      toast({ title: "Done!", description: "Task marked as complete." });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Could not complete task.", variant: "destructive" });
-    },
-  });
-
   const handleCompleteTask = (task: V2Task) => {
+    trackEvent('click', 'maintenance_log', 'complete_task');
     setSelectedTask(task);
     setShowAddEntry(true);
   };
 
-  const handleMarkDone = (task: V2Task) => {
-    trackEvent('click', 'maintenance_log', 'mark_done');
-    markDoneMutation.mutate(task);
-  };
-
-  const totalSpent = logEntries.reduce((sum, e) => sum + (e.cost || 0), 0);
 
   if (homeLoading || (home && tasksLoading)) {
     return (
@@ -411,13 +376,11 @@ export default function MaintenanceLog() {
             <CardContent className="pt-4">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                  <DollarSign className="h-5 w-5 text-blue-600" />
+                  <CalendarClock className="h-5 w-5 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="text-total-spent">
-                    ${(totalSpent / 100).toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Total Spent</p>
+                  <p className="text-2xl font-bold" data-testid="text-upcoming-count">{counts.upcoming}</p>
+                  <p className="text-xs text-muted-foreground">Upcoming</p>
                 </div>
               </div>
             </CardContent>
@@ -488,9 +451,7 @@ export default function MaintenanceLog() {
                   key={task.id}
                   task={task}
                   systemsById={systemsById}
-                  onMarkDone={handleMarkDone}
-                  onLogDetails={handleCompleteTask}
-                  isMarkingDone={markDoneMutation.isPending}
+                  onComplete={handleCompleteTask}
                 />
               ))}
             </div>
@@ -594,6 +555,7 @@ function AddLogEntryDialog({ isOpen, onClose, homeId, legacyHomeId, task, system
     date: format(new Date(), "yyyy-MM-dd"),
     systemId: task?.relatedSystemId?.toString() || "",
     cost: "",
+    completedBy: "myself" as "myself" | "contractor",
     provider: "",
     notes: "",
   });
@@ -605,6 +567,7 @@ function AddLogEntryDialog({ isOpen, onClose, homeId, legacyHomeId, task, system
         date: format(new Date(), "yyyy-MM-dd"),
         systemId: task.relatedSystemId?.toString() || "",
         cost: "",
+        completedBy: "myself",
         provider: "",
         notes: "",
       });
@@ -614,6 +577,7 @@ function AddLogEntryDialog({ isOpen, onClose, homeId, legacyHomeId, task, system
         date: format(new Date(), "yyyy-MM-dd"),
         systemId: "",
         cost: "",
+        completedBy: "myself",
         provider: "",
         notes: "",
       });
@@ -627,7 +591,7 @@ function AddLogEntryDialog({ isOpen, onClose, homeId, legacyHomeId, task, system
           title: data.title,
           date: new Date(data.date).toISOString(),
           cost: data.cost ? Math.round(parseFloat(data.cost) * 100) : undefined,
-          provider: data.provider || undefined,
+          provider: data.completedBy === "contractor" ? (data.provider || "Contractor") : "DIY (Myself)",
           notes: data.notes || undefined,
         });
       }
@@ -646,6 +610,7 @@ function AddLogEntryDialog({ isOpen, onClose, homeId, legacyHomeId, task, system
         date: format(new Date(), "yyyy-MM-dd"),
         systemId: "",
         cost: "",
+        completedBy: "myself",
         provider: "",
         notes: "",
       });
@@ -687,6 +652,53 @@ function AddLogEntryDialog({ isOpen, onClose, homeId, legacyHomeId, task, system
             </div>
           )}
 
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              Who completed this?
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, completedBy: "myself", provider: "" })}
+                className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors ${
+                  formData.completedBy === "myself"
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-muted hover:border-muted-foreground/30"
+                }`}
+                data-testid="button-completed-by-myself"
+              >
+                <UserCheck className="h-4 w-4" />
+                <span className="text-sm font-medium">Myself</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, completedBy: "contractor" })}
+                className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors ${
+                  formData.completedBy === "contractor"
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-muted hover:border-muted-foreground/30"
+                }`}
+                data-testid="button-completed-by-contractor"
+              >
+                <HardHat className="h-4 w-4" />
+                <span className="text-sm font-medium">Contractor</span>
+              </button>
+            </div>
+          </div>
+
+          {formData.completedBy === "contractor" && (
+            <div className="space-y-2">
+              <Label htmlFor="provider">Contractor / Company Name</Label>
+              <Input
+                id="provider"
+                value={formData.provider}
+                onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
+                placeholder="e.g., ABC Plumbing, Joe's Electric..."
+                data-testid="input-entry-provider"
+              />
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="date">Date</Label>
@@ -712,7 +724,7 @@ function AddLogEntryDialog({ isOpen, onClose, homeId, legacyHomeId, task, system
             </div>
           </div>
 
-          {systems.length > 0 && (
+          {systems.length > 0 && !task && (
             <div className="space-y-2">
               <Label htmlFor="system">Related System (optional)</Label>
               <Select 
@@ -733,17 +745,6 @@ function AddLogEntryDialog({ isOpen, onClose, homeId, legacyHomeId, task, system
               </Select>
             </div>
           )}
-
-          <div className="space-y-2">
-            <Label htmlFor="provider">Service Provider (optional)</Label>
-            <Input
-              id="provider"
-              value={formData.provider}
-              onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
-              placeholder="e.g., ABC Plumbing, DIY..."
-              data-testid="input-entry-provider"
-            />
-          </div>
 
           <div className="space-y-2">
             <Label htmlFor="notes">Notes (optional)</Label>
