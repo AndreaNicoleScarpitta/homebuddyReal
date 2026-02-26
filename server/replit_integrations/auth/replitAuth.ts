@@ -40,14 +40,20 @@ export function getSession() {
   });
 }
 
-function getExternalUrl(): string {
+export function getExternalUrl(reqHeaders?: { host?: string; "x-forwarded-proto"?: string; "x-forwarded-host"?: string }): string {
+  if (reqHeaders) {
+    const host = reqHeaders["x-forwarded-host"] || reqHeaders.host;
+    if (host) {
+      const proto = reqHeaders["x-forwarded-proto"] || "https";
+      return `${proto}://${host}`;
+    }
+  }
+
+  if (process.env.REPLIT_DEPLOYMENT_URL) {
+    return process.env.REPLIT_DEPLOYMENT_URL;
+  }
   if (process.env.REPLIT_DEV_DOMAIN) {
     return `https://${process.env.REPLIT_DEV_DOMAIN}`;
-  }
-  const replSlug = process.env.REPL_SLUG;
-  const replOwner = process.env.REPL_OWNER;
-  if (replSlug && replOwner) {
-    return `https://${replSlug}.${replOwner}.repl.co`;
   }
   return `http://localhost:5000`;
 }
@@ -65,13 +71,13 @@ export async function setupAuth(app: Express) {
     execute: [client.allowInsecureRequests],
   });
 
-  const callbackURL = `${getExternalUrl()}/api/callback`;
-
   app.get("/api/login", async (req, res) => {
     try {
       const code_verifier = client.randomPKCECodeVerifier();
       const code_challenge = await client.calculatePKCECodeChallenge(code_verifier);
       const state = client.randomState();
+
+      const callbackURL = `${getExternalUrl(req.headers as any)}/api/callback`;
 
       req.session.code_verifier = code_verifier;
       req.session.state = state;
@@ -109,7 +115,7 @@ export async function setupAuth(app: Express) {
 
       const currentUrl = new URL(
         req.originalUrl,
-        getExternalUrl()
+        getExternalUrl(req.headers as any)
       );
 
       const tokens = await client.authorizationCodeGrant(
