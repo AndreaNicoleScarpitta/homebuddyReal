@@ -2,12 +2,11 @@ import { Layout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Plus, 
@@ -18,20 +17,82 @@ import {
   Clock,
   Building,
   FileText,
-  ChevronRight,
-  ClipboardList
+  ClipboardList,
+  AlertTriangle,
+  ArrowRight,
+  CalendarClock,
+  CalendarCheck,
+  CalendarX
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getHome, getTasks, getSystems, getLogEntries, createLogEntry, updateTask } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { format, formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, isPast, isToday, isFuture, addDays, differenceInDays } from "date-fns";
 import type { V2Task, V2System } from "@/lib/api";
 import type { MaintenanceLogEntry } from "@shared/schema";
 import { trackEvent } from "@/lib/analytics";
+
+type FilterTab = "upcoming" | "due" | "past_due" | "completed";
+
+const filterTabs: { key: FilterTab; label: string; icon: React.ElementType }[] = [
+  { key: "upcoming", label: "Upcoming", icon: CalendarClock },
+  { key: "due", label: "Due", icon: CalendarCheck },
+  { key: "past_due", label: "Past Due", icon: CalendarX },
+  { key: "completed", label: "Completed", icon: CheckCircle2 },
+];
+
+function categorizeTasks(tasks: V2Task[]) {
+  const now = new Date();
+  const upcoming: V2Task[] = [];
+  const due: V2Task[] = [];
+  const pastDue: V2Task[] = [];
+  const completed: V2Task[] = [];
+
+  for (const task of tasks) {
+    if (task.status === "completed" || task.state === "completed") {
+      completed.push(task);
+      continue;
+    }
+
+    const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+
+    if (!dueDate) {
+      upcoming.push(task);
+      continue;
+    }
+
+    if (isPast(dueDate) && !isToday(dueDate)) {
+      pastDue.push(task);
+    } else if (isToday(dueDate) || (isFuture(dueDate) && differenceInDays(dueDate, now) <= 7)) {
+      due.push(task);
+    } else {
+      upcoming.push(task);
+    }
+  }
+
+  pastDue.sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
+  due.sort((a, b) => {
+    const aDate = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+    const bDate = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+    return aDate - bDate;
+  });
+  upcoming.sort((a, b) => {
+    const aDate = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+    const bDate = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+    return aDate - bDate;
+  });
+  completed.sort((a, b) => {
+    const aDate = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+    const bDate = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+    return bDate - aDate;
+  });
+
+  return { upcoming, due, past_due: pastDue, completed };
+}
 
 function MaintenanceLogSkeleton() {
   return (
@@ -54,12 +115,138 @@ function MaintenanceLogSkeleton() {
   );
 }
 
+function urgencyColor(urgency?: string) {
+  switch (urgency) {
+    case "now": return "text-red-600 bg-red-500/10";
+    case "soon": return "text-orange-600 bg-orange-500/10";
+    case "later": return "text-blue-600 bg-blue-500/10";
+    case "monitor": return "text-gray-600 bg-gray-500/10";
+    default: return "text-muted-foreground bg-muted";
+  }
+}
+
+function diyColor(diy?: string | null) {
+  switch (diy) {
+    case "DIY-Safe": return "text-green-700 bg-green-500/10 border-green-200";
+    case "Caution": return "text-amber-700 bg-amber-500/10 border-amber-200";
+    case "Pro-Only": return "text-red-700 bg-red-500/10 border-red-200";
+    default: return "text-muted-foreground bg-muted";
+  }
+}
+
+function TaskRow({ task, systemsById, onMarkDone, onLogDetails, isMarkingDone }: {
+  task: V2Task;
+  systemsById: Record<string, V2System>;
+  onMarkDone: (task: V2Task) => void;
+  onLogDetails: (task: V2Task) => void;
+  isMarkingDone: boolean;
+}) {
+  const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+  const isOverdue = dueDate && isPast(dueDate) && !isToday(dueDate);
+  const isDueToday = dueDate && isToday(dueDate);
+  const isCompleted = task.status === "completed" || task.state === "completed";
+  const system = task.relatedSystemId ? systemsById[task.relatedSystemId] : null;
+
+  return (
+    <div 
+      className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+        isOverdue ? "border-red-200 bg-red-50/50 dark:border-red-900/30 dark:bg-red-950/20" :
+        isDueToday ? "border-orange-200 bg-orange-50/50 dark:border-orange-900/30 dark:bg-orange-950/20" :
+        isCompleted ? "border-green-200 bg-green-50/30 dark:border-green-900/30 dark:bg-green-950/20" :
+        "bg-muted/30 hover:bg-muted/50"
+      }`}
+      data-testid={`row-task-${task.id}`}
+    >
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+          isCompleted ? "bg-green-500/20" : isOverdue ? "bg-red-500/20" : "bg-muted"
+        }`}>
+          {isCompleted ? (
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+          ) : isOverdue ? (
+            <AlertTriangle className="h-4 w-4 text-red-600" />
+          ) : (
+            <Wrench className="h-4 w-4 text-muted-foreground" />
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className={`font-medium text-sm truncate ${isCompleted ? "line-through text-muted-foreground" : ""}`} data-testid={`text-task-title-${task.id}`}>
+            {task.title}
+          </p>
+          <div className="flex items-center gap-2 flex-wrap mt-0.5">
+            {task.category && (
+              <span className="text-xs text-muted-foreground">{task.category}</span>
+            )}
+            {system && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                {system.name}
+              </Badge>
+            )}
+            {dueDate && (
+              <span className={`text-xs ${isOverdue ? "text-red-600 font-medium" : isDueToday ? "text-orange-600 font-medium" : "text-muted-foreground"}`}>
+                {isOverdue ? `Overdue ${formatDistanceToNow(dueDate)}` : 
+                 isDueToday ? "Due today" : 
+                 `Due ${format(dueDate, "MMM d")}`}
+              </span>
+            )}
+            {!dueDate && !isCompleted && (
+              <span className="text-xs text-muted-foreground">No due date</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+        {task.urgency && !isCompleted && (
+          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 hidden sm:flex ${urgencyColor(task.urgency)}`}>
+            {task.urgency}
+          </Badge>
+        )}
+        {task.diyLevel && !isCompleted && (
+          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 hidden sm:flex ${diyColor(task.diyLevel)}`}>
+            {task.diyLevel}
+          </Badge>
+        )}
+        {task.estimatedCost && !isCompleted && (
+          <span className="text-xs text-muted-foreground hidden md:block">{task.estimatedCost}</span>
+        )}
+        {!isCompleted && (
+          <div className="flex gap-1">
+            <Button 
+              size="sm" 
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => onMarkDone(task)}
+              disabled={isMarkingDone}
+              data-testid={`button-mark-done-${task.id}`}
+            >
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Done
+            </Button>
+            <Button 
+              size="sm" 
+              variant="ghost"
+              className="h-7 text-xs"
+              onClick={() => onLogDetails(task)}
+              data-testid={`button-log-details-${task.id}`}
+            >
+              <FileText className="h-3 w-3 mr-1" />
+              Log
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function MaintenanceLog() {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [selectedTask, setSelectedTask] = useState<V2Task | null>(null);
+  const [activeFilter, setActiveFilter] = useState<FilterTab>("upcoming");
 
   const { data: home, isLoading: homeLoading } = useQuery({
     queryKey: ["home"],
@@ -67,7 +254,7 @@ export default function MaintenanceLog() {
     enabled: isAuthenticated,
   });
 
-  const { data: tasks = [] } = useQuery({
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ["tasks", home?.id],
     queryFn: () => getTasks(home!.id),
     enabled: !!home?.id,
@@ -85,8 +272,26 @@ export default function MaintenanceLog() {
     enabled: !!home?.id && !!home?.legacyId,
   });
 
-  const pendingTasks = tasks.filter(t => t.status === "pending" || t.status === "scheduled");
-  const completedTasks = tasks.filter(t => t.status === "completed");
+  const categorized = useMemo(() => categorizeTasks(tasks), [tasks]);
+
+  const counts = useMemo(() => ({
+    upcoming: categorized.upcoming.length,
+    due: categorized.due.length,
+    past_due: categorized.past_due.length,
+    completed: categorized.completed.length,
+  }), [categorized]);
+
+  useEffect(() => {
+    if (counts.past_due > 0) {
+      setActiveFilter("past_due");
+    } else if (counts.due > 0) {
+      setActiveFilter("due");
+    } else {
+      setActiveFilter("upcoming");
+    }
+  }, [tasks.length]);
+
+  const filteredTasks = categorized[activeFilter];
 
   const systemsById = systems.reduce((acc, s) => {
     acc[s.id] = s;
@@ -118,7 +323,7 @@ export default function MaintenanceLog() {
 
   const totalSpent = logEntries.reduce((sum, e) => sum + (e.cost || 0), 0);
 
-  if (homeLoading || (home && entriesLoading)) {
+  if (homeLoading || (home && tasksLoading)) {
     return (
       <Layout>
         <MaintenanceLogSkeleton />
@@ -136,7 +341,7 @@ export default function MaintenanceLog() {
             </div>
             <h2 className="text-xl font-semibold mb-2">Set up your home first</h2>
             <p className="text-muted-foreground">
-              Complete your home profile to start tracking your maintenance history.
+              Complete your home profile to start tracking your maintenance.
             </p>
           </div>
         </div>
@@ -153,7 +358,7 @@ export default function MaintenanceLog() {
               Maintenance Log
             </h1>
             <p className="text-muted-foreground mt-1">
-              Track completed work and maintenance history
+              Track tasks and completed work on your home
             </p>
           </div>
           <Button onClick={() => { trackEvent('click', 'maintenance_log', 'log_work'); setSelectedTask(null); setShowAddEntry(true); }} data-testid="button-add-entry">
@@ -162,7 +367,6 @@ export default function MaintenanceLog() {
           </Button>
         </header>
 
-        {/* Summary Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card>
             <CardContent className="pt-4">
@@ -171,8 +375,34 @@ export default function MaintenanceLog() {
                   <CheckCircle2 className="h-5 w-5 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="text-entries-count">{logEntries.length}</p>
-                  <p className="text-xs text-muted-foreground">Entries Logged</p>
+                  <p className="text-2xl font-bold" data-testid="text-completed-count">{counts.completed}</p>
+                  <p className="text-xs text-muted-foreground">Completed</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold" data-testid="text-past-due-count">{counts.past_due}</p>
+                  <p className="text-xs text-muted-foreground">Past Due</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-orange-500/10 flex items-center justify-center">
+                  <Clock className="h-5 w-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold" data-testid="text-due-count">{counts.due}</p>
+                  <p className="text-xs text-muted-foreground">Due Now</p>
                 </div>
               </div>
             </CardContent>
@@ -192,123 +422,94 @@ export default function MaintenanceLog() {
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-orange-500/10 flex items-center justify-center">
-                  <Clock className="h-5 w-5 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold" data-testid="text-pending-count">{pendingTasks.length}</p>
-                  <p className="text-xs text-muted-foreground">Pending Tasks</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Building className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold" data-testid="text-systems-count">{systems.length}</p>
-                  <p className="text-xs text-muted-foreground">Home Systems</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
-        {/* Quick Actions: Mark Tasks Complete */}
-        {pendingTasks.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Ready to Complete?</CardTitle>
-              <CardDescription>Mark tasks as done and log the details</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {pendingTasks.slice(0, 5).map((task) => (
-                  <div 
-                    key={task.id}
-                    className="flex items-center justify-between p-3 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors"
+        <div className="flex gap-1 p-1 bg-muted/50 rounded-lg overflow-x-auto" data-testid="filter-tabs">
+          {filterTabs.map(({ key, label, icon: Icon }) => {
+            const count = counts[key];
+            const isActive = activeFilter === key;
+            return (
+              <button
+                key={key}
+                onClick={() => { setActiveFilter(key); trackEvent('click', 'maintenance_log', `filter_${key}`); }}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                  isActive 
+                    ? "bg-background shadow-sm text-foreground" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                }`}
+                data-testid={`filter-${key}`}
+              >
+                <Icon className="h-4 w-4" />
+                <span>{label}</span>
+                {count > 0 && (
+                  <Badge 
+                    variant={isActive ? "default" : "secondary"} 
+                    className={`ml-1 h-5 min-w-[20px] flex items-center justify-center text-[10px] px-1.5 ${
+                      key === "past_due" && count > 0 ? "bg-red-500 text-white" : ""
+                    }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <Wrench className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium text-sm">{task.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {task.category} {task.estimatedCost && `• Est. ${task.estimatedCost}`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => handleMarkDone(task)}
-                        disabled={markDoneMutation.isPending}
-                        data-testid={`button-mark-done-${task.id}`}
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-1" />
-                        Mark Done
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={() => { trackEvent('click', 'maintenance_log', 'complete_task'); handleCompleteTask(task); }}
-                        data-testid={`button-complete-task-${task.id}`}
-                      >
-                        <FileText className="h-4 w-4 mr-1" />
-                        Log Details
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                {pendingTasks.length > 5 && (
-                  <p className="text-xs text-muted-foreground text-center pt-2">
-                    +{pendingTasks.length - 5} more pending tasks
-                  </p>
+                    {count}
+                  </Badge>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div data-testid="task-list">
+          {filteredTasks.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                {activeFilter === "completed" ? (
+                  <CheckCircle2 className="h-8 w-8 text-muted-foreground" />
+                ) : activeFilter === "past_due" ? (
+                  <CalendarX className="h-8 w-8 text-muted-foreground" />
+                ) : (
+                  <CalendarClock className="h-8 w-8 text-muted-foreground" />
                 )}
               </div>
-            </CardContent>
-          </Card>
-        )}
+              <h3 className="text-lg font-semibold mb-2">
+                {activeFilter === "upcoming" && "No upcoming tasks"}
+                {activeFilter === "due" && "Nothing due right now"}
+                {activeFilter === "past_due" && "No overdue tasks"}
+                {activeFilter === "completed" && "No completed tasks yet"}
+              </h3>
+              <p className="text-muted-foreground text-sm max-w-md mx-auto">
+                {activeFilter === "upcoming" && "Tasks scheduled for the future will appear here."}
+                {activeFilter === "due" && "Tasks due today or within the next 7 days will appear here."}
+                {activeFilter === "past_due" && "Great job staying on top of your maintenance!"}
+                {activeFilter === "completed" && "Complete your first task to start building your maintenance history."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredTasks.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  systemsById={systemsById}
+                  onMarkDone={handleMarkDone}
+                  onLogDetails={handleCompleteTask}
+                  isMarkingDone={markDoneMutation.isPending}
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
-        {/* Maintenance History */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Maintenance History
-            </CardTitle>
-            <CardDescription>
-              A timeline of all completed work on your home
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {entriesLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              </div>
-            ) : logEntries.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                  <FileText className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2">No maintenance logged yet</h3>
-                <p className="text-muted-foreground text-sm mb-4 max-w-md mx-auto">
-                  Start tracking your home maintenance by logging completed work. This helps you
-                  keep records and plan future maintenance.
-                </p>
-                <Button onClick={() => setShowAddEntry(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Log First Entry
-                </Button>
-              </div>
-            ) : (
-              <ScrollArea className="h-[400px] pr-4">
+        {logEntries.length > 0 && activeFilter === "completed" && (
+          <Card className="mt-4">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileText className="h-5 w-5" />
+                Work Log
+              </CardTitle>
+              <CardDescription>
+                Detailed records of completed maintenance work
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[300px] pr-4">
                 <div className="space-y-4">
                   {logEntries.map((entry, index) => (
                     <div key={entry.id}>
@@ -358,12 +559,11 @@ export default function MaintenanceLog() {
                   ))}
                 </div>
               </ScrollArea>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
-      {/* Add Entry Dialog */}
       <AddLogEntryDialog
         isOpen={showAddEntry}
         onClose={() => { setShowAddEntry(false); setSelectedTask(null); }}

@@ -10,7 +10,7 @@ import { trackEvent } from "@/lib/analytics";
 
 const navItems = [
   { href: "/dashboard", icon: Home, label: "Overview", sublabel: "What needs attention", tourId: "nav-overview" },
-  { href: "/maintenance-log", icon: ClipboardList, label: "History", sublabel: "What you've done", tourId: "nav-history" },
+  { href: "/maintenance-log", icon: ClipboardList, label: "Maintenance Log", sublabel: "What you've done", tourId: "nav-history" },
   { href: "/inspections", icon: FileText, label: "Inspections", sublabel: "What's wrong", tourId: "nav-inspections" },
   { href: "/documents", icon: FolderOpen, label: "Documents", sublabel: "Your files", tourId: "nav-documents" },
   { href: "/chat", icon: MessageSquare, label: "Assistant", sublabel: "Get guidance", tourId: "nav-assistant" },
@@ -20,7 +20,7 @@ const navItems = [
 
 const bottomNavItems = [
   { href: "/dashboard", icon: Home, label: "Home" },
-  { href: "/maintenance-log", icon: ClipboardList, label: "History" },
+  { href: "/maintenance-log", icon: ClipboardList, label: "Log" },
   { href: "/chat", icon: MessageSquare, label: "Assistant" },
   { href: "/inspections", icon: FileText, label: "Reports" },
 ];
