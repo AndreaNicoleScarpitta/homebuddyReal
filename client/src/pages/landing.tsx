@@ -1,6 +1,7 @@
 import { Calendar, MessageSquare, ArrowRight, Sparkles, FileText } from "lucide-react";
 import { motion } from "framer-motion";
 import { DashboardDemo, ChatDemo, DocumentsDemo } from "@/components/landing-demos";
+import { trackEvent } from "@/lib/analytics";
 
 export default function Landing() {
   const benefits = [
@@ -27,6 +28,7 @@ export default function Landing() {
           <a
             href="/api/login"
             target="_top"
+            onClick={() => trackEvent('click', 'landing', 'sign_in_header')}
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground no-underline"
             data-testid="button-login"
           >
@@ -192,6 +194,7 @@ export default function Landing() {
                 <a
                   href="/api/login"
                   target="_top"
+                  onClick={() => trackEvent('click', 'landing', 'cta_start_managing')}
                   className="inline-flex items-center justify-center h-14 px-10 text-lg font-medium rounded-md bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 no-underline"
                   data-testid="button-cta-bottom"
                 >
@@ -207,7 +210,7 @@ export default function Landing() {
       <footer className="border-t border-border/40 py-8">
         <div className="container mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
           <span>&copy; 2026 Home Buddy. Your trusted home maintenance assistant.</span>
-          <a href="/terms" className="underline hover:text-foreground" data-testid="link-footer-terms">
+          <a href="/terms" onClick={() => trackEvent('click', 'landing', 'footer_terms')} className="underline hover:text-foreground" data-testid="link-footer-terms">
             Terms & Conditions
           </a>
         </div>

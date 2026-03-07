@@ -1,4 +1,4 @@
-const CACHE_VERSION = '2';
+const CACHE_VERSION = '3';
 const CACHE_NAME = `home-buddy-v${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   '/manifest.json'
@@ -28,6 +28,12 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+  const authPaths = ['/api/login', '/api/callback', '/api/logout'];
+  if (authPaths.some((p) => url.pathname.startsWith(p))) {
+    return;
+  }
 
   if (event.request.url.includes('/api/') || event.request.url.includes('/v2/')) {
     event.respondWith(

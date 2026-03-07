@@ -423,6 +423,7 @@ export default function Inspections() {
         objectPath: `/objects/uploads/${file.id}`,
       });
       queryClient.invalidateQueries({ queryKey: ["reports"] });
+      trackEvent('upload', 'inspections', 'report_uploaded');
       toast({ title: "Report uploaded", description: "Your report is ready for analysis." });
       setSelectedReportId(report.id);
     } catch (error) {
