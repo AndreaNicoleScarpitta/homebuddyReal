@@ -1,4 +1,5 @@
 import { Layout } from "@/components/layout";
+import { SwipeableTask } from "@/components/swipeable-task";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getHome, getTasks, getSystems, getLogEntries, createLogEntry, updateTask } from "@/lib/api";
+import { getHome, getTasks, getSystems, getLogEntries, createLogEntry, updateTask, deleteTask } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { format, formatDistanceToNow, isPast, isToday, isFuture, differenceInDays } from "date-fns";
@@ -300,6 +301,59 @@ export default function MaintenanceLog() {
     setShowAddEntry(true);
   };
 
+  const taskDeleteMutation = useMutation({
+    mutationFn: (taskId: string | number) => deleteTask(taskId),
+    onMutate: async (taskId) => {
+      await queryClient.cancelQueries({ queryKey: ["tasks", home?.id] });
+      const previous = queryClient.getQueryData<V2Task[]>(["tasks", home?.id]);
+      queryClient.setQueryData<V2Task[]>(["tasks", home?.id], old => old?.filter(t => t.id !== String(taskId)) ?? []);
+      return { previous };
+    },
+    onError: (_err, _taskId, context) => {
+      if (context?.previous) queryClient.setQueryData(["tasks", home?.id], context.previous);
+      toast({ title: "Error", description: "Could not delete task.", variant: "destructive" });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }),
+  });
+
+  const handleDeleteTask = (task: V2Task) => {
+    trackEvent('swipe', 'maintenance_log', 'delete_task');
+    taskDeleteMutation.mutate(task.id);
+    toast({ title: "Task deleted", description: `"${task.title}" was removed.` });
+  };
+
+  const swipeCompleteMutation = useMutation({
+    mutationFn: async (task: V2Task) => {
+      await createLogEntry(home!.legacyId!, {
+        title: task.title,
+        date: new Date().toISOString(),
+      });
+      await updateTask(task.id, { status: "completed" });
+    },
+    onMutate: async (task) => {
+      await queryClient.cancelQueries({ queryKey: ["tasks", home?.id] });
+      const previous = queryClient.getQueryData<V2Task[]>(["tasks", home?.id]);
+      queryClient.setQueryData<V2Task[]>(["tasks", home?.id], old =>
+        old?.map(t => t.id === task.id ? { ...t, status: "completed" } : t) ?? []
+      );
+      return { previous };
+    },
+    onError: (_err, _task, context) => {
+      if (context?.previous) queryClient.setQueryData(["tasks", home?.id], context.previous);
+      toast({ title: "Error", description: "Could not complete task.", variant: "destructive" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["logEntries"] });
+    },
+  });
+
+  const handleSwipeComplete = (task: V2Task) => {
+    trackEvent('swipe', 'maintenance_log', 'complete_task_quick');
+    swipeCompleteMutation.mutate(task);
+    toast({ title: "Task completed!", description: `"${task.title}" marked as done.` });
+  };
+
 
   if (homeLoading || (home && tasksLoading)) {
     return (
@@ -459,14 +513,23 @@ export default function MaintenanceLog() {
             </div>
           ) : (
             <div className="space-y-2">
-              {filteredTasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  systemsById={systemsById}
-                  onComplete={handleCompleteTask}
-                />
-              ))}
+              {filteredTasks.map((task) => {
+                const isCompleted = task.status === "completed" || task.state === "completed";
+                return (
+                  <SwipeableTask
+                    key={task.id}
+                    onSwipeLeft={() => handleSwipeComplete(task)}
+                    onSwipeRight={() => handleDeleteTask(task)}
+                    disabled={isCompleted}
+                  >
+                    <TaskRow
+                      task={task}
+                      systemsById={systemsById}
+                      onComplete={handleCompleteTask}
+                    />
+                  </SwipeableTask>
+                );
+              })}
             </div>
           )}
         </div>

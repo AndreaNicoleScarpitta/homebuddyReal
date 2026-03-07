@@ -1,0 +1,76 @@
+You are updating the task interaction behavior in our app.
+
+Goal:
+Adjust the task UI so that:
+1. Swiping left on a task marks it as Done
+2. Swiping right on a task archives or deletes it, depending on the current app pattern and data model
+3. The UI updates immediately and correctly after each gesture
+4. Tests are added to verify both status changes and visible UI changes
+
+Implementation requirements:
+- Inspect the existing task component, gesture handling, state management, and persistence flow before making changes
+- Reuse existing patterns for swipe actions, task status updates, animations, and optimistic UI updates where possible
+- Do not introduce a new gesture library or unnecessary abstractions unless required
+- Preserve accessibility, touch responsiveness, and visual consistency with the existing app
+- If “archive” and “delete” are both present in the app, follow the one already used for task removal in the current product flow rather than inventing a new pattern
+- Make sure the swipe directions are explicitly mapped as:
+  - Swipe left → mark task as done
+  - Swipe right → archive/delete task
+
+Behavior requirements:
+- When a user swipes left on an active task:
+  - the task status should change to done/completed in state and persistence
+  - the task UI should visually reflect completion
+  - any relevant styling should update, such as strikethrough, opacity, icon, badge, or movement to a completed section if that is how the app works
+- When a user swipes right on an active task:
+  - the task should be archived or deleted according to the app’s existing data model
+  - it should be removed from the active task list in the UI
+  - persistence should reflect the change
+- Ensure the interactions do not accidentally trigger the opposite action
+- Ensure repeat swipes or partial swipes do not cause inconsistent state
+
+Testing requirements:
+Add or update tests to cover:
+
+1. Swipe left behavior
+- verifies swiping left triggers the “mark as done” action
+- verifies the task status is updated in state/store/backend mock
+- verifies the task’s UI changes to the completed state
+- verifies the task remains visible only if completed tasks are meant to remain visible, otherwise verifies it moves/disappears according to current app behavior
+
+2. Swipe right behavior
+- verifies swiping right triggers archive/delete
+- verifies the task is archived/deleted in state/store/backend mock
+- verifies the task is removed from the active list UI
+
+3. Direction correctness
+- verifies left swipe does not archive/delete
+- verifies right swipe does not mark as done
+
+4. UI regression coverage
+- verifies the correct swipe affordance labels/icons if those exist
+- verifies completed styling appears only after successful left swipe
+- verifies removed/archive state is visually reflected after successful right swipe
+
+5. Edge cases
+- task already completed
+- task already archived/deleted if relevant
+- failed persistence/update case, if the app supports error handling or rollback
+- minimal swipe that should not trigger an action
+- multiple rapid swipes do not create duplicate updates
+
+Technical expectations:
+- Update the relevant component(s), gesture handlers, state/store logic, and tests
+- Use the project’s existing test framework and conventions
+- Prefer robust interaction tests over shallow implementation-only tests
+- Mock persistence/network boundaries where appropriate
+- Keep the change focused and production-ready
+
+Deliverables:
+1. Updated implementation
+2. Added/updated tests
+3. Brief summary of:
+   - files changed
+   - final swipe mapping
+   - what was tested
+   - any assumptions made about archive vs delete behavior

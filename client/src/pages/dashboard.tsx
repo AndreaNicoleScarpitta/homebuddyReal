@@ -2,6 +2,7 @@ import { Layout } from "@/components/layout";
 import { HomeHealth } from "@/components/home-health";
 import { HomeInfoCard } from "@/components/home-info-card";
 import { MaintenanceCard } from "@/components/maintenance-card";
+import { SwipeableTask } from "@/components/swipeable-task";
 import { AddSystemWizard } from "@/components/add-system-wizard";
 import { SystemsSummary } from "@/components/systems-summary";
 import { OnboardingTour, useTourState } from "@/components/onboarding-tour";
@@ -19,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { FieldTooltip } from "@/components/field-tooltip";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getHome, getTasks, getSystems, createTask, updateTask, createLogEntry, analyzeTask, getNotificationPreferences } from "@/lib/api";
+import { getHome, getTasks, getSystems, createTask, updateTask, deleteTask, createLogEntry, analyzeTask, getNotificationPreferences } from "@/lib/api";
 import type { TaskAnalysis } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -473,6 +474,9 @@ export default function Dashboard() {
   const [showAddTask, setShowAddTask] = useState(false);
   const [completingTask, setCompletingTask] = useState<V2Task | null>(null);
 
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   const { data: home, isLoading: homeLoading } = useQuery({
     queryKey: ["home"],
     queryFn: getHome,
@@ -490,6 +494,59 @@ export default function Dashboard() {
     queryFn: () => getSystems(home!.id),
     enabled: !!home?.id,
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (taskId: string | number) => deleteTask(taskId),
+    onMutate: async (taskId) => {
+      await queryClient.cancelQueries({ queryKey: ["tasks", home?.id] });
+      const previous = queryClient.getQueryData<V2Task[]>(["tasks", home?.id]);
+      queryClient.setQueryData<V2Task[]>(["tasks", home?.id], old => old?.filter(t => t.id !== String(taskId)) ?? []);
+      return { previous };
+    },
+    onError: (_err, _taskId, context) => {
+      if (context?.previous) queryClient.setQueryData(["tasks", home?.id], context.previous);
+      toast({ title: "Error", description: "Could not delete task.", variant: "destructive" });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }),
+  });
+
+  const handleDeleteTask = (task: V2Task) => {
+    trackEvent('swipe', 'task', 'delete');
+    deleteMutation.mutate(task.id);
+    toast({ title: "Task deleted", description: `"${task.title}" was removed.` });
+  };
+
+  const swipeCompleteMutation = useMutation({
+    mutationFn: async (task: V2Task) => {
+      await createLogEntry(home!.legacyId!, {
+        title: task.title,
+        date: new Date().toISOString(),
+      });
+      await updateTask(task.id, { status: "completed" });
+    },
+    onMutate: async (task) => {
+      await queryClient.cancelQueries({ queryKey: ["tasks", home?.id] });
+      const previous = queryClient.getQueryData<V2Task[]>(["tasks", home?.id]);
+      queryClient.setQueryData<V2Task[]>(["tasks", home?.id], old =>
+        old?.map(t => t.id === task.id ? { ...t, status: "completed" } : t) ?? []
+      );
+      return { previous };
+    },
+    onError: (_err, _task, context) => {
+      if (context?.previous) queryClient.setQueryData(["tasks", home?.id], context.previous);
+      toast({ title: "Error", description: "Could not complete task.", variant: "destructive" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["logEntries"] });
+    },
+  });
+
+  const handleSwipeComplete = (task: V2Task) => {
+    trackEvent('swipe', 'task', 'complete');
+    swipeCompleteMutation.mutate(task);
+    toast({ title: "Task completed!", description: `"${task.title}" marked as done.` });
+  };
 
   useEffect(() => {
     if (!authLoading && !homeLoading && !home) {
@@ -704,11 +761,17 @@ export default function Dashboard() {
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {urgencyTasks.map((task) => (
-                        <MaintenanceCard 
-                          key={task.id} 
-                          task={task} 
-                          onComplete={(t) => setCompletingTask(t)}
-                        />
+                        <SwipeableTask
+                          key={task.id}
+                          onSwipeLeft={() => handleSwipeComplete(task)}
+                          onSwipeRight={() => handleDeleteTask(task)}
+                          disabled={task.status === "completed"}
+                        >
+                          <MaintenanceCard 
+                            task={task} 
+                            onComplete={(t) => setCompletingTask(t)}
+                          />
+                        </SwipeableTask>
                       ))}
                     </div>
                   </div>
