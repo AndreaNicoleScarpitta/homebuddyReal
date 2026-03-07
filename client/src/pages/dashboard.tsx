@@ -528,7 +528,7 @@ export default function Dashboard() {
       await queryClient.cancelQueries({ queryKey: ["tasks", home?.id] });
       const previous = queryClient.getQueryData<V2Task[]>(["tasks", home?.id]);
       queryClient.setQueryData<V2Task[]>(["tasks", home?.id], old =>
-        old?.map(t => t.id === task.id ? { ...t, status: "completed" } : t) ?? []
+        old?.map(t => t.id === task.id ? { ...t, status: "completed", state: "completed" } : t) ?? []
       );
       return { previous };
     },
@@ -539,13 +539,13 @@ export default function Dashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["logEntries"] });
+      toast({ title: "Task completed!", description: "Nice work — this has been logged." });
     },
   });
 
   const handleSwipeComplete = (task: V2Task) => {
     trackEvent('swipe', 'task', 'complete');
     swipeCompleteMutation.mutate(task);
-    toast({ title: "Task completed!", description: `"${task.title}" marked as done.` });
   };
 
   useEffect(() => {
@@ -739,7 +739,7 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-6">
               {["now", "soon", "later", "monitor"].map((urgency) => {
-                const urgencyTasks = tasks.filter(t => t.urgency === urgency);
+                const urgencyTasks = tasks.filter(t => t.urgency === urgency && t.status !== "completed");
                 if (urgencyTasks.length === 0) return null;
 
                 const urgencyLabels: Record<string, string> = {

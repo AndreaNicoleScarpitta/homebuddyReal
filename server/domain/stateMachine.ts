@@ -57,6 +57,7 @@ const taskTransitions: Record<string, Set<string>> = {
     EventTypes.TaskRejected,
     EventTypes.TaskSkipped,
     EventTypes.TaskUpdated,
+    EventTypes.TaskCompleted,
   ]),
   approved: new Set([
     EventTypes.TaskScheduled,
@@ -64,12 +65,14 @@ const taskTransitions: Record<string, Set<string>> = {
     EventTypes.TaskSkipped,
     EventTypes.TaskOverdueMarked,
     EventTypes.TaskUpdated,
+    EventTypes.TaskCompleted,
   ]),
   scheduled: new Set([
     EventTypes.TaskStarted,
     EventTypes.TaskSkipped,
     EventTypes.TaskOverdueMarked,
     EventTypes.TaskUpdated,
+    EventTypes.TaskCompleted,
   ]),
   in_progress: new Set([
     EventTypes.TaskCompleted,

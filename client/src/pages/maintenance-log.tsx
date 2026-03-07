@@ -334,7 +334,7 @@ export default function MaintenanceLog() {
       await queryClient.cancelQueries({ queryKey: ["tasks", home?.id] });
       const previous = queryClient.getQueryData<V2Task[]>(["tasks", home?.id]);
       queryClient.setQueryData<V2Task[]>(["tasks", home?.id], old =>
-        old?.map(t => t.id === task.id ? { ...t, status: "completed" } : t) ?? []
+        old?.map(t => t.id === task.id ? { ...t, status: "completed", state: "completed" } : t) ?? []
       );
       return { previous };
     },
@@ -345,13 +345,13 @@ export default function MaintenanceLog() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["logEntries"] });
+      toast({ title: "Task completed!", description: "Nice work — this has been logged." });
     },
   });
 
   const handleSwipeComplete = (task: V2Task) => {
     trackEvent('swipe', 'maintenance_log', 'complete_task_quick');
     swipeCompleteMutation.mutate(task);
-    toast({ title: "Task completed!", description: `"${task.title}" marked as done.` });
   };
 
 
