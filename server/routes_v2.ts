@@ -706,15 +706,17 @@ v2Router.post("/tasks", async (req: Request, res: Response) => {
       const systemId = req.body.systemId || req.body.relatedSystemId;
       if (systemId) {
         const sysResult = await db.execute(
-          sql`SELECT category, name, system_id FROM projection_system WHERE system_id = ${systemId} LIMIT 1`
+          sql`SELECT system_id, system_type, attrs FROM projection_system WHERE system_id = ${systemId} LIMIT 1`
         );
         if (sysResult.rows.length > 0) {
-          const sys = sysResult.rows[0] as { category: string; name: string; system_id: string };
-          nsPrefix = generateInstancePrefix(sys.category || "other", sys.name, sys.system_id);
+          const row = sysResult.rows[0] as { system_type: string; attrs: Record<string, string>; system_id: string };
+          const category = row.attrs?.category || row.system_type || "other";
+          const name = row.attrs?.name || category;
+          nsPrefix = generateInstancePrefix(category, name, row.system_id);
         }
       }
-      if (!nsPrefix && req.body.category) {
-        nsPrefix = systemNameToPrefix(req.body.category);
+      if (!nsPrefix && (req.body.category || req.body.estimates?.category)) {
+        nsPrefix = systemNameToPrefix(req.body.category || req.body.estimates.category);
       }
       if (!nsPrefix) {
         nsPrefix = "unknown_system";
@@ -765,11 +767,13 @@ v2Router.post("/tasks/analyze", async (req: Request, res: Response) => {
     let nsPrefix = "unknown_system";
     if (systemId) {
       const sysResult = await db.execute(
-        sql`SELECT category, name, system_id FROM projection_system WHERE system_id = ${systemId} LIMIT 1`
+        sql`SELECT system_id, system_type, attrs FROM projection_system WHERE system_id = ${systemId} LIMIT 1`
       );
       if (sysResult.rows.length > 0) {
-        const sys = sysResult.rows[0] as { category: string; name: string; system_id: string };
-        nsPrefix = generateInstancePrefix(sys.category || "other", sys.name, sys.system_id);
+        const row = sysResult.rows[0] as { system_type: string; attrs: Record<string, string>; system_id: string };
+        const cat = row.attrs?.category || row.system_type || "other";
+        const nm = row.attrs?.name || cat;
+        nsPrefix = generateInstancePrefix(cat, nm, row.system_id);
       }
     } else if (sysName && category) {
       nsPrefix = generateInstancePrefix(category, sysName);
@@ -1867,6 +1871,7 @@ function handleError(res: Response, err: unknown): void {
     return;
   }
   const error = err as Error & { status?: number; code?: string };
+  console.error("[v2 error]", error.message, error.stack);
   if (error.code === "23505") {
     res.status(409).json({ error: "Conflict: this operation was already processed" });
     return;
