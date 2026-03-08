@@ -1,0 +1,103 @@
+You are updating the HomeBuddy mobile application to add a legally protective disclaimer and user acceptance system related to AI-generated home repair guidance.
+The disclaimer protects the platform from liability associated with:
+AI-generated home analysis
+repair recommendations
+safety risks
+unlicensed contractor interpretations
+The implementation must be minimal, safe, and deployable without breaking existing app functionality.
+Feature Requirements
+1. Disclaimer Gate
+Before users can access the following features:
+File Upload
+Document Analysis
+Task generation from uploaded files
+Home system repair suggestions
+they must accept the HomeBuddy Disclaimer.
+If the user has not accepted the disclaimer, redirect them to the Disclaimer Acceptance Screen.
+2. Disclaimer UI
+Create a screen called:
+HomeBuddy Safety and Responsibility Notice
+Display the full disclaimer text.
+At the bottom include:
+Checkbox:
+"I acknowledge that HomeBuddy provides informational guidance only and that any repairs or actions I take based on this information are at my own risk."
+Buttons:
+Agree and Continue
+Cancel
+Cancel returns the user to the home dashboard without enabling analysis features.
+3. Backend Acceptance Storage
+Record acceptance in the backend.
+Add the following fields to the user model:
+Copy code
+
+disclaimerAccepted: boolean
+disclaimerAcceptedAt: timestamp
+disclaimerVersion: string
+Example record:
+Copy code
+
+{
+ userId: "abc123",
+ disclaimerAccepted: true,
+ disclaimerAcceptedAt: "2026-03-08T16:05:00Z",
+ disclaimerVersion: "v1.0"
+}
+4. Access Enforcement
+Before accessing the following routes:
+/file-upload
+/analysis-results
+/generated-tasks
+perform this check:
+Copy code
+
+if (!user.disclaimerAccepted) {
+ redirect('/disclaimer')
+}
+Users cannot bypass this check.
+5. Versioning
+Set a global variable:
+Copy code
+
+currentDisclaimerVersion = "v1.0"
+If the disclaimer changes later:
+Copy code
+
+if (user.disclaimerVersion !== currentDisclaimerVersion)
+force the user to accept again.
+6. Logging
+Record acceptance events for audit purposes:
+Copy code
+
+userId
+timestamp
+disclaimerVersion
+ipAddress (optional)
+7. Tests
+Add automated tests.
+Acceptance Flow
+Test that:
+new users must accept disclaimer before using File Upload
+acceptance stores the correct fields
+timestamp is recorded
+version is recorded
+Access Control
+Test that:
+users without acceptance cannot access analysis routes
+users with acceptance can access normally
+Versioning
+Test that:
+updating disclaimerVersion forces re-acceptance
+Regression
+Test that:
+existing home systems load correctly
+existing tasks still work
+navigation does not break
+file uploads still function after acceptance
+Definition of Done
+This feature is complete when:
+disclaimer appears before using analysis features
+user acceptance is recorded in backend
+access is blocked without acceptance
+versioning allows future updates
+tests pass
+existing HomeBuddy features remain functional

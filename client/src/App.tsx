@@ -27,6 +27,7 @@ import Profile from "@/pages/profile";
 import Documents from "@/pages/documents";
 import Systems from "@/pages/systems";
 import SystemDetail from "@/pages/system-detail";
+import Disclaimer from "@/pages/disclaimer";
 
 function PublicTermsPage() {
   return (
@@ -100,6 +101,7 @@ function Router() {
       <Route path="/onboarding" component={Onboarding} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/document-analysis" component={DocumentAnalysis} />
+      <Route path="/disclaimer" component={Disclaimer} />
 
       <Route path="/maintenance-log" component={MaintenanceLog} />
       <Route path="/systems/:id" component={SystemDetail} />

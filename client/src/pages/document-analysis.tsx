@@ -1,5 +1,6 @@
 import { Layout } from "@/components/layout";
 import { useState, useRef } from "react";
+import { useLocation } from "wouter";
 import {
   Upload,
   FileText,
@@ -32,6 +33,7 @@ import type {
 } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
+import { useDisclaimer } from "@/hooks/use-disclaimer";
 
 const urgencyColors: Record<string, string> = {
   now: "bg-red-100 text-red-800 border-red-200",
@@ -262,6 +264,8 @@ export default function DocumentAnalysis() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { disclaimerAccepted, isLoading: disclaimerLoading } = useDisclaimer();
+  const [, navigate] = useLocation();
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -450,6 +454,21 @@ export default function DocumentAnalysis() {
   );
 
   const noResults = analysisResult && !hasResults;
+
+  if (disclaimerLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!disclaimerAccepted) {
+    navigate("/disclaimer");
+    return null;
+  }
 
   return (
     <Layout>

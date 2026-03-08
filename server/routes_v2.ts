@@ -23,6 +23,7 @@ import {
   generateInstancePrefix,
   systemNameToPrefix,
 } from "./lib/attribute-namespace";
+import { CURRENT_DISCLAIMER_VERSION } from "./replit_integrations/auth/routes";
 
 export const v2Router = Router();
 
@@ -54,6 +55,22 @@ function getActor(req: Request): Actor {
 function getUserId(req: Request): string {
   const user = req.user as { id?: number | string } | undefined;
   return String(user?.id ?? "");
+}
+
+function requireDisclaimer(req: Request, res: Response): boolean {
+  const user = req.user as any;
+  if (
+    !user?.disclaimerAccepted ||
+    user?.disclaimerVersion !== CURRENT_DISCLAIMER_VERSION
+  ) {
+    res.status(403).json({
+      error: "Disclaimer acceptance required",
+      code: "DISCLAIMER_REQUIRED",
+      currentVersion: CURRENT_DISCLAIMER_VERSION,
+    });
+    return false;
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1932,6 +1949,7 @@ v2Router.post(
   fileUpload.array("files", 10),
   async (req: Request, res: Response) => {
     try {
+      if (!requireDisclaimer(req, res)) return;
       const actor = getActor(req);
       const userId = getUserId(req);
       const { homeId } = req.params;
@@ -2118,6 +2136,7 @@ v2Router.get("/homes/:homeId/suggestions", async (req: Request, res: Response) =
 
 v2Router.post("/suggestions/:suggestionId/approve", async (req: Request, res: Response) => {
   try {
+    if (!requireDisclaimer(req, res)) return;
     const actor = getActor(req);
     const userId = getUserId(req);
     const { suggestionId } = req.params;
@@ -2222,6 +2241,7 @@ v2Router.post("/suggestions/:suggestionId/approve", async (req: Request, res: Re
 
 v2Router.post("/suggestions/:suggestionId/decline", async (req: Request, res: Response) => {
   try {
+    if (!requireDisclaimer(req, res)) return;
     const actor = getActor(req);
     const userId = getUserId(req);
     const { suggestionId } = req.params;
@@ -2270,6 +2290,7 @@ v2Router.post("/suggestions/:suggestionId/decline", async (req: Request, res: Re
 // ---------------------------------------------------------------------------
 v2Router.post("/homes/:homeId/confirm-matched-tasks", async (req: Request, res: Response) => {
   try {
+    if (!requireDisclaimer(req, res)) return;
     const actor = getActor(req);
     const userId = getUserId(req);
     const { homeId } = req.params;

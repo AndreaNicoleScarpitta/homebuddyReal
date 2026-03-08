@@ -20,8 +20,20 @@ export const users = pgTable("users", {
   provider: varchar("provider"),
   providerId: varchar("provider_id"),
   dataStorageOptOut: boolean("data_storage_opt_out").default(false),
+  disclaimerAccepted: boolean("disclaimer_accepted").default(false),
+  disclaimerAcceptedAt: timestamp("disclaimer_accepted_at"),
+  disclaimerVersion: varchar("disclaimer_version"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const disclaimerAuditLog = pgTable("disclaimer_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  disclaimerVersion: varchar("disclaimer_version").notNull(),
+  action: varchar("action").notNull(),
+  ipAddress: varchar("ip_address"),
+  acceptedAt: timestamp("accepted_at").defaultNow(),
 });
 
 export type UpsertUser = typeof users.$inferInsert;

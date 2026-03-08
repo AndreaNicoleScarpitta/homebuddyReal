@@ -1,4 +1,4 @@
-import { users, type User, type UpsertUser } from "@shared/models/auth";
+import { users, disclaimerAuditLog, type User, type UpsertUser } from "@shared/models/auth";
 import { db } from "../../db";
 import { eq } from "drizzle-orm";
 
@@ -6,6 +6,7 @@ export interface IAuthStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   updateUserPrivacy(id: string, dataStorageOptOut: boolean): Promise<User>;
+  acceptDisclaimer(id: string, version: string, ipAddress?: string): Promise<User>;
 }
 
 class AuthStorage implements IAuthStorage {
@@ -40,6 +41,30 @@ class AuthStorage implements IAuthStorage {
       .set({ dataStorageOptOut, updatedAt: new Date() })
       .where(eq(users.id, id))
       .returning();
+    return updated;
+  }
+
+  async acceptDisclaimer(id: string, version: string, ipAddress?: string): Promise<User> {
+    const now = new Date();
+    const [updated] = await db
+      .update(users)
+      .set({
+        disclaimerAccepted: true,
+        disclaimerAcceptedAt: now,
+        disclaimerVersion: version,
+        updatedAt: now,
+      })
+      .where(eq(users.id, id))
+      .returning();
+
+    await db.insert(disclaimerAuditLog).values({
+      userId: id,
+      disclaimerVersion: version,
+      action: "accepted",
+      ipAddress: ipAddress || null,
+      acceptedAt: now,
+    });
+
     return updated;
   }
 }
