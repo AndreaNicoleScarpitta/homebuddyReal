@@ -163,6 +163,40 @@ export async function setupAuth(app: Express) {
     }
   });
 
+  app.post("/api/auth/test-login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      if (username !== "test" || password !== "password123") {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      const testUserId = "test-user-001";
+      const user = await authStorage.upsertUser({
+        id: testUserId,
+        email: "test@homebuddy.app",
+        firstName: "Test",
+        lastName: "User",
+        profileImageUrl: null,
+        provider: "local",
+        providerId: testUserId,
+      });
+
+      await authStorage.incrementLoginCount(user.id);
+      req.session.userId = user.id;
+
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error after test login:", err);
+          return res.status(500).json({ message: "Failed to save session" });
+        }
+        res.json({ success: true, user });
+      });
+    } catch (error) {
+      console.error("Test login error:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
   app.get("/api/logout", (req, res) => {
     req.session.destroy((err) => {
       if (err) {

@@ -42,8 +42,7 @@ export default function Landing() {
             <span className="text-xl font-heading font-bold">Home Buddy</span>
           </div>
           <a
-            href="/api/login"
-            target="_top"
+            href="/login"
             onClick={() => trackEvent('click', 'landing', 'sign_in_header')}
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground no-underline"
             data-testid="button-login"
@@ -83,8 +82,7 @@ export default function Landing() {
 
                 <div className="flex flex-col sm:flex-row gap-4">
                   <a
-                    href="/api/login"
-                    target="_top"
+                    href="/login"
                     onClick={() => trackEvent('click', 'landing', 'cta_hero')}
                     className="inline-flex items-center justify-center h-14 px-8 text-lg font-medium rounded-md bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 no-underline transition-all hover:shadow-primary/35 hover:shadow-xl"
                     data-testid="button-cta-hero"
@@ -354,8 +352,7 @@ export default function Landing() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <a
-                  href="/api/login"
-                  target="_top"
+                  href="/login"
                   onClick={() => trackEvent('click', 'landing', 'cta_bottom')}
                   className="inline-flex items-center justify-center h-14 px-10 text-lg font-medium rounded-md bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 no-underline transition-all hover:shadow-primary/35 hover:shadow-xl"
                   data-testid="button-cta-bottom"
