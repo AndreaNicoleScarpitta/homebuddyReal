@@ -17,6 +17,12 @@ import { applyEvent } from "./projections/applyEvent";
 import { EventTypes, type Actor } from "./eventing/types";
 import { validateTransition, TransitionError } from "./domain/stateMachine";
 import { isAuthenticated } from "./replit_integrations/auth";
+import {
+  resolveNamespacePrefix,
+  namespaceTaskAttributes,
+  generateInstancePrefix,
+  systemNameToPrefix,
+} from "./lib/attribute-namespace";
 
 export const v2Router = Router();
 
@@ -674,6 +680,8 @@ v2Router.get("/homes/:homeId/tasks", async (req: Request, res: Response) => {
         createdFrom: eventMeta.createdFrom ?? "manual",
         isRecurring: eventMeta.isRecurring ?? false,
         recurrenceCadence: eventMeta.recurrenceCadence ?? null,
+        namespacePrefix: eventMeta.namespacePrefix ?? null,
+        namespacedAttributes: eventMeta.namespacedAttributes ?? null,
       };
     });
 
@@ -692,6 +700,41 @@ v2Router.post("/tasks", async (req: Request, res: Response) => {
       res.status(403).json({ error: "Access denied" });
       return;
     }
+
+    let nsPrefix = req.body.namespacePrefix || null;
+    if (!nsPrefix) {
+      const systemId = req.body.systemId || req.body.relatedSystemId;
+      if (systemId) {
+        const sysResult = await db.execute(
+          sql`SELECT category, name, system_id FROM projection_system WHERE system_id = ${systemId} LIMIT 1`
+        );
+        if (sysResult.rows.length > 0) {
+          const sys = sysResult.rows[0] as { category: string; name: string; system_id: string };
+          nsPrefix = generateInstancePrefix(sys.category || "other", sys.name, sys.system_id);
+        }
+      }
+      if (!nsPrefix && req.body.category) {
+        nsPrefix = systemNameToPrefix(req.body.category);
+      }
+      if (!nsPrefix) {
+        nsPrefix = "unknown_system";
+      }
+    }
+
+    let nsAttrs = req.body.namespacedAttributes || null;
+    if (!nsAttrs && nsPrefix !== "unknown_system") {
+      const attrFields: Record<string, string | null | undefined> = {
+        urgency: req.body.urgency || req.body.estimates?.urgency,
+        diy_level: req.body.diyLevel || req.body.estimates?.diyLevel,
+        estimated_cost: req.body.estimatedCost || req.body.estimates?.estimatedCost,
+        description: req.body.description || req.body.estimates?.description,
+        safety_warning: req.body.safetyWarning || req.body.estimates?.safetyWarning,
+      };
+      nsAttrs = namespaceTaskAttributes(attrFields, nsPrefix);
+    }
+
+    const taskData = { ...req.body, namespacePrefix: nsPrefix, namespacedAttributes: nsAttrs };
+
     const taskId = crypto.randomUUID();
     const result = await db.transaction(async (tx) =>
       appendAndApply(tx, {
@@ -699,13 +742,13 @@ v2Router.post("/tasks", async (req: Request, res: Response) => {
         aggregateId: taskId,
         expectedVersion: 0,
         eventType: EventTypes.TaskCreated,
-        data: req.body,
+        data: taskData,
         meta: {},
         actor,
         idempotencyKey: req.idempotencyKey!,
       }),
     );
-    res.status(201).json({ id: taskId, taskId, ...result });
+    res.status(201).json({ id: taskId, taskId, namespacePrefix: nsPrefix, ...result });
   } catch (err) {
     handleError(res, err);
   }
@@ -713,10 +756,25 @@ v2Router.post("/tasks", async (req: Request, res: Response) => {
 
 v2Router.post("/tasks/analyze", async (req: Request, res: Response) => {
   try {
-    const { title, category } = req.body;
+    const { title, category, systemId, systemName: sysName } = req.body;
     if (!title || typeof title !== "string" || title.trim().length < 3) {
       res.status(400).json({ error: "Task title is required (min 3 characters)" });
       return;
+    }
+
+    let nsPrefix = "unknown_system";
+    if (systemId) {
+      const sysResult = await db.execute(
+        sql`SELECT category, name, system_id FROM projection_system WHERE system_id = ${systemId} LIMIT 1`
+      );
+      if (sysResult.rows.length > 0) {
+        const sys = sysResult.rows[0] as { category: string; name: string; system_id: string };
+        nsPrefix = generateInstancePrefix(sys.category || "other", sys.name, sys.system_id);
+      }
+    } else if (sysName && category) {
+      nsPrefix = generateInstancePrefix(category, sysName);
+    } else if (category) {
+      nsPrefix = systemNameToPrefix(category);
     }
 
     const OpenAI = (await import("openai")).default;
@@ -727,14 +785,24 @@ v2Router.post("/tasks/analyze", async (req: Request, res: Response) => {
 
     const prompt = `You are a home maintenance expert. A homeowner wants to add this task: "${title.trim()}"${category ? ` (category: ${category})` : ""}.
 
-Analyze this task and return a JSON object with:
-- "urgency": one of "now", "soon", "later", "monitor" — based on typical safety/damage risk if delayed
-- "diyLevel": one of "DIY-Safe", "Caution", "Pro-Only" — based on skill/licensing/safety requirements
-- "estimatedCost": a realistic cost range string like "$0-25", "$50-150", "$200-500" — include both DIY and pro costs if applicable
-- "description": 1-2 sentence explanation of this task and why it matters
-- "safetyWarning": a brief safety note if relevant, or null if the task is straightforward
+Analyze this task and return a JSON object with SYSTEM-SCOPED attribute keys.
+The namespace prefix for this task is: "${nsPrefix}"
 
-Be practical and realistic. Most routine cleaning/filter tasks are DIY-Safe with low urgency. Electrical, gas, structural, and roofing work is typically Pro-Only. Consider permits, licensing requirements, and physical danger.
+All attribute keys in your response MUST be prefixed with "${nsPrefix}_". For example:
+- "${nsPrefix}_urgency": one of "now", "soon", "later", "monitor"
+- "${nsPrefix}_diy_level": one of "DIY-Safe", "Caution", "Pro-Only"
+- "${nsPrefix}_estimated_cost": a realistic cost range string like "$0-25", "$50-150", "$200-500"
+- "${nsPrefix}_description": 1-2 sentence explanation of this task
+- "${nsPrefix}_safety_warning": a brief safety note if relevant, or null
+
+Also include these standard (unprefixed) fields for backward compatibility:
+- "urgency": same value as ${nsPrefix}_urgency
+- "diyLevel": same value as ${nsPrefix}_diy_level
+- "estimatedCost": same value as ${nsPrefix}_estimated_cost
+- "description": same value as ${nsPrefix}_description
+- "safetyWarning": same value as ${nsPrefix}_safety_warning
+
+Be practical and realistic. Most routine cleaning/filter tasks are DIY-Safe with low urgency. Electrical, gas, structural, and roofing work is typically Pro-Only.
 
 Return ONLY a valid JSON object, no markdown or explanation.`;
 
@@ -742,7 +810,7 @@ Return ONLY a valid JSON object, no markdown or explanation.`;
       model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.2,
-      max_tokens: 400,
+      max_tokens: 600,
     });
 
     const content = completion.choices[0]?.message?.content || "{}";
@@ -752,12 +820,25 @@ Return ONLY a valid JSON object, no markdown or explanation.`;
     const validUrgencies = ["now", "soon", "later", "monitor"];
     const validDiy = ["DIY-Safe", "Caution", "Pro-Only"];
 
+    const urgency = validUrgencies.includes(parsed.urgency) ? parsed.urgency : "later";
+    const diyLevel = validDiy.includes(parsed.diyLevel) ? parsed.diyLevel : "Caution";
+    const estimatedCost = parsed.estimatedCost || "TBD";
+    const description = parsed.description || "";
+    const safetyWarning = parsed.safetyWarning || null;
+
+    const namespacedAttrs = namespaceTaskAttributes(
+      { urgency, diy_level: diyLevel, estimated_cost: estimatedCost, description, safety_warning: safetyWarning || "" },
+      nsPrefix
+    );
+
     res.json({
-      urgency: validUrgencies.includes(parsed.urgency) ? parsed.urgency : "later",
-      diyLevel: validDiy.includes(parsed.diyLevel) ? parsed.diyLevel : "Caution",
-      estimatedCost: parsed.estimatedCost || "TBD",
-      description: parsed.description || "",
-      safetyWarning: parsed.safetyWarning || null,
+      urgency,
+      diyLevel,
+      estimatedCost,
+      description,
+      safetyWarning,
+      namespacePrefix: nsPrefix,
+      namespacedAttributes: namespacedAttrs,
     });
   } catch (err) {
     console.error("AI task analysis error:", err);
@@ -767,11 +848,17 @@ Return ONLY a valid JSON object, no markdown or explanation.`;
 
 v2Router.post("/systems/suggest-tasks", async (req: Request, res: Response) => {
   try {
-    const { systemName, systemCategory, notes } = req.body;
+    const { systemName, systemCategory, systemId, notes } = req.body;
     if (!systemName) {
       res.status(400).json({ error: "systemName is required" });
       return;
     }
+
+    const nsPrefix = generateInstancePrefix(
+      systemCategory || "other",
+      systemName,
+      systemId
+    );
 
     const OpenAI = (await import("openai")).default;
     const openai = new OpenAI({
@@ -806,7 +893,22 @@ Return ONLY a valid JSON array, no markdown or explanation.`;
     const cleaned = content.replace(/```json\n?|\n?```/g, "").trim();
     const tasks = JSON.parse(cleaned);
 
-    res.json({ tasks });
+    const namespacedTasks = tasks.map((t: Record<string, unknown>) => ({
+      ...t,
+      namespacePrefix: nsPrefix,
+      namespacedAttributes: namespaceTaskAttributes(
+        {
+          urgency: String(t.urgency || "later"),
+          diy_level: String(t.diyLevel || "Caution"),
+          estimated_cost: String(t.estimatedCost || "TBD"),
+          description: String(t.description || ""),
+          safety_warning: String(t.safetyWarning || ""),
+        },
+        nsPrefix
+      ),
+    }));
+
+    res.json({ tasks: namespacedTasks, namespacePrefix: nsPrefix });
   } catch (err) {
     console.error("AI task suggestion error:", err);
     res.status(500).json({ error: "Failed to generate task suggestions" });

@@ -102,6 +102,8 @@ export interface V2Task {
   isRecurring?: boolean;
   recurrenceCadence?: string | null;
   completedAt?: string | null;
+  namespacePrefix?: string | null;
+  namespacedAttributes?: Record<string, string> | null;
 }
 
 export interface V2Report {
@@ -294,27 +296,39 @@ export interface TaskAnalysis {
   estimatedCost: string;
   description: string;
   safetyWarning: string | null;
+  namespacePrefix?: string;
+  namespacedAttributes?: Record<string, string>;
 }
 
-/**
- * Calls GPT-4o to analyze a task title and return urgency, DIY level,
- * cost estimate, description, and safety warnings.
- * Debounced in the UI to avoid excessive calls while typing.
- */
-export async function analyzeTask(title: string, category?: string): Promise<TaskAnalysis> {
+export async function analyzeTask(
+  title: string,
+  category?: string,
+  systemId?: string,
+  systemName?: string
+): Promise<TaskAnalysis> {
   const response = await fetch("/v2/tasks/analyze", {
     method: "POST",
     headers: v2Headers(),
-    body: JSON.stringify({ title, category: category || undefined }),
+    body: JSON.stringify({
+      title,
+      category: category || undefined,
+      systemId: systemId || undefined,
+      systemName: systemName || undefined,
+    }),
   });
   return handleResponse<TaskAnalysis>(response);
 }
 
-export async function suggestMaintenanceTasks(systemName: string, systemCategory: string, notes?: string): Promise<SuggestedTask[]> {
+export async function suggestMaintenanceTasks(
+  systemName: string,
+  systemCategory: string,
+  notes?: string,
+  systemId?: string
+): Promise<SuggestedTask[]> {
   const response = await fetch(`/v2/systems/suggest-tasks`, {
     method: "POST",
     headers: v2Headers(),
-    body: JSON.stringify({ systemName, systemCategory, notes }),
+    body: JSON.stringify({ systemName, systemCategory, notes, systemId }),
   });
   const data = await handleResponse<{ tasks: SuggestedTask[] }>(response);
   return data.tasks;

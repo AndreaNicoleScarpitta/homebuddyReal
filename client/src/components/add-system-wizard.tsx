@@ -305,7 +305,7 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [] 
       if (templates && templates.length > 0) {
         setSuggestedTasks(templates.map(t => ({ ...t, approved: true })));
       } else {
-        const aiTasks = await suggestMaintenanceTasks(name, category, notes);
+        const aiTasks = await suggestMaintenanceTasks(name, category, notes, createdSystemId || undefined);
         setSuggestedTasks(aiTasks.map(t => ({ ...t, approved: true })));
       }
     } catch (error) {
@@ -372,6 +372,7 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [] 
             createdFrom: "maintenance-schedule",
             isRecurring: enableRecurring,
             recurrenceCadence: enableRecurring ? t.cadence : null,
+            namespacePrefix: (t as any).namespacePrefix || undefined,
           },
         };
       });

@@ -8,8 +8,15 @@ import {
   prefixAttribute,
   validateAttributeNamespace,
   enforceAttributeNamespaces,
-  type ExtractedIssue,
 } from "../server/lib/document-analysis";
+import {
+  generateInstancePrefix,
+  namespaceTaskAttributes,
+  denamespaceTaskAttributes,
+  validateInstanceNamespace,
+  resolveNamespacePrefix,
+  type ExtractedIssue,
+} from "../server/lib/attribute-namespace";
 
 vi.mock("openai", () => {
   const create = vi.fn();
@@ -446,6 +453,148 @@ describe("Document Analysis", () => {
 
       expect(tasks[1].attributes).toHaveProperty("siding_material");
       expect(tasks[1].attributes).not.toHaveProperty("roof_material");
+    });
+  });
+
+  describe("generateInstancePrefix — instance-level uniqueness", () => {
+    it("should create unique prefixes for two HVAC systems with different names", () => {
+      const prefix1 = generateInstancePrefix("HVAC", "Main Floor AC");
+      const prefix2 = generateInstancePrefix("HVAC", "Upstairs Heat Pump");
+
+      expect(prefix1).not.toBe(prefix2);
+      expect(prefix1).toBe("hvac_main_floor_ac");
+      expect(prefix2).toBe("hvac_upstairs_heat_pump");
+    });
+
+    it("should create unique prefixes for two Plumbing systems", () => {
+      const prefix1 = generateInstancePrefix("Plumbing", "Main Bathroom");
+      const prefix2 = generateInstancePrefix("Plumbing", "Kitchen");
+
+      expect(prefix1).not.toBe(prefix2);
+      expect(prefix1).toBe("plumbing_main_bathroom");
+      expect(prefix2).toBe("plumbing_kitchen");
+    });
+
+    it("should fall back to category + ID when name matches category", () => {
+      const prefix = generateInstancePrefix("HVAC", "HVAC", "abc12345");
+      expect(prefix).toContain("hvac_");
+      expect(prefix).toContain("abc12345");
+    });
+
+    it("should return just the category prefix when no unique name and no ID", () => {
+      const prefix = generateInstancePrefix("Roof", "Roof");
+      expect(prefix).toBe("roof");
+    });
+  });
+
+  describe("namespaceTaskAttributes / denamespaceTaskAttributes round-trip", () => {
+    it("should namespace standard task attributes with a prefix", () => {
+      const attrs = {
+        urgency: "soon",
+        diy_level: "Pro-Only",
+        estimated_cost: "$200-$500",
+        description: "Fix the compressor",
+      };
+      const nsPrefix = "hvac_main_floor_ac";
+      const namespaced = namespaceTaskAttributes(attrs, nsPrefix);
+
+      expect(namespaced["hvac_main_floor_ac_urgency"]).toBe("soon");
+      expect(namespaced["hvac_main_floor_ac_diy_level"]).toBe("Pro-Only");
+      expect(namespaced["hvac_main_floor_ac_estimated_cost"]).toBe("$200-$500");
+      expect(namespaced["hvac_main_floor_ac_description"]).toBe("Fix the compressor");
+      expect(namespaced).not.toHaveProperty("urgency");
+    });
+
+    it("should skip null/undefined values", () => {
+      const attrs = { urgency: "soon", safety_warning: null as any };
+      const namespaced = namespaceTaskAttributes(attrs, "roof");
+      expect(namespaced).toHaveProperty("roof_urgency");
+      expect(namespaced).not.toHaveProperty("roof_safety_warning");
+    });
+
+    it("should round-trip: denamespace reverses namespace", () => {
+      const original = {
+        urgency: "now",
+        diy_level: "Caution",
+        estimated_cost: "$100",
+        description: "Check the circuit breaker",
+      };
+      const prefix = "electrical_main_panel";
+      const namespaced = namespaceTaskAttributes(original, prefix);
+      const restored = denamespaceTaskAttributes(namespaced, prefix);
+
+      expect(restored.urgency).toBe("now");
+      expect(restored.diy_level).toBe("Caution");
+      expect(restored.estimated_cost).toBe("$100");
+      expect(restored.description).toBe("Check the circuit breaker");
+    });
+  });
+
+  describe("validateInstanceNamespace — cross-instance isolation", () => {
+    it("hvac_main_floor_ac attributes do NOT bleed to hvac_upstairs_heat_pump", () => {
+      const attrs = {
+        hvac_main_floor_ac_urgency: "soon",
+        hvac_main_floor_ac_condition: "failing",
+      };
+      const { valid, violations } = validateInstanceNamespace(
+        attrs,
+        "hvac_upstairs_heat_pump",
+        "hvac"
+      );
+      expect(valid).not.toHaveProperty("hvac_main_floor_ac_urgency");
+      expect(valid).not.toHaveProperty("hvac_main_floor_ac_condition");
+      expect(Object.keys(valid)).toHaveLength(0);
+    });
+
+    it("category-prefixed attributes are upgraded to instance prefix", () => {
+      const attrs = {
+        hvac_condition: "good",
+        hvac_filter_size: "16x25",
+      };
+      const { valid, violations } = validateInstanceNamespace(
+        attrs,
+        "hvac_main_floor_ac",
+        "hvac"
+      );
+      expect(valid["hvac_main_floor_ac_condition"]).toBe("good");
+      expect(valid["hvac_main_floor_ac_filter_size"]).toBe("16x25");
+    });
+
+    it("cross-system attributes are rejected at instance level too", () => {
+      const attrs = {
+        roof_material: "asphalt",
+        hvac_main_floor_ac_condition: "good",
+      };
+      const { valid, violations } = validateInstanceNamespace(
+        attrs,
+        "hvac_main_floor_ac",
+        "hvac"
+      );
+      expect(valid).not.toHaveProperty("roof_material");
+      expect(valid["hvac_main_floor_ac_condition"]).toBe("good");
+      expect(violations.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("resolveNamespacePrefix", () => {
+    it("should use system category + name when available", () => {
+      const prefix = resolveNamespacePrefix({ category: "HVAC", name: "Main AC", id: "123" });
+      expect(prefix).toBe("hvac_main_ac");
+    });
+
+    it("should fall back to category-only when no system name", () => {
+      const prefix = resolveNamespacePrefix({ category: "Roof", name: null, id: null });
+      expect(prefix).toBe("roof");
+    });
+
+    it("should fall back to standalone category string", () => {
+      const prefix = resolveNamespacePrefix(null, "Plumbing");
+      expect(prefix).toBe("plumbing");
+    });
+
+    it("should return unknown_system when nothing provided", () => {
+      const prefix = resolveNamespacePrefix(null);
+      expect(prefix).toBe("unknown_system");
     });
   });
 

@@ -66,6 +66,23 @@ export function MaintenanceCard({ task, onComplete }: TaskProps) {
                   {task.category}
                 </Badge>
               )}
+              {task.namespacePrefix && task.namespacePrefix !== "unknown_system" && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className="text-xs font-mono bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                      data-testid={`badge-namespace-${task.id}`}
+                    >
+                      {task.namespacePrefix.replace(/_/g, " ")}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p>System namespace: <code className="text-xs">{task.namespacePrefix}</code></p>
+                    <p className="text-muted-foreground mt-1">Attributes for this task are scoped to this system instance.</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge className={`text-xs border ${getDiyBadgeColor(task.diyLevel)} shadow-none cursor-help`}>

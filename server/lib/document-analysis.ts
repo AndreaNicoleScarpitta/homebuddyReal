@@ -2,90 +2,29 @@ import OpenAI from "openai";
 import { storage } from "../storage";
 import { logInfo, logError } from "./logger";
 import { z } from "zod";
+import {
+  KNOWN_SYSTEMS,
+  systemNameToPrefix,
+  prefixAttribute,
+  validateAttributeNamespace,
+  enforceAttributeNamespaces,
+  type KnownSystem,
+  type ExtractedIssue,
+} from "./attribute-namespace";
+
+export {
+  KNOWN_SYSTEMS,
+  systemNameToPrefix,
+  prefixAttribute,
+  validateAttributeNamespace,
+  enforceAttributeNamespaces,
+  type KnownSystem,
+};
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
-
-const KNOWN_SYSTEMS = [
-  "roof",
-  "hvac",
-  "plumbing",
-  "electrical",
-  "windows",
-  "siding",
-  "foundation",
-  "appliances",
-  "water_heater",
-  "landscaping",
-  "pest",
-  "other",
-] as const;
-
-export type KnownSystem = typeof KNOWN_SYSTEMS[number];
-
-export function systemNameToPrefix(systemName: string): string {
-  const normalized = systemName
-    .toLowerCase()
-    .replace(/\//g, "_")
-    .replace(/[^a-z0-9_]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "");
-
-  if (normalized === "siding_exterior" || normalized === "siding") return "siding";
-  if (normalized === "water_heater") return "water_heater";
-
-  const matched = KNOWN_SYSTEMS.find((s) => s === normalized);
-  return matched || normalized || "unknown_system";
-}
-
-export function prefixAttribute(systemPrefix: string, attributeName: string): string {
-  const cleanAttr = attributeName
-    .toLowerCase()
-    .replace(/[^a-z0-9_]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "");
-
-  if (cleanAttr.startsWith(systemPrefix + "_")) {
-    return cleanAttr;
-  }
-
-  return `${systemPrefix}_${cleanAttr}`;
-}
-
-export function validateAttributeNamespace(
-  attributes: Record<string, string>,
-  systemPrefix: string
-): { valid: Record<string, string>; violations: string[] } {
-  const valid: Record<string, string> = {};
-  const violations: string[] = [];
-
-  for (const [key, value] of Object.entries(attributes)) {
-    const normalizedKey = key
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_|_$/g, "");
-
-    if (normalizedKey.startsWith(systemPrefix + "_")) {
-      valid[normalizedKey] = value;
-    } else {
-      const otherSystem = KNOWN_SYSTEMS.find(
-        (s) => s !== systemPrefix && normalizedKey.startsWith(s + "_")
-      );
-      if (otherSystem) {
-        violations.push(
-          `Attribute "${normalizedKey}" belongs to system "${otherSystem}", not "${systemPrefix}"`
-        );
-      } else {
-        valid[prefixAttribute(systemPrefix, normalizedKey)] = value;
-      }
-    }
-  }
-
-  return { valid, violations };
-}
 
 export const extractedIssueSchema = z.object({
   title: z.string().min(1),
@@ -103,7 +42,6 @@ export const documentAnalysisResponseSchema = z.object({
   issues: z.array(extractedIssueSchema),
 });
 
-export type ExtractedIssue = z.infer<typeof extractedIssueSchema>;
 export type DocumentAnalysisResponse = z.infer<typeof documentAnalysisResponseSchema>;
 
 const DOCUMENT_ANALYSIS_PROMPT = `You are a home maintenance expert analyzing a document for potential home issues and recommended maintenance tasks.
@@ -172,32 +110,6 @@ export async function extractTextFromDocument(buffer: Buffer, mimeType: string):
   }
 
   throw new Error(`Unsupported file type: ${mimeType}. Supported types: PDF, TXT, CSV, Markdown.`);
-}
-
-export function enforceAttributeNamespaces(issues: ExtractedIssue[]): ExtractedIssue[] {
-  return issues.map((issue) => {
-    const systemPrefix = systemNameToPrefix(issue.systemName || "unknown_system");
-    const normalizedSystemName = systemPrefix;
-
-    if (!issue.attributes || Object.keys(issue.attributes).length === 0) {
-      return { ...issue, systemName: normalizedSystemName };
-    }
-
-    const { valid, violations } = validateAttributeNamespace(issue.attributes, systemPrefix);
-
-    if (violations.length > 0) {
-      logInfo("document-analysis.namespace", "Dropped cross-system attributes", {
-        systemName: normalizedSystemName,
-        violations,
-      });
-    }
-
-    return {
-      ...issue,
-      systemName: normalizedSystemName,
-      attributes: valid,
-    };
-  });
 }
 
 export async function analyzeDocumentWithLLM(

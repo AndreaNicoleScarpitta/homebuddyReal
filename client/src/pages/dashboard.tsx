@@ -118,16 +118,21 @@ function QuickAddTaskDialog({ isOpen, onClose, homeId }: { isOpen: boolean; onCl
   const createMutation = useMutation({
     mutationFn: () => {
       const useManual = analysisFailed || !analysis;
-      return createTask(homeId, {
+      const taskData: Record<string, unknown> = {
         title: title.trim(),
-        urgency: (useManual ? manualUrgency : analysis?.urgency || "later") as any,
+        urgency: useManual ? manualUrgency : analysis?.urgency || "later",
         category: category || undefined,
-        diyLevel: (useManual ? manualDiy : (diyOverride || analysis?.diyLevel || "Caution")) as any,
+        diyLevel: useManual ? manualDiy : (diyOverride || analysis?.diyLevel || "Caution"),
         estimatedCost: useManual ? (manualCost || undefined) : (analysis?.estimatedCost || undefined),
         description: analysis?.description || undefined,
         safetyWarning: analysis?.safetyWarning || undefined,
+        namespacePrefix: analysis?.namespacePrefix || undefined,
         status: "pending",
-      });
+      };
+      if (analysis?.namespacedAttributes) {
+        taskData.namespacedAttributes = analysis.namespacedAttributes;
+      }
+      return createTask(homeId, taskData as any);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
