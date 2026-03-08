@@ -28,7 +28,7 @@ const REASONING_PATTERNS: ReasoningPattern[] = [
     inferenceReason: "Equipment described as near end of life — replacement planning recommended",
   },
   {
-    pattern: /monitor\s+for\s+(further\s+)?(movement|crack|leak|damage|deterioration|settling)/i,
+    pattern: /monitor\s+(for\s+)?(further\s+)?(movement|crack|leak|damage|deterioration|settling)|recommend\s+monitor\b/i,
     taskTitle: (match, cat) => `Monitor ${cat} — recurring inspection`,
     taskDescription: (_, cat) => `Ongoing monitoring recommended for ${cat} system. Set up recurring check to track any progression.`,
     category: "Inspection",
@@ -37,7 +37,7 @@ const REASONING_PATTERNS: ReasoningPattern[] = [
     inferenceReason: "Document recommends monitoring — converted to recurring inspection task",
   },
   {
-    pattern: /recommend\s+(a\s+)?(licensed|certified|professional|qualified)\s+(electrician|plumber|contractor|technician|specialist|engineer)\s+(evaluation|inspection|assessment|review)/i,
+    pattern: /recommend\s+(a\s+)?(licensed|certified|professional|qualified)\s+(electrician|plumber|contractor|technician|specialist|engineer)\s+(evaluation|inspection|assessment|review)|(recommend\s+)?(repair|evaluat|re.?evaluat)\w*\s+by\s+(a\s+)?(licensed|certified|professional|qualified)\s+(electrician|plumber|contractor|technician|specialist|engineer)/i,
     taskTitle: (match, cat) => `Schedule professional ${cat} evaluation`,
     taskDescription: (match, cat) => `A licensed professional evaluation was recommended for the ${cat} system. Schedule an inspection with a qualified contractor.`,
     category: "Inspection",
@@ -82,13 +82,13 @@ const REASONING_PATTERNS: ReasoningPattern[] = [
     inferenceReason: "Periodic inspection recommended in document",
   },
   {
-    pattern: /water\s+(stain|damage|intrusion|leak|seepage|penetration)/i,
+    pattern: /(water|moisture)\s+(stain|damage|intrusion|leak|seepage|penetration)/i,
     taskTitle: (_, cat) => `Investigate water issue in ${cat}`,
     taskDescription: (_, cat) => `Evidence of water intrusion or damage detected in ${cat} system. Investigate source and extent of water issue.`,
     category: "Repair",
     priority: "soon",
     diyLevel: "Caution",
-    inferenceReason: "Water intrusion evidence detected — investigation recommended",
+    inferenceReason: "Water/moisture intrusion evidence detected — investigation recommended",
   },
 ];
 
