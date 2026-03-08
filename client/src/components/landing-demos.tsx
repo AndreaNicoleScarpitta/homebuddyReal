@@ -62,7 +62,7 @@ function DashboardDemo() {
               animate={{
                 opacity: isChecked ? 0.4 : 1,
                 scale: isChecking ? 1.02 : 1,
-                backgroundColor: isChecking ? "rgba(249,115,22,0.06)" : "rgba(0,0,0,0)",
+                backgroundColor: isChecking ? "rgba(249,115,22,0.06)" : "rgba(0,0,0,0.0001)",
               }}
               transition={{ duration: 0.3 }}
               className="flex items-center gap-3 p-2.5 rounded-lg border border-border/30"
@@ -261,7 +261,7 @@ function DocumentAnalysisDemo() {
         <motion.div
           animate={{
             borderColor: phase === "uploading" ? "rgba(249,115,22,0.5)" : "rgba(0,0,0,0.1)",
-            backgroundColor: phase === "uploading" ? "rgba(249,115,22,0.03)" : "transparent",
+            backgroundColor: phase === "uploading" ? "rgba(249,115,22,0.03)" : "rgba(0,0,0,0.0001)",
           }}
           className="border-2 border-dashed rounded-lg p-3 flex items-center gap-3"
         >
