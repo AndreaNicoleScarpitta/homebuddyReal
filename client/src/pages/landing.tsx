@@ -269,7 +269,10 @@ export default function Landing() {
                     <MessageSquare className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <h3 className="font-heading font-bold text-foreground text-lg" data-testid="text-feature-assistant">AI Assistant</h3>
+                    <h3 className="font-heading font-bold text-foreground text-lg" data-testid="text-feature-assistant">
+                      AI Assistant
+                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary align-middle">Coming Soon</span>
+                    </h3>
                     <p className="text-sm text-muted-foreground">Ask anything. Get real answers with cost estimates, safety guidance, and step-by-step instructions.</p>
                   </div>
                 </div>
