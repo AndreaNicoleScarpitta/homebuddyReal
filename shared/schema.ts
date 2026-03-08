@@ -57,6 +57,7 @@ export const systemCategories = [
   "Windows",
   "Siding/Exterior",
   "Foundation",
+  "Chimney",
   "Appliances",
   "Water Heater",
   "Landscaping",

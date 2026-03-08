@@ -30,6 +30,7 @@ import {
   FileText,
   FolderOpen,
   ClipboardList,
+  Landmark,
 } from "lucide-react";
 import { Link, useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -49,11 +50,27 @@ const categoryIcons: Record<string, any> = {
   "Windows": Square,
   "Siding/Exterior": Layers,
   "Foundation": Building,
+  "Chimney": Landmark,
   "Appliances": CookingPot,
   "Water Heater": Flame,
   "Landscaping": Trees,
   "Pest": Bug,
   "Other": HelpCircle,
+};
+
+const notesPlaceholders: Record<string, string> = {
+  "Roof": "e.g., GAF Timberline HDZ in Charcoal, 30-year warranty, installed by ABC Roofing...",
+  "HVAC": "e.g., Serial #XYZ123, 10-year parts warranty with Carrier, last serviced 6/2024...",
+  "Plumbing": "e.g., Copper pipes throughout, PEX in the addition, main shutoff in garage...",
+  "Electrical": "e.g., 200-amp panel, Siemens breakers, whole-home surge protector installed...",
+  "Windows": "e.g., Andersen 400 Series, double-hung, Low-E glass, lifetime warranty...",
+  "Siding/Exterior": "e.g., James Hardie HardiePlank in Arctic White, 30-year warranty...",
+  "Foundation": "e.g., Poured concrete, sealed in 2020, French drain on east side...",
+  "Chimney": "e.g., Clay flue liner, stainless steel cap, last swept 10/2024, no cracks found...",
+  "Appliances": "e.g., Serial #ABC456, purchased from Home Depot, extended warranty until 2027...",
+  "Water Heater": "e.g., 50-gallon tank, Serial #WH789, anode rod replaced 2023...",
+  "Landscaping": "e.g., Rain Bird irrigation, 6 zones, winterized each November...",
+  "Pest": "e.g., Contract #12345, quarterly treatments, termite bond renewal date 3/2026...",
 };
 
 const taskStatusColors: Record<string, string> = {
@@ -548,8 +565,8 @@ export default function SystemDetail() {
               <Textarea
                 value={editNotes}
                 onChange={(e) => setEditNotes(e.target.value)}
-                placeholder="Add notes about this system (serial number, warranty info, service history, etc.)"
-                rows={4}
+                placeholder={notesPlaceholders[system.category] || "Add notes about this system (serial number, warranty info, service history, etc.)"}
+                rows={5}
                 data-testid="textarea-notes"
               />
             ) : (

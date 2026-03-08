@@ -25,6 +25,7 @@ import {
   ArrowUpDown,
   ChevronRight,
   Package,
+  Landmark,
 } from "lucide-react";
 import {
   Select,
@@ -49,6 +50,7 @@ const categoryIcons: Record<string, any> = {
   Windows: Square,
   "Siding/Exterior": Layers,
   Foundation: Building,
+  Chimney: Landmark,
   Appliances: CookingPot,
   "Water Heater": Flame,
   Landscaping: Trees,

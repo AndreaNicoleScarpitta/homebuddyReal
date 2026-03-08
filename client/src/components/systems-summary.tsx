@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, Plus, Home, Wind, Droplets, Zap, Square, Layers, Building, CookingPot, Flame, Trees, Bug, HelpCircle } from "lucide-react";
+import { ArrowRight, Plus, Home, Wind, Droplets, Zap, Square, Layers, Building, CookingPot, Flame, Trees, Bug, HelpCircle, Landmark } from "lucide-react";
 import { useLocation } from "wouter";
 import { trackEvent } from "@/lib/analytics";
 import { systemCategories } from "@shared/schema";
@@ -15,6 +15,7 @@ const categoryIcons: Record<string, any> = {
   "Windows": Square,
   "Siding/Exterior": Layers,
   "Foundation": Building,
+  "Chimney": Landmark,
   "Appliances": CookingPot,
   "Water Heater": Flame,
   "Landscaping": Trees,

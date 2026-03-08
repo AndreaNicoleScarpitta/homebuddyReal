@@ -33,7 +33,8 @@ import {
   AlertTriangle,
   X,
   ListChecks,
-  RefreshCw
+  RefreshCw,
+  Landmark
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createSystem, identifySystemFromImage, createTasksBatch, suggestMaintenanceTasks } from "@/lib/api";
@@ -59,6 +60,7 @@ const categoryIcons: Record<string, any> = {
   "Windows": Square,
   "Siding/Exterior": Layers,
   "Foundation": Building,
+  "Chimney": Landmark,
   "Appliances": CookingPot,
   "Water Heater": Flame,
   "Landscaping": Trees,
@@ -74,11 +76,42 @@ const categoryHints: Record<string, string> = {
   "Windows": "Check labels on window frames for brand/year",
   "Siding/Exterior": "Walk the exterior to assess condition",
   "Foundation": "Basement, crawl space, or exterior base",
+  "Chimney": "Fireplace, rooftop, or exterior chimney stack",
   "Appliances": "Kitchen, laundry room - check labels",
   "Water Heater": "Garage or utility room",
   "Landscaping": "Irrigation systems, outdoor lighting",
   "Pest": "Recent pest treatments or contracts",
   "Other": "Any other home system you want to track",
+};
+
+const notesPlaceholders: Record<string, string> = {
+  "Roof": "e.g., GAF Timberline HDZ in Charcoal, 30-year warranty, installed by ABC Roofing...",
+  "HVAC": "e.g., Serial #XYZ123, 10-year parts warranty with Carrier, last serviced 6/2024...",
+  "Plumbing": "e.g., Copper pipes throughout, PEX in the addition, main shutoff in garage...",
+  "Electrical": "e.g., 200-amp panel, Siemens breakers, whole-home surge protector installed...",
+  "Windows": "e.g., Andersen 400 Series, double-hung, Low-E glass, lifetime warranty...",
+  "Siding/Exterior": "e.g., James Hardie HardiePlank in Arctic White, 30-year warranty...",
+  "Foundation": "e.g., Poured concrete, sealed in 2020, French drain on east side...",
+  "Chimney": "e.g., Clay flue liner, stainless steel cap, last swept 10/2024, no cracks found...",
+  "Appliances": "e.g., Serial #ABC456, purchased from Home Depot, extended warranty until 2027...",
+  "Water Heater": "e.g., 50-gallon tank, Serial #WH789, anode rod replaced 2023...",
+  "Landscaping": "e.g., Rain Bird irrigation, 6 zones, winterized each November...",
+  "Pest": "e.g., Contract #12345, quarterly treatments, termite bond renewal date 3/2026...",
+};
+
+const notesHints: Record<string, string> = {
+  "Roof": "Record the shingle brand, product line, and color so you can get an exact match for repairs.",
+  "HVAC": "Include serial number, warranty details, and refrigerant type for faster service calls.",
+  "Plumbing": "Note pipe material, water heater serial number, and location of shutoff valves.",
+  "Electrical": "Record panel brand, amp rating, and any known circuit assignments.",
+  "Windows": "Note the brand, series, and glass type for warranty claims and replacement matching.",
+  "Siding/Exterior": "Record the brand, product line, and color code for exact replacement matching.",
+  "Foundation": "Note any existing cracks, drainage systems, and waterproofing details.",
+  "Chimney": "Record the flue liner type, cap style, and last professional inspection date.",
+  "Appliances": "Include serial number, purchase date, and warranty expiration for each appliance.",
+  "Water Heater": "Note the tank size, fuel type, serial number, and anode rod replacement date.",
+  "Landscaping": "Record irrigation zones, controller model, and winterization schedule.",
+  "Pest": "Include contract number, treatment schedule, and any active warranties or bonds.",
 };
 
 const maintenanceTemplates: Record<string, SuggestedTask[]> = {
@@ -141,6 +174,12 @@ const maintenanceTemplates: Record<string, SuggestedTask[]> = {
     { title: "Inspect and winterize irrigation system", description: "Before the first freeze, drain and blow out irrigation lines to prevent pipe damage.", urgency: "later", diyLevel: "Caution", cadence: "annually", monthsUntilDue: 6, estimatedCost: "$50-150", safetyWarning: null },
     { title: "Mow lawn to proper height", description: "Keep grass at recommended height for your grass type. Never cut more than one-third of the blade at once.", urgency: "soon", diyLevel: "DIY-Safe", cadence: "as-needed", monthsUntilDue: 0, estimatedCost: "$0-40", safetyWarning: null },
     { title: "Edge beds and walkways", description: "Clean edges improve curb appeal and prevent grass from encroaching into garden beds.", urgency: "later", diyLevel: "DIY-Safe", cadence: "monthly", monthsUntilDue: 1, estimatedCost: "$0", safetyWarning: null },
+  ],
+  "Chimney": [
+    { title: "Schedule annual chimney inspection", description: "A certified chimney sweep should inspect and clean the flue annually to prevent creosote buildup, blockages, and structural issues. Required before each burning season.", urgency: "soon", diyLevel: "Pro-Only", cadence: "annually", monthsUntilDue: 3, estimatedCost: "$150-350", safetyWarning: "Creosote buildup is a leading cause of chimney fires" },
+    { title: "Check chimney cap and spark arrestor", description: "Inspect the chimney cap for damage or rust, and ensure the spark arrestor screen is intact. Caps prevent rain, animals, and debris from entering the flue.", urgency: "later", diyLevel: "DIY-Safe", cadence: "semi-annually", monthsUntilDue: 3, estimatedCost: "$0-200", safetyWarning: "Inspect from the ground or with binoculars — do not climb on roof without safety equipment" },
+    { title: "Inspect flashing and mortar joints", description: "Check the chimney flashing where it meets the roof for gaps or lifting, and look for cracked or missing mortar between bricks. Water intrusion causes expensive damage.", urgency: "later", diyLevel: "Caution", cadence: "annually", monthsUntilDue: 6, estimatedCost: "$0-500", safetyWarning: null },
+    { title: "Test fireplace damper operation", description: "Open and close the damper to make sure it moves freely and seals properly. A stuck-open damper wastes heated/cooled air year-round.", urgency: "later", diyLevel: "DIY-Safe", cadence: "annually", monthsUntilDue: 6, estimatedCost: "$0", safetyWarning: null },
   ],
   "Pest": [
     { title: "Schedule pest inspection", description: "Annual pest inspection catches infestations early. Critical for termites, rodents, and carpenter ants.", urgency: "soon", diyLevel: "Pro-Only", cadence: "annually", monthsUntilDue: 3, estimatedCost: "$75-200", safetyWarning: null },
@@ -403,7 +442,7 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [] 
 
   const showsCondition = (cat: string) => !["Pest"].includes(cat);
   const showsMakeModel = (cat: string) => ["HVAC", "Appliances", "Water Heater"].includes(cat);
-  const showsMaterial = (cat: string) => ["Roof", "Windows", "Siding/Exterior", "Foundation"].includes(cat);
+  const showsMaterial = (cat: string) => ["Roof", "Windows", "Siding/Exterior", "Foundation", "Chimney"].includes(cat);
   const showsEnergyRating = (cat: string) => ["HVAC", "Windows", "Water Heater"].includes(cat);
   const showsPestFields = (cat: string) => cat === "Pest";
 
@@ -666,7 +705,7 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [] 
                 <Label htmlFor="material" className="flex items-center gap-1">Material <FieldTooltip termSlug="system-material" screenName="add-system" /></Label>
                 <Input
                   id="material"
-                  placeholder={formData.category === "Roof" ? "e.g., Asphalt Shingle, Metal" : "e.g., Vinyl, Wood, Aluminum"}
+                  placeholder={formData.category === "Roof" ? "e.g., Asphalt Shingle, Metal" : formData.category === "Chimney" ? "e.g., Brick, Stone, Metal" : "e.g., Vinyl, Wood, Aluminum"}
                   value={formData.material}
                   onChange={(e) => setFormData({ ...formData, material: e.target.value })}
                   data-testid="input-material"
@@ -733,12 +772,18 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [] 
               <Label htmlFor="notes">Notes (optional)</Label>
               <Textarea
                 id="notes"
-                placeholder="Serial number or any relevant details..."
+                placeholder={notesPlaceholders[formData.category] || "Serial number, warranty info, or any relevant details..."}
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                rows={2}
+                rows={3}
                 data-testid="input-notes"
               />
+              {notesHints[formData.category] && (
+                <p className="text-xs text-muted-foreground flex items-start gap-1">
+                  <Info className="h-3 w-3 mt-0.5 shrink-0" />
+                  {notesHints[formData.category]}
+                </p>
+              )}
             </div>
             
             <div className="flex justify-between pt-4">
