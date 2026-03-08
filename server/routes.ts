@@ -415,10 +415,12 @@ export async function registerRoutes(
         title: z.string().min(1),
         description: z.string().nullable().optional(),
         category: z.string().nullable().optional(),
+        systemName: z.string().optional().default("unknown_system"),
         urgency: z.enum(["now", "soon", "later", "monitor"]).optional().default("later"),
         diyLevel: z.enum(["DIY-Safe", "Caution", "Pro-Only"]).optional().default("Caution"),
         estimatedCost: z.string().nullable().optional(),
         safetyWarning: z.string().nullable().optional(),
+        attributes: z.record(z.string(), z.string()).optional().default({}),
       });
 
       const created = [];
@@ -428,10 +430,20 @@ export async function registerRoutes(
           return res.status(400).json({ message: "Invalid task data", details: parsed.error.flatten(), code: "VALIDATION_ERROR" });
         }
         const task = parsed.data;
+
+        const { validateAttributeNamespace, systemNameToPrefix } = await import("./lib/document-analysis");
+        const prefix = systemNameToPrefix(task.systemName);
+        const { valid: validAttrs } = validateAttributeNamespace(task.attributes, prefix);
+
+        const attrSummary = Object.entries(validAttrs)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("\n");
+        const fullDescription = [task.description, attrSummary].filter(Boolean).join("\n\n");
+
         const result = await storage.createMaintenanceTask({
           homeId,
           title: sanitizeText(task.title),
-          description: task.description ? sanitizeText(task.description) : null,
+          description: fullDescription ? sanitizeText(fullDescription) : null,
           category: task.category || null,
           urgency: task.urgency || "later",
           diyLevel: task.diyLevel || "Caution",

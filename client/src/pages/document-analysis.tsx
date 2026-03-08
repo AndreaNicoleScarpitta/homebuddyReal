@@ -1,6 +1,6 @@
 import { Layout } from "@/components/layout";
 import { useState, useRef } from "react";
-import { Upload, FileText, Loader2, Check, X, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { Upload, FileText, Loader2, Check, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,51 @@ const diyColors: Record<string, string> = {
   "Pro-Only": "bg-red-100 text-red-800 border-red-200",
 };
 
+function formatAttrKey(key: string): string {
+  const parts = key.split("_");
+  return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+}
+
+function SystemAttributesDisplay({
+  systemName,
+  attributes,
+  taskIndex,
+}: {
+  systemName: string;
+  attributes: Record<string, string>;
+  taskIndex: number;
+}) {
+  const entries = Object.entries(attributes);
+  if (entries.length === 0) return null;
+
+  const prefix = systemName + "_";
+
+  return (
+    <div className="mt-2 space-y-1" data-testid={`attributes-${systemName}-${taskIndex}`}>
+      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+        {systemName.replace(/_/g, " ")} attributes
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+        {entries.map(([key, value]) => {
+          const displayKey = key.startsWith(prefix)
+            ? formatAttrKey(key.slice(prefix.length))
+            : formatAttrKey(key);
+          return (
+            <div
+              key={key}
+              className="flex items-baseline gap-1.5 text-xs"
+              data-testid={`attr-${key}-${taskIndex}`}
+            >
+              <span className="text-muted-foreground shrink-0">{displayKey}:</span>
+              <span className="font-medium truncate">{value}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function TaskCard({
   task,
   index,
@@ -35,6 +80,8 @@ function TaskCard({
   onToggle: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const hasAttributes = task.attributes && Object.keys(task.attributes).length > 0;
+  const hasDetails = !!task.description || hasAttributes;
 
   return (
     <div
@@ -63,6 +110,11 @@ function TaskCard({
             </h3>
           </div>
           <div className="flex gap-2 mt-1.5 flex-wrap">
+            {task.systemName && task.systemName !== "unknown_system" && (
+              <Badge variant="outline" className="text-[10px] py-0 bg-indigo-50 text-indigo-700 border-indigo-200">
+                {task.systemName.replace(/_/g, " ")}
+              </Badge>
+            )}
             {task.category && (
               <Badge variant="outline" className="text-[10px] py-0">
                 {task.category}
@@ -86,7 +138,7 @@ function TaskCard({
               </Badge>
             )}
           </div>
-          {task.description && (
+          {hasDetails && (
             <button
               type="button"
               onClick={() => setExpanded(!expanded)}
@@ -97,10 +149,21 @@ function TaskCard({
               {expanded ? "Hide details" : "Show details"}
             </button>
           )}
-          {expanded && task.description && (
-            <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-              {task.description}
-            </p>
+          {expanded && (
+            <>
+              {task.description && (
+                <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+                  {task.description}
+                </p>
+              )}
+              {hasAttributes && (
+                <SystemAttributesDisplay
+                  systemName={task.systemName}
+                  attributes={task.attributes}
+                  taskIndex={index}
+                />
+              )}
+            </>
           )}
           {task.safetyWarning && (
             <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1.5">

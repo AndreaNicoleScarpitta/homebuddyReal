@@ -388,12 +388,14 @@ export interface DocumentAnalysisTask {
   title: string;
   description: string | null;
   category: string | null;
+  systemName: string;
   urgency: string;
   diyLevel: string;
   estimatedCost: string | null;
   safetyWarning: string | null;
   createdFrom: string;
   status: string;
+  attributes: Record<string, string>;
 }
 
 export interface DocumentAnalysisResult {

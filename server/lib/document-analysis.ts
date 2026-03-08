@@ -8,14 +8,95 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
+const KNOWN_SYSTEMS = [
+  "roof",
+  "hvac",
+  "plumbing",
+  "electrical",
+  "windows",
+  "siding",
+  "foundation",
+  "appliances",
+  "water_heater",
+  "landscaping",
+  "pest",
+  "other",
+] as const;
+
+export type KnownSystem = typeof KNOWN_SYSTEMS[number];
+
+export function systemNameToPrefix(systemName: string): string {
+  const normalized = systemName
+    .toLowerCase()
+    .replace(/\//g, "_")
+    .replace(/[^a-z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+
+  if (normalized === "siding_exterior" || normalized === "siding") return "siding";
+  if (normalized === "water_heater") return "water_heater";
+
+  const matched = KNOWN_SYSTEMS.find((s) => s === normalized);
+  return matched || normalized || "unknown_system";
+}
+
+export function prefixAttribute(systemPrefix: string, attributeName: string): string {
+  const cleanAttr = attributeName
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+
+  if (cleanAttr.startsWith(systemPrefix + "_")) {
+    return cleanAttr;
+  }
+
+  return `${systemPrefix}_${cleanAttr}`;
+}
+
+export function validateAttributeNamespace(
+  attributes: Record<string, string>,
+  systemPrefix: string
+): { valid: Record<string, string>; violations: string[] } {
+  const valid: Record<string, string> = {};
+  const violations: string[] = [];
+
+  for (const [key, value] of Object.entries(attributes)) {
+    const normalizedKey = key
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "");
+
+    if (normalizedKey.startsWith(systemPrefix + "_")) {
+      valid[normalizedKey] = value;
+    } else {
+      const otherSystem = KNOWN_SYSTEMS.find(
+        (s) => s !== systemPrefix && normalizedKey.startsWith(s + "_")
+      );
+      if (otherSystem) {
+        violations.push(
+          `Attribute "${normalizedKey}" belongs to system "${otherSystem}", not "${systemPrefix}"`
+        );
+      } else {
+        valid[prefixAttribute(systemPrefix, normalizedKey)] = value;
+      }
+    }
+  }
+
+  return { valid, violations };
+}
+
 export const extractedIssueSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional().default(""),
+  systemName: z.string().optional().default("unknown_system"),
   category: z.string().optional().default("Other"),
   urgency: z.enum(["now", "soon", "later", "monitor"]).optional().default("later"),
   diyLevel: z.enum(["DIY-Safe", "Caution", "Pro-Only"]).optional().default("Caution"),
   estimatedCost: z.string().optional().default("Unknown"),
   safetyWarning: z.string().nullable().optional().default(null),
+  attributes: z.record(z.string(), z.string()).optional().default({}),
 });
 
 export const documentAnalysisResponseSchema = z.object({
@@ -31,20 +112,42 @@ Analyze the provided document text and extract any home-related issues, maintena
 
 You MUST respond with valid JSON only — no markdown, no explanation, no surrounding text.
 
+CRITICAL RULE — System-Scoped Attributes:
+Every attribute you extract MUST be prefixed with the system name it belongs to.
+- Use the format: systemName_attributeName
+- Examples: roof_material, siding_condition, hvac_unit_type, plumbing_pipe_material
+- NEVER use generic attribute names like "material", "condition", "age", or "installation_year"
+- Each attribute MUST only appear in the system it belongs to
+- If roof material is detected, set "roof_material" — do NOT set "siding_material" or any other system's material
+- If you cannot confidently determine which system an attribute belongs to, prefix it with "unknown_system_"
+
+Known systems: roof, hvac, plumbing, electrical, windows, siding, foundation, appliances, water_heater, landscaping, pest, other
+
 Response format:
 {
   "issues": [
     {
       "title": "Short descriptive title of the issue or task",
       "description": "Detailed description of the issue and what needs to be done",
+      "systemName": "The home system this issue belongs to (e.g., roof, hvac, plumbing, electrical, siding, foundation, windows, appliances, water_heater, landscaping, pest, other, or unknown_system)",
       "category": "One of: Roof, HVAC, Plumbing, Electrical, Windows, Siding/Exterior, Foundation, Appliances, Water Heater, Landscaping, Pest, Other",
       "urgency": "One of: now, soon, later, monitor",
       "diyLevel": "One of: DIY-Safe, Caution, Pro-Only",
       "estimatedCost": "Rough cost range like '$100-$300' or 'Unknown'",
-      "safetyWarning": "Safety warning if applicable, or null"
+      "safetyWarning": "Safety warning if applicable, or null",
+      "attributes": {
+        "systemName_attributeName": "value"
+      }
     }
   ]
 }
+
+Attribute examples per system:
+- Roof issue: { "roof_material": "asphalt shingles", "roof_condition": "deteriorating", "roof_installation_year": "2005" }
+- Siding issue: { "siding_material": "vinyl", "siding_condition": "cracked" }
+- HVAC issue: { "hvac_unit_type": "central air", "hvac_condition": "failing", "hvac_age_years": "18" }
+- Plumbing issue: { "plumbing_pipe_material": "copper", "plumbing_condition": "corroded" }
+- Foundation issue: { "foundation_crack_type": "hairline", "foundation_location": "southeast corner" }
 
 Rules:
 - Extract ONLY home-maintenance-related issues from the document.
@@ -53,7 +156,9 @@ Rules:
 - Cost estimates should be ranges reflecting typical US pricing.
 - Mark anything involving gas, electrical panels, structural work, or asbestos/mold as "Pro-Only".
 - Include safety warnings for anything that could be dangerous.
-- Do not fabricate issues not present in the document text.`;
+- Do not fabricate issues not present in the document text.
+- ALL attribute keys MUST be prefixed with their system name — no exceptions.
+- Do NOT cross-populate attributes between systems.`;
 
 export async function extractTextFromDocument(buffer: Buffer, mimeType: string): Promise<string> {
   if (mimeType === "application/pdf") {
@@ -67,6 +172,32 @@ export async function extractTextFromDocument(buffer: Buffer, mimeType: string):
   }
 
   throw new Error(`Unsupported file type: ${mimeType}. Supported types: PDF, TXT, CSV, Markdown.`);
+}
+
+export function enforceAttributeNamespaces(issues: ExtractedIssue[]): ExtractedIssue[] {
+  return issues.map((issue) => {
+    const systemPrefix = systemNameToPrefix(issue.systemName || "unknown_system");
+    const normalizedSystemName = systemPrefix;
+
+    if (!issue.attributes || Object.keys(issue.attributes).length === 0) {
+      return { ...issue, systemName: normalizedSystemName };
+    }
+
+    const { valid, violations } = validateAttributeNamespace(issue.attributes, systemPrefix);
+
+    if (violations.length > 0) {
+      logInfo("document-analysis.namespace", "Dropped cross-system attributes", {
+        systemName: normalizedSystemName,
+        violations,
+      });
+    }
+
+    return {
+      ...issue,
+      systemName: normalizedSystemName,
+      attributes: valid,
+    };
+  });
 }
 
 export async function analyzeDocumentWithLLM(
@@ -130,12 +261,14 @@ export async function analyzeDocumentWithLLM(
     throw new Error("The AI response did not match the expected format. Please try again.");
   }
 
+  const namespacedIssues = enforceAttributeNamespaces(validated.data.issues);
+
   logInfo("document-analysis", "Document analysis complete", {
     homeId,
-    issueCount: validated.data.issues.length,
+    issueCount: namespacedIssues.length,
   });
 
-  return validated.data;
+  return { issues: namespacedIssues };
 }
 
 export function convertIssuesToTasks(
@@ -146,23 +279,27 @@ export function convertIssuesToTasks(
   title: string;
   description: string | null;
   category: string | null;
+  systemName: string;
   urgency: string;
   diyLevel: string;
   estimatedCost: string | null;
   safetyWarning: string | null;
   createdFrom: string;
   status: string;
+  attributes: Record<string, string>;
 }> {
   return issues.map((issue) => ({
     homeId,
     title: issue.title,
     description: issue.description || null,
     category: issue.category || null,
+    systemName: issue.systemName || "unknown_system",
     urgency: issue.urgency || "later",
     diyLevel: issue.diyLevel || "Caution",
     estimatedCost: issue.estimatedCost || null,
     safetyWarning: issue.safetyWarning || null,
     createdFrom: "document-analysis",
     status: "pending",
+    attributes: issue.attributes || {},
   }));
 }
