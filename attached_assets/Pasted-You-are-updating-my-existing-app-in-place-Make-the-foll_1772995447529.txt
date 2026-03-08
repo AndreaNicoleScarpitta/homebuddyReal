@@ -1,0 +1,186 @@
+You are updating my existing app in-place. Make the following changes carefully, preserve all existing functionality, and add tests. This must be production-safe, mobile-friendly, and deploy-ready.
+
+GOALS
+
+1) Rename/document the “document analysis” feature as a beta feature
+2) Add a donation experience to the profile/settings area
+3) Add a smart donation modal based on login count
+4) Route users to Stripe for checkout
+5) Persist donation suppression after successful donation
+6) Allow users to donate again later from settings/profile even after prior donation
+7) Add thank-you return handling after checkout
+8) Preserve app stability with regression tests
+
+PRODUCT REQUIREMENTS
+
+A. DOCUMENT ANALYSIS LABELING
+- Everywhere in the UI where “Document Analysis” appears, rename it to:
+  “Document Analysis (Beta)”
+- If there is a subtitle/helper copy, add language like:
+  “Beta feature: results may be incomplete and should be reviewed before acting on them.”
+- Do not break existing upload, parsing, or task generation flows.
+- If there is analytics/tracking, keep original event names unless changing them is necessary. If renamed, update references consistently.
+
+B. DONATION ENTRY POINT ON PROFILE / SETTINGS PAGE
+- Add a new section on the Profile or Settings page called:
+  “Support the App”
+- Include friendly copy similar to:
+  “This app is free to use. If it’s helped you, a small donation or ‘buy me a coffee’ is appreciated.”
+- Add fixed donation options:
+  - $1
+  - $5
+  - $10
+- Add a persistent button/link:
+  “Donate”
+- Add a persistent button/link:
+  “Maybe Later”
+- Add explanatory text that donations are optional and not required to use the app.
+- Keep this settings/profile donation section always visible, even if the user has donated before.
+
+C. SMART DONATION MODAL BASED ON LOGIN COUNT
+- On user login, track/login-count per authenticated user in the backend.
+- If a user has logged in fewer than 10 times total and has NOT previously completed a donation, show a donation modal after login.
+- Modal content should include:
+  - headline: “Enjoying the app?”
+  - body text: “This app is free to use. If it’s been helpful, consider supporting it with a small donation.”
+  - donation choices: $1, $5, $10
+  - “Maybe Later”
+  - close (X) button
+- Closing the modal via X should behave exactly the same as “Maybe Later”.
+- If the user selects “Maybe Later” or closes the modal, suppress the modal for the next 20 logins.
+- After that 20-login suppression window expires, re-prompt again on a later login, as long as the user still has not completed a donation.
+- Once the user completes a donation successfully through any journey in the app, disable all future automatic donation modals permanently for that user.
+- The settings/profile donation option must still remain available even after a donation.
+
+D. CHECKOUT + RETURN FLOW
+- When a user clicks a donation amount ($1, $5, $10), create a checkout session and route them to Stripe-hosted checkout.
+- After successful payment, route the user back into the app to a thank-you state/page/modal that says something like:
+  “Thank you for supporting the app ❤️”
+- After returning from successful payment:
+  - mark the user as donated=true in backend state
+  - stop all future automatic donation modal prompts
+  - do NOT remove the persistent donate option from settings/profile
+- If the user cancels checkout, return them safely to the app without marking donated=true.
+
+E. PAYMENT METHOD BEHAVIOR
+- Use Stripe in the safest supported way for mobile web/app browser flows.
+- Support the payment methods that the current Stripe integration/account can safely expose, such as cards and compatible wallet/payment options automatically supported by Stripe checkout on the user’s device/browser/account.
+- Prefer native mobile-friendly payment experiences when available through the processor, including device/browser-supported wallets.
+- Do NOT hardcode unsupported payment methods.
+- If the app/account supports PayPal through Stripe’s supported payment methods, enable it.
+- For Venmo and any PayPal/Venmo “connect account via OAuth” behavior:
+  - First inspect the existing stack and payment provider setup.
+  - Only implement direct PayPal/Venmo connection flows if they are truly supported by the configured payment processor and current app architecture.
+  - If direct OAuth account linking is not natively supported in the current stack, do NOT fake it or create broken UI.
+  - Instead, implement the donation flow with the supported processor checkout options and leave a clearly isolated TODO/feature flag for future PayPal/Venmo expansion.
+- Keep implementation PCI-safe by using hosted checkout or provider-approved client SDK patterns. Do not collect raw card data on our servers.
+
+F. BACKEND / DATA MODEL
+Add or update backend fields for the user, or a related preferences/support table, to support:
+- loginCount: number
+- hasDonated: boolean
+- donationPromptSnoozeUntilLoginCount: number | null
+- lastDonationPromptedAt: timestamp | null
+- donationHistory (optional, if helpful)
+- lastDonationAmount (optional, if helpful)
+
+Behavior logic:
+- Increment loginCount on each successful login.
+- Automatic donation modal shows only if:
+  - hasDonated = false
+  - loginCount < 10 OR loginCount >= donationPromptSnoozeUntilLoginCount after prior snooze cycle logic
+  - and user is otherwise eligible for prompting
+- If user clicks Maybe Later or closes modal:
+  - set donationPromptSnoozeUntilLoginCount = current loginCount + 20
+- If user completes donation:
+  - set hasDonated = true
+  - automatic modal permanently disabled
+  - keep manual donation entry point in settings/profile
+
+Use the existing persistence patterns in the app. Do not introduce a second conflicting source of truth.
+
+G. UI / UX DETAILS
+- Modal and settings UI must be responsive and look good on mobile.
+- Do not create aggressive dark patterns.
+- Keep the donation ask lightweight and dismissible.
+- Avoid showing the modal repeatedly within the same session.
+- Make sure the user can always continue into the app if they dismiss it.
+- Thank-you flow should feel clean and brief, then allow the user to continue using the app normally.
+
+H. CONFIG / ENVIRONMENT
+- Add environment variables for payment configuration, such as:
+  - STRIPE_SECRET_KEY
+  - STRIPE_PUBLISHABLE_KEY
+  - STRIPE_WEBHOOK_SECRET
+  - STRIPE_SUCCESS_URL
+  - STRIPE_CANCEL_URL
+  - DONATION_PRODUCT_NAME or equivalent metadata
+- If the app already uses env validation, extend it.
+- Do not hardcode secrets.
+- Add webhook handling for completed checkout if the current stack supports it. Use webhook verification.
+- Ensure success/failure states are robust even if the redirect completes before webhook processing, using safe reconciliation where needed.
+
+I. ANALYTICS / EVENTS
+If analytics exist, add events for:
+- donation_modal_shown
+- donation_amount_selected
+- donation_checkout_started
+- donation_checkout_completed
+- donation_checkout_cancelled
+- donation_maybe_later
+- donation_modal_dismissed
+- donation_settings_opened
+
+J. TESTS
+Add/update tests to verify all of the following:
+
+1. Document Analysis label updates
+- “Document Analysis” now renders as “Document Analysis (Beta)”
+- Existing document upload/analysis flow still works
+
+2. Login-based prompting
+- User with loginCount < 10 and hasDonated=false sees donation modal
+- User with hasDonated=true does not see automatic donation modal
+- User who clicked Maybe Later does not see modal again until 20 additional logins have occurred
+- User who closes the modal gets the same behavior as Maybe Later
+- On the login when suppression expires, the modal is eligible to show again
+
+3. Donation selection + routing
+- Clicking $1 / $5 / $10 starts checkout with correct amount metadata
+- Successful checkout return marks hasDonated=true
+- Cancel return does not mark hasDonated=true
+
+4. Post-donation behavior
+- Automatic donation modal no longer appears after successful donation
+- Manual donation option remains visible on settings/profile after successful donation
+- Thank-you page/modal appears on successful return
+
+5. Regression / stability
+- No existing profile/settings content is broken
+- No existing auth/login flow is broken
+- No runtime crash if Stripe config is absent in local/dev; instead degrade gracefully with a hidden or disabled donation action and a developer-facing warning
+- Existing mobile navigation still works
+
+K. IMPLEMENTATION CONSTRAINTS
+- Make the smallest safe set of changes needed
+- Reuse existing design system/components where possible
+- Reuse existing auth/session/user models where possible
+- Keep code organized, typed, and maintainable
+- If schema migrations are needed, create them
+- If route protection is needed, add it
+- If webhook endpoints are needed, add them securely
+- If feature flags exist, gate donation features behind one if appropriate
+
+L. DELIVERABLES
+When done, provide:
+1. concise summary of changes made
+2. files changed
+3. any schema/env additions
+4. any manual setup steps required for Stripe
+5. known limitations, especially around unsupported wallet/account-linking methods if the current payment stack does not support them natively
+
+IMPORTANT
+- Do not break existing app behavior
+- Do not implement fake PayPal/Venmo OAuth if unsupported
+- Prefer a working, deployable Stripe-hosted donation flow over an overbuilt broken one
+- Make sure the thank-you return path works reliably on mobile
