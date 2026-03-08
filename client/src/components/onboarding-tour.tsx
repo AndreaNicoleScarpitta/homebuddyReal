@@ -30,21 +30,9 @@ const desktopTourSteps: TourStep[] = [
     placement: "top",
   },
   {
-    target: "[data-tour='nav-budget']",
-    title: "Budget Tracker",
-    content: "Set aside funds for repairs and see what you can afford. No judgment—we help you plan realistically.",
-    placement: "right",
-  },
-  {
-    target: "[data-tour='nav-inspections']",
-    title: "Inspection Reports",
-    content: "Upload inspection reports and we'll analyze them to create prioritized maintenance tasks. You stay in control of what gets added.",
-    placement: "right",
-  },
-  {
-    target: "[data-tour='nav-assistant']",
-    title: "Your Home Assistant",
-    content: "Ask questions about repairs, get cost estimates, or understand what work involves. We give you ranges, not quotes—so you can make informed decisions.",
+    target: "[data-tour='nav-file-upload']",
+    title: "Document Analysis",
+    content: "Upload inspection reports, warranties, or other home documents. Our AI reads them and creates maintenance tasks automatically.",
     placement: "right",
   },
   {

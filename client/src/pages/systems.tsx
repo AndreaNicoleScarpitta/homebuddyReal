@@ -569,6 +569,7 @@ export default function SystemsPage() {
           onClose={() => setShowAddSystem(false)}
           homeId={home.id}
           existingSystems={systems}
+          initialCategory={activeType || undefined}
         />
       </div>
     </Layout>

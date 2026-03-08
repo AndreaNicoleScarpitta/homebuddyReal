@@ -50,6 +50,7 @@ interface AddSystemWizardProps {
   onClose: () => void;
   homeId: string | number;
   existingSystems?: V2System[];
+  initialCategory?: string;
 }
 
 const categoryIcons: Record<string, any> = {
@@ -205,7 +206,7 @@ const urgencyColors: Record<string, string> = {
   "monitor": "bg-gray-100 text-gray-700 dark:bg-gray-950/40 dark:text-gray-400",
 };
 
-export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [] }: AddSystemWizardProps) {
+export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [], initialCategory }: AddSystemWizardProps) {
   const [step, setStep] = useState<number>(1);
   const [showHints, setShowHints] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -260,8 +261,18 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [] 
 
   useEffect(() => {
     if (isOpen) {
-      setStep(1);
-      setFormData(initialFormData);
+      if (initialCategory && systemCategories.includes(initialCategory as any)) {
+        const instanceNum = getNextInstanceNumber(initialCategory);
+        setFormData({
+          ...initialFormData,
+          category: initialCategory,
+          name: `${initialCategory} ${instanceNum}`,
+        });
+        setStep(2);
+      } else {
+        setStep(1);
+        setFormData(initialFormData);
+      }
       setShowHints(false);
       setIsAnalyzing(false);
       setSavedSystemName("");

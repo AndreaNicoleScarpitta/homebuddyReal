@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, FileSearch, Mail, Menu, LogOut, FileText, ClipboardList, User, FolderOpen, HelpCircle } from "lucide-react";
+import { Home, FileSearch, Mail, Menu, LogOut, ClipboardList, User, FolderOpen, HelpCircle, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
@@ -10,19 +10,19 @@ import { trackEvent } from "@/lib/analytics";
 
 const navItems = [
   { href: "/dashboard", icon: Home, label: "Overview", sublabel: "What needs attention", tourId: "nav-overview" },
+  { href: "/systems", icon: Settings2, label: "Systems", sublabel: "Your home systems", tourId: "nav-systems" },
   { href: "/maintenance-log", icon: ClipboardList, label: "Maintenance Log", sublabel: "What you've done", tourId: "nav-history" },
-  { href: "/inspections", icon: FileText, label: "Inspections", sublabel: "What's wrong", tourId: "nav-inspections" },
   { href: "/documents", icon: FolderOpen, label: "Documents", sublabel: "Your files", tourId: "nav-documents" },
-  { href: "/document-analysis", icon: FileSearch, label: "File Upload (Beta)", sublabel: "Analyze files", tourId: "nav-file-upload" },
+  { href: "/document-analysis", icon: FileSearch, label: "Document Analysis (Beta)", sublabel: "Analyze files", tourId: "nav-file-upload" },
   { href: "/profile", icon: User, label: "Profile", sublabel: "Your settings", tourId: "nav-profile" },
   { href: "/contact", icon: Mail, label: "Contact", sublabel: "Reach us", tourId: "nav-contact" },
 ];
 
 const bottomNavItems = [
   { href: "/dashboard", icon: Home, label: "Home" },
+  { href: "/systems", icon: Settings2, label: "Systems" },
   { href: "/maintenance-log", icon: ClipboardList, label: "Log" },
-  { href: "/document-analysis", icon: FileSearch, label: "Upload" },
-  { href: "/inspections", icon: FileText, label: "Reports" },
+  { href: "/document-analysis", icon: FileSearch, label: "Analyze" },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {

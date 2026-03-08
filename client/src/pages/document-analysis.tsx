@@ -475,7 +475,7 @@ export default function DocumentAnalysis() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-heading font-bold" data-testid="text-page-title">
-            File Upload
+            Document Analysis
             <span className="ml-2 inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary align-middle">Beta</span>
           </h1>
           <p className="text-muted-foreground text-sm mt-1">

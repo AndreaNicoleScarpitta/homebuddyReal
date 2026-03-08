@@ -31,10 +31,11 @@ import {
   FolderOpen,
   ClipboardList,
   Landmark,
+  CheckCircle2,
 } from "lucide-react";
 import { Link, useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getHome, getSystems, getTasks, updateSystem, deleteSystem } from "@/lib/api";
+import { getHome, getSystems, getTasks, updateSystem, deleteSystem, updateTask, createLogEntry } from "@/lib/api";
 import type { V2System, V2Task } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState } from "react";
@@ -190,6 +191,31 @@ export default function SystemDetail() {
       toast({ title: "Error", description: "Could not delete system.", variant: "destructive" });
     },
   });
+
+  const completeTaskMutation = useMutation({
+    mutationFn: async (task: V2Task) => {
+      if (home?.legacyId) {
+        await createLogEntry(home.legacyId, {
+          title: task.title,
+          date: new Date().toISOString(),
+        });
+      }
+      await updateTask(task.id, { status: "completed" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["logEntries"] });
+      toast({ title: "Task completed!", description: "Nice work — this has been logged." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not complete task.", variant: "destructive" });
+    },
+  });
+
+  const handleCompleteRelatedTask = (task: V2Task) => {
+    trackEvent('click', 'system_detail', 'complete_related_task');
+    completeTaskMutation.mutate(task);
+  };
 
   const handleSaveEdit = () => {
     const payload: Partial<V2System> = {
@@ -594,33 +620,51 @@ export default function SystemDetail() {
               </p>
             ) : (
               <div className="space-y-3">
-                {relatedTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
-                    data-testid={`card-task-${task.id}`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${urgencyColors[task.urgency || "later"] || "bg-gray-400"}`} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate" data-testid={`text-task-title-${task.id}`}>{task.title}</p>
-                        {task.dueDate && (
-                          <p className="text-xs text-muted-foreground">
-                            Due: {new Date(task.dueDate).toLocaleDateString()}
-                          </p>
+                {relatedTasks.map((task) => {
+                  const isDone = task.status === "completed" || task.state === "completed";
+                  return (
+                    <div
+                      key={task.id}
+                      className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors group"
+                      data-testid={`card-task-${task.id}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${urgencyColors[task.urgency || "later"] || "bg-gray-400"}`} />
+                        <div className="min-w-0">
+                          <p className={`text-sm font-medium truncate ${isDone ? "line-through text-muted-foreground" : ""}`} data-testid={`text-task-title-${task.id}`}>{task.title}</p>
+                          {task.dueDate && (
+                            <p className="text-xs text-muted-foreground">
+                              Due: {new Date(task.dueDate).toLocaleDateString()}
+                            </p>
+                          )}
+                          {task.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {!isDone && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCompleteRelatedTask(task)}
+                            data-testid={`button-complete-task-${task.id}`}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity h-7 text-xs"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                            Done
+                          </Button>
+                        )}
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${taskStatusColors[task.status] || taskStatusColors.pending}`} data-testid={`badge-task-status-${task.id}`}>
+                          {task.status}
+                        </span>
+                        {task.estimatedCost && (
+                          <span className="text-xs text-muted-foreground">{task.estimatedCost}</span>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${taskStatusColors[task.status] || taskStatusColors.pending}`} data-testid={`badge-task-status-${task.id}`}>
-                        {task.status}
-                      </span>
-                      {task.estimatedCost && (
-                        <span className="text-xs text-muted-foreground">{task.estimatedCost}</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

@@ -21,7 +21,6 @@ import Landing from "@/pages/landing";
 import Login from "@/pages/login";
 
 import Contact from "@/pages/contact";
-import Inspections from "@/pages/inspections";
 import Terms, { TermsContent } from "@/pages/terms";
 import MaintenanceLog from "@/pages/maintenance-log";
 import Profile from "@/pages/profile";
@@ -109,7 +108,6 @@ function Router() {
         <Route path="/maintenance-log" component={MaintenanceLog} />
         <Route path="/systems/:id" component={SystemDetail} />
         <Route path="/systems" component={Systems} />
-        <Route path="/inspections" component={Inspections} />
         <Route path="/documents" component={Documents} />
         <Route path="/profile" component={Profile} />
         <Route path="/contact" component={Contact} />

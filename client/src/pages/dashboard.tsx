@@ -553,11 +553,12 @@ export default function Dashboard() {
     swipeCompleteMutation.mutate(task);
   };
 
+  const homeQuerySettled = !homeLoading && isAuthenticated;
   useEffect(() => {
-    if (!authLoading && !homeLoading && !home) {
+    if (!authLoading && homeQuerySettled && !home) {
       navigate("/onboarding");
     }
-  }, [authLoading, homeLoading, home, navigate]);
+  }, [authLoading, homeQuerySettled, home, navigate]);
 
   useEffect(() => {
     if (home && hasSeenTour === false && !showTour) {

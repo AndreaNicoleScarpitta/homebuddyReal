@@ -11,29 +11,55 @@ export function registerDonationRoutes(app: Express) {
     try {
       const publishableKey = await getStripePublishableKey();
 
-      const result = await db.execute(sql`
-        SELECT 
-          p.id as product_id,
-          p.name as product_name,
-          p.description as product_description,
-          pr.id as price_id,
-          pr.unit_amount
-        FROM stripe.products p
-        JOIN stripe.prices pr ON pr.product = p.id AND pr.active = true
-        WHERE p.active = true AND p.metadata->>'type' = 'donation'
-        ORDER BY pr.unit_amount ASC
-      `);
-
-      res.json({
-        publishableKey,
-        donations: result.rows.map((row: any) => ({
+      let donations: any[] = [];
+      try {
+        const result = await db.execute(sql`
+          SELECT 
+            p.id as product_id,
+            p.name as product_name,
+            p.description as product_description,
+            pr.id as price_id,
+            pr.unit_amount
+          FROM stripe.products p
+          JOIN stripe.prices pr ON pr.product = p.id AND pr.active = true
+          WHERE p.active = true AND p.metadata->>'type' = 'donation'
+          ORDER BY pr.unit_amount ASC
+        `);
+        donations = result.rows.map((row: any) => ({
           productId: row.product_id,
           productName: row.product_name,
           description: row.product_description,
           priceId: row.price_id,
           amount: row.unit_amount,
-        })),
-      });
+        }));
+      } catch (dbErr) {
+        logError("donations.config", "DB query failed, trying Stripe API directly", { error: dbErr });
+      }
+
+      if (donations.length === 0) {
+        try {
+          const stripe = await getUncachableStripeClient();
+          const products = await stripe.products.search({ query: "metadata['type']:'donation'" });
+          for (const product of products.data) {
+            if (!product.active) continue;
+            const prices = await stripe.prices.list({ product: product.id, active: true });
+            for (const price of prices.data) {
+              donations.push({
+                productId: product.id,
+                productName: product.name,
+                description: product.description,
+                priceId: price.id,
+                amount: price.unit_amount,
+              });
+            }
+          }
+          donations.sort((a: any, b: any) => (a.amount || 0) - (b.amount || 0));
+        } catch (stripeErr) {
+          logError("donations.config", "Stripe API fallback also failed", { error: stripeErr });
+        }
+      }
+
+      res.json({ publishableKey, donations });
     } catch (error) {
       logError("donations.config", "Failed to load donation config", { error });
       res.status(500).json({ message: "Failed to load donation configuration" });

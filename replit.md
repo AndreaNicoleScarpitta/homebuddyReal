@@ -36,6 +36,12 @@ Core features include:
 - **Tooltip + Definitions System**: In-product help system with reusable FieldTooltip component (hover/tap/focus), Definitions Drawer (search, categories, detail views with related terms), 50+ structured term definitions covering all dropdowns and fields. Entry points: sidebar help icon (desktop), header help icon (mobile), and "Learn more" links from any tooltip. Privacy-safe analytics (term_slug only, no user data). Content stored as typed JSON in `client/src/data/definitions.ts`.
 - **Swipe Gestures on Tasks**: SwipeableTask wrapper component (framer-motion drag) applied to both Dashboard MaintenanceCards and Maintenance Log TaskRows. Swipe left → immediately completes the task (optimistic update + log entry + persistence). Swipe right → deletes the task (optimistic removal + persistence). Threshold: 100px displacement or 500px/s velocity. Disabled for already-completed tasks. Action lock prevents duplicate rapid swipes. Visual affordances: green "Done" background on left, red "Delete" background on right. State machine allows TaskCompleted from all active states (proposed, approved, scheduled, in_progress, overdue). Dashboard filters completed tasks out of urgency groups; maintenance-log moves them to Completed tab.
 - **UI/UX**: React-based frontend with a "Modern Utility" design, featuring onboarding tours, rich text rendering, and responsive components.
+- **Navigation**: Desktop sidebar and mobile bottom nav. Items: Overview, Systems, Maintenance Log, Documents, Document Analysis (Beta), Profile, Contact. Inspections feature removed. "File Upload" renamed to "Document Analysis".
+- **Delete All Data**: Uses PostgreSQL savepoints (`SAVEPOINT/ROLLBACK TO SAVEPOINT`) inside a transaction to gracefully handle missing tables without aborting the entire transaction.
+- **Donation Config Fallback**: If Stripe DB query returns empty donations, falls back to direct Stripe API calls to fetch donation products by known price IDs.
+- **System Detail Related Tasks**: Tasks show a hoverable "Done" button for inline completion via `completeTaskMutation`.
+- **Add System Wizard**: Accepts `initialCategory` prop to pre-select category and skip step 1 when navigating from a filtered system type view.
+- **Onboarding Guard**: Dashboard redirect to `/onboarding` is gated by `homeQuerySettled` to prevent false redirects before data loads.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database for all application data.
