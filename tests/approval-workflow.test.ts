@@ -92,10 +92,10 @@ describe("Approval Workflow — Suggested Systems", () => {
   it("declining removes all tasks and attributes for that suggestion", () => {
     const pp = emptyPreProcessorOutput();
     pp.issuesDetected = [
-      { description: "Septic system needs inspection", severity: "moderate", systemCategory: "Septic", sourceRef: "Septic" },
+      { description: "Irrigation system needs inspection", severity: "moderate", systemCategory: "Irrigation", sourceRef: "Irrigation" },
     ];
     pp.attributesDetected = [
-      { key: "tank_size", value: "1000 gallon", systemCategory: "Septic", confidence: 0.8, sourceRef: "Septic" },
+      { key: "zone_count", value: "6 zones", systemCategory: "Irrigation", confidence: 0.8, sourceRef: "Irrigation" },
     ];
     const result = runContractorAnalysis({
       preProcessorOutput: pp,
@@ -103,10 +103,10 @@ describe("Approval Workflow — Suggested Systems", () => {
       existingTasks: [],
       homeId: "home-1",
     });
-    const septicSuggestion = result.suggestedSystems.find((s) => s.category === "Septic");
-    expect(septicSuggestion).toBeDefined();
+    const irrigationSuggestion = result.suggestedSystems.find((s) => s.category === "Irrigation");
+    expect(irrigationSuggestion).toBeDefined();
 
-    const declined = { ...septicSuggestion!, status: "declined" as const };
+    const declined = { ...irrigationSuggestion!, status: "declined" as const };
     expect(declined.status).toBe("declined");
     expect(declined.pendingTasks.length).toBeGreaterThanOrEqual(1);
     expect(Object.keys(declined.pendingAttributes).length).toBeGreaterThanOrEqual(1);
@@ -116,7 +116,7 @@ describe("Approval Workflow — Suggested Systems", () => {
     const pp = emptyPreProcessorOutput();
     pp.issuesDetected = [
       { description: "Pool needs cleaning", severity: "minor", systemCategory: "Pool", sourceRef: "Pool" },
-      { description: "Septic tank issue", severity: "moderate", systemCategory: "Septic", sourceRef: "Septic" },
+      { description: "Irrigation system leak", severity: "moderate", systemCategory: "Irrigation", sourceRef: "Irrigation" },
       { description: "Well pump noise", severity: "moderate", systemCategory: "Well", sourceRef: "Well" },
     ];
     const result = runContractorAnalysis({
@@ -128,7 +128,7 @@ describe("Approval Workflow — Suggested Systems", () => {
     expect(result.suggestedSystems.length).toBe(3);
     const categories = result.suggestedSystems.map((s) => s.category);
     expect(categories).toContain("Pool");
-    expect(categories).toContain("Septic");
+    expect(categories).toContain("Irrigation");
     expect(categories).toContain("Well");
 
     for (const s of result.suggestedSystems) {

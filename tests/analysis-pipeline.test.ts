@@ -545,3 +545,156 @@ describe("Sample Scenarios", () => {
     expect(solarSuggestion!.pendingTasks.length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("False Positive Guards", () => {
+  it("'CO monitor installed' does not create a monitoring task", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.issuesDetected = [
+      { description: "CO monitor installed on each level", severity: "informational", systemCategory: "Other", sourceRef: "CO monitor installed on each level" },
+    ];
+    const tasks = runReasoningEngine(pp, [], []);
+    const monitorTasks = tasks.filter((t) => t.category === "Inspection" && t.priority === "monitor");
+    expect(monitorTasks).toHaveLength(0);
+  });
+
+  it("'monitoring system' does not create a monitoring task", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.issuesDetected = [
+      { description: "Home security monitoring system present", severity: "informational", systemCategory: "Other", sourceRef: "Home security monitoring system present" },
+    ];
+    const tasks = runReasoningEngine(pp, [], []);
+    const monitorTasks = tasks.filter((t) => t.category === "Inspection" && t.priority === "monitor");
+    expect(monitorTasks).toHaveLength(0);
+  });
+
+  it("mentioning 'electrician' in a label does not trigger professional eval", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.issuesDetected = [
+      { description: "Panel label shows electrician company name", severity: "informational", systemCategory: "Electrical", sourceRef: "Panel label shows electrician company name" },
+    ];
+    const tasks = runReasoningEngine(pp, [], [ELECTRICAL_SYSTEM]);
+    const proTasks = tasks.filter((t) => t.inferenceReason?.includes("Professional evaluation"));
+    expect(proTasks).toHaveLength(0);
+  });
+
+  it("'improperly installed flashing' does not trigger code violation (no code context)", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.issuesDetected = [
+      { description: "Flashing appears improperly installed at roof-wall junction", severity: "moderate", systemCategory: "Roof", sourceRef: "Flashing improperly installed" },
+    ];
+    const tasks = runReasoningEngine(pp, [], [ROOF_SYSTEM]);
+    const codeTasks = tasks.filter((t) => t.inferenceReason?.includes("Code violation"));
+    expect(codeTasks).toHaveLength(0);
+  });
+
+  it("informational findings do not produce urgent tasks", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.issuesDetected = [
+      { description: "Smoke detectors present on all levels", severity: "informational", systemCategory: "Other", sourceRef: "Smoke detectors present" },
+      { description: "Gas meter located on east side of home", severity: "informational", systemCategory: "Other", sourceRef: "Gas meter located" },
+    ];
+    const tasks = runReasoningEngine(pp, [], []);
+    const urgentTasks = tasks.filter((t) => t.priority === "now");
+    expect(urgentTasks).toHaveLength(0);
+  });
+
+  it("'unit appears operational' does not create replacement task", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.issuesDetected = [
+      { description: "Unit appears operational and in fair condition", severity: "informational", systemCategory: "HVAC", sourceRef: "operational" },
+    ];
+    const tasks = runReasoningEngine(pp, [], [HVAC_SYSTEM]);
+    const replacementTasks = tasks.filter((t) => t.category === "Replacement");
+    expect(replacementTasks).toHaveLength(0);
+  });
+
+  it("diverse report phrasings: 'have it checked' triggers monitoring", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.maintenanceRecommendations = [
+      { description: "Should monitor for further cracking over time", systemCategory: "Foundation", sourceRef: "monitor for further cracking" },
+    ];
+    const tasks = runReasoningEngine(pp, [], []);
+    const monitorTasks = tasks.filter((t) => t.priority === "monitor");
+    expect(monitorTasks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("diverse report phrasings: 'contact a qualified contractor' triggers professional eval", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.maintenanceRecommendations = [
+      { description: "Contact a qualified professional for further evaluation", systemCategory: "Roof", sourceRef: "Contact a qualified professional" },
+    ];
+    const tasks = runReasoningEngine(pp, [], [ROOF_SYSTEM]);
+    const proTasks = tasks.filter((t) => t.diyLevel === "Pro-Only");
+    expect(proTasks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("diverse report phrasings: 'needs to be replaced soon' triggers replacement", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.issuesDetected = [
+      { description: "Water heater needs to be replaced soon due to age", severity: "moderate", systemCategory: "Water Heater", sourceRef: "needs to be replaced soon" },
+    ];
+    const tasks = runReasoningEngine(pp, [], []);
+    const replacementTasks = tasks.filter((t) => t.category === "Replacement");
+    expect(replacementTasks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("diverse report phrasings: 'recommend annual service' triggers periodic inspection", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.maintenanceRecommendations = [
+      { description: "Recommend annual service and inspection of HVAC system", systemCategory: "HVAC", sourceRef: "Recommend annual service" },
+    ];
+    const tasks = runReasoningEngine(pp, [], [HVAC_SYSTEM]);
+    const annualTasks = tasks.filter((t) => t.title.toLowerCase().includes("annual"));
+    expect(annualTasks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("diverse report phrasings: 'moisture damage on ceiling' triggers water investigation", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.issuesDetected = [
+      { description: "Moisture damage visible on bathroom ceiling", severity: "moderate", systemCategory: "Plumbing", sourceRef: "Moisture damage on ceiling" },
+    ];
+    const tasks = runReasoningEngine(pp, [], []);
+    const waterTasks = tasks.filter((t) => t.title.toLowerCase().includes("water"));
+    expect(waterTasks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("diverse report phrasings: 'settling noted in garage slab' triggers structural eval", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.issuesDetected = [
+      { description: "Settling noted in garage slab with minor cracking", severity: "moderate", systemCategory: "Foundation", sourceRef: "Settling noted in garage slab" },
+    ];
+    const tasks = runReasoningEngine(pp, [], []);
+    const structuralTasks = tasks.filter((t) => t.title.toLowerCase().includes("structural"));
+    expect(structuralTasks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("diverse report phrasings: 'negative grade slopes toward house' triggers drainage task", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.issuesDetected = [
+      { description: "Negative grade on south side slopes toward house foundation", severity: "moderate", systemCategory: "Drainage", sourceRef: "Negative grade slopes toward house" },
+    ];
+    const tasks = runReasoningEngine(pp, [], []);
+    const drainageTasks = tasks.filter((t) => t.title.toLowerCase().includes("grading") || t.title.toLowerCase().includes("drainage"));
+    expect(drainageTasks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("diverse report phrasings: 'wood rot at trim boards' triggers repair", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.issuesDetected = [
+      { description: "Wood rot at trim boards along east elevation", severity: "moderate", systemCategory: "Siding", sourceRef: "Wood rot at trim boards" },
+    ];
+    const tasks = runReasoningEngine(pp, [], []);
+    const rotTasks = tasks.filter((t) => t.title.toLowerCase().includes("wood"));
+    expect(rotTasks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("diverse report phrasings: 'polybutylene piping throughout' triggers known-risk eval", () => {
+    const pp = emptyPreProcessorOutput();
+    pp.issuesDetected = [
+      { description: "Polybutylene piping throughout the home supply lines", severity: "critical", systemCategory: "Plumbing", sourceRef: "Polybutylene piping throughout" },
+    ];
+    const tasks = runReasoningEngine(pp, [], []);
+    const riskTasks = tasks.filter((t) => t.inferenceReason?.includes("Known-risk"));
+    expect(riskTasks.length).toBeGreaterThanOrEqual(1);
+  });
+});

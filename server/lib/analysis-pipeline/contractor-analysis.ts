@@ -14,32 +14,130 @@ import type {
 const CATEGORY_ALIASES: Record<string, string> = {
   "roof": "Roof",
   "roofing": "Roof",
+  "roof covering": "Roof",
+  "roof structure": "Roof",
+  "chimney": "Roof",
+  "flashing": "Roof",
+  "gutters": "Roof",
+  "gutter": "Roof",
+  "downspout": "Roof",
+  "downspouts": "Roof",
   "hvac": "HVAC",
   "heating": "HVAC",
   "cooling": "HVAC",
   "air conditioning": "HVAC",
+  "air conditioner": "HVAC",
+  "ac": "HVAC",
+  "a/c": "HVAC",
   "furnace": "HVAC",
+  "heat pump": "HVAC",
+  "boiler": "HVAC",
+  "ductwork": "HVAC",
+  "ducts": "HVAC",
+  "thermostat": "HVAC",
+  "mini split": "HVAC",
   "plumbing": "Plumbing",
+  "pipes": "Plumbing",
+  "piping": "Plumbing",
+  "water supply": "Plumbing",
+  "water distribution": "Plumbing",
+  "drain": "Plumbing",
+  "drains": "Plumbing",
+  "waste": "Plumbing",
+  "sewer": "Plumbing",
+  "septic": "Plumbing",
+  "faucet": "Plumbing",
+  "fixture": "Plumbing",
+  "toilet": "Plumbing",
   "electrical": "Electrical",
   "wiring": "Electrical",
+  "electric": "Electrical",
+  "panel": "Electrical",
+  "breaker": "Electrical",
+  "circuit": "Electrical",
+  "receptacle": "Electrical",
+  "outlet": "Electrical",
+  "switch": "Electrical",
+  "gfci": "Electrical",
+  "afci": "Electrical",
   "foundation": "Foundation",
+  "basement": "Foundation",
+  "crawl space": "Foundation",
+  "crawlspace": "Foundation",
+  "slab": "Foundation",
+  "structural": "Foundation",
+  "structure": "Foundation",
+  "footing": "Foundation",
   "siding": "Siding",
   "exterior": "Siding",
   "siding/exterior": "Siding",
+  "stucco": "Siding",
+  "brick": "Siding",
+  "masonry": "Siding",
+  "cladding": "Siding",
+  "trim": "Siding",
+  "fascia": "Siding",
+  "soffit": "Siding",
+  "eaves": "Siding",
   "windows": "Windows",
+  "window": "Windows",
+  "glazing": "Windows",
   "doors": "Doors",
+  "door": "Doors",
+  "entry": "Doors",
   "appliances": "Appliances",
+  "appliance": "Appliances",
+  "kitchen": "Appliances",
+  "range": "Appliances",
+  "oven": "Appliances",
+  "dishwasher": "Appliances",
+  "refrigerator": "Appliances",
+  "microwave": "Appliances",
+  "disposal": "Appliances",
   "garage": "Garage",
+  "garage door": "Garage",
+  "carport": "Garage",
   "deck": "Deck",
+  "patio": "Deck",
+  "porch": "Deck",
+  "balcony": "Deck",
+  "pergola": "Deck",
   "landscaping": "Landscaping",
+  "grading": "Landscaping",
+  "yard": "Landscaping",
+  "lot": "Landscaping",
   "water heater": "Water Heater",
   "water_heater": "Water Heater",
+  "hot water": "Water Heater",
+  "hot water heater": "Water Heater",
+  "tankless": "Water Heater",
   "insulation": "Insulation",
+  "attic": "Insulation",
+  "ventilation": "Insulation",
+  "vapor barrier": "Insulation",
   "solar": "Solar",
+  "solar panel": "Solar",
+  "photovoltaic": "Solar",
   "drainage": "Drainage",
+  "grading/drainage": "Drainage",
+  "sump": "Drainage",
+  "sump pump": "Drainage",
+  "french drain": "Drainage",
   "pest": "Pest",
-  "gutters": "Roof",
-  "gutter": "Roof",
+  "termite": "Pest",
+  "insect": "Pest",
+  "rodent": "Pest",
+  "wildlife": "Pest",
+  "pool": "Pool",
+  "swimming pool": "Pool",
+  "spa": "Pool",
+  "hot tub": "Pool",
+  "fireplace": "Other",
+  "chimney flue": "Other",
+  "intercom": "Other",
+  "security": "Other",
+  "smoke detector": "Other",
+  "co detector": "Other",
   "other": "Other",
 };
 
@@ -77,29 +175,37 @@ function matchSystem(
 function classifyTaskCategory(description: string, issue?: { severity?: string }): TaskCategory {
   const lower = description.toLowerCase();
 
-  if (/replac|end of life|swap out|upgrade/.test(lower)) return "Replacement";
-  if (/repair|fix|patch|seal|caulk|tighten/.test(lower)) return "Repair";
-  if (/inspect|check|evaluat|assess|monitor|review/.test(lower)) return "Inspection";
-  if (/improv|enhanc|add|install new|upgrad/.test(lower)) return "Improvement";
-  if (/clean|maintain|service|flush|filter|lubricate|tune/.test(lower)) return "Maintenance";
+  if (/replac|end of life|swap out|beyond\s+(useful|repair)|needs?\s+new|install\s+new|obsolete|no\s+longer\s+(function|service)|past\s+(its|their)\s+life/.test(lower)) return "Replacement";
+  if (/repair|fix|patch|seal|caulk|tighten|correct|restor|resolv|address|mend|remedy|re.?attach|re.?secur|re.?fasten|damaged|broken|crack|leak|rot|deteriorat|defective|deficien|fail|malfunction|not\s+(function|work|operat)|faulty/.test(lower)) return "Repair";
+  if (/inspect|check|evaluat|assess|monitor|review|examin|investigat|determin|test|verify|survey|analyz|diagnos|identify|consult|profession|licensed|certif|qualified|re.?evaluat|further\s+(review|analysis|investigation)/.test(lower)) return "Inspection";
+  if (/improv|enhanc|add|install\s+new|upgrad|moderniz|retrofit|update|expand|extend|increase|optimize|boost/.test(lower)) return "Improvement";
+  if (/clean|maintain|service|flush|filter|lubricate|tune|adjust|drain|clear|wash|vacuum|debris|trim|prune|paint|stain|treat|preserve|protect|prevent|routine|regular|annual|seasonal|grease|oil/.test(lower)) return "Maintenance";
   if (issue?.severity === "critical") return "Repair";
+  if (issue?.severity === "moderate") return "Repair";
 
   return "Maintenance";
 }
 
 function assignPriority(
   severity?: string,
-  timing?: string
+  timing?: string,
+  description?: string
 ): "now" | "soon" | "later" | "monitor" {
   if (severity === "critical") return "now";
+  if (description) {
+    const dl = description.toLowerCase();
+    if (/immediate|urgent|asap|safety\s+hazard|fire\s+hazard|dangerous|shock|carbon\s+monoxide|gas\s+leak|active\s+leak/.test(dl)) return "now";
+  }
   if (severity === "moderate") return "soon";
   if (timing) {
     const lower = timing.toLowerCase();
-    if (/immediate|urgent|asap/.test(lower)) return "now";
-    if (/soon|within.*month|next.*month/.test(lower)) return "soon";
-    if (/monitor|watch|observe/.test(lower)) return "monitor";
+    if (/immediate|urgent|asap|right\s+away|as\s+soon/.test(lower)) return "now";
+    if (/soon|within.*month|next.*month|short\s+term|near\s+term|promptly|timely/.test(lower)) return "soon";
+    if (/monitor|watch|observe|keep.*eye|track|ongoing|periodic/.test(lower)) return "monitor";
+    if (/long\s+term|eventual|when\s+(budget|convenient|possible)|plan\s+for|future/.test(lower)) return "later";
   }
   if (severity === "minor") return "later";
+  if (severity === "informational") return "later";
   return "later";
 }
 
@@ -108,10 +214,10 @@ function assignDiyLevel(
   safetyLevel?: string
 ): "DIY-Safe" | "Caution" | "Pro-Only" {
   const lower = description.toLowerCase();
-  if (/licensed|professional|electrician|plumber|structural|gas|asbestos|mold|panel/.test(lower)) {
+  if (/licensed|professional|electrician|plumber|structural|gas\s+(line|leak|valve|meter)|asbestos|mold|panel|breaker|wire\s*(?:ing)?|circuit|hvac\s+tech|roofer|mason|engineer|septic|well\s+pump|foundation|load.?bearing|permit\s+required|code\s+(violation|compliance|update)|polybutylene|knob.?and.?tube|federal\s+pacific|refrigerant/.test(lower)) {
     return "Pro-Only";
   }
-  if (/caution|careful|risk|height|ladder|chemical/.test(lower)) {
+  if (/caution|careful|risk|height|ladder|chemical|roof\s+(access|work)|attic|crawl\s*space|elevated|overhead|power\s+tool|heavy|confined\s+space|corrosive|toxic|pressure|steam|hot\s+water|electrical\s+(work|repair)/.test(lower)) {
     return "Caution";
   }
   if (safetyLevel === "critical" || safetyLevel === "warning") {
@@ -188,7 +294,7 @@ export function runContractorAnalysis(input: ContractorAnalysisInput): Contracto
 
   for (const issue of pp.issuesDetected) {
     const matched = matchSystem(issue.systemCategory, existingSystems);
-    const priority = assignPriority(issue.severity);
+    const priority = assignPriority(issue.severity, undefined, issue.description);
     const taskCategory = classifyTaskCategory(issue.description, issue);
     const diyLevel = assignDiyLevel(issue.description);
     const title = issue.description.length > 80
@@ -246,7 +352,7 @@ export function runContractorAnalysis(input: ContractorAnalysisInput): Contracto
   for (const rec of pp.maintenanceRecommendations) {
     const matched = matchSystem(rec.systemCategory, existingSystems);
     const taskCategory = classifyTaskCategory(rec.description);
-    const priority = assignPriority(undefined, rec.timing);
+    const priority = assignPriority(undefined, rec.timing, rec.description);
     const diyLevel = assignDiyLevel(rec.description);
     const title = rec.description.length > 80
       ? rec.description.slice(0, 77) + "..."
