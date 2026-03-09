@@ -106,10 +106,10 @@ function DetailSkeleton() {
 }
 
 interface PaintColor {
-  name: string;
+  room: string;
+  wall: string;
   color: string;
-  brand: string;
-  code: string;
+  hex: string;
 }
 
 function parsePaintData(notes: string | null | undefined): { colors: PaintColor[]; textNotes: string } {
@@ -119,12 +119,12 @@ function parsePaintData(notes: string | null | undefined): { colors: PaintColor[
     const colors: PaintColor[] = [];
     if (parsed?.paintColors && Array.isArray(parsed.paintColors)) {
       for (const entry of parsed.paintColors) {
-        if (entry && typeof entry.name === "string" && typeof entry.color === "string") {
+        if (entry && typeof entry === "object") {
           colors.push({
-            name: entry.name,
-            color: entry.color,
-            brand: typeof entry.brand === "string" ? entry.brand : "",
-            code: typeof entry.code === "string" ? entry.code : "",
+            room: typeof entry.room === "string" ? entry.room : (typeof entry.name === "string" ? entry.name : ""),
+            wall: typeof entry.wall === "string" ? entry.wall : "",
+            color: typeof entry.color === "string" && !entry.color.startsWith("#") ? entry.color : (typeof entry.brand === "string" ? entry.brand : ""),
+            hex: typeof entry.hex === "string" ? entry.hex : (typeof entry.color === "string" && entry.color.startsWith("#") ? entry.color : (typeof entry.code === "string" ? entry.code : "")),
           });
         }
       }
@@ -140,20 +140,6 @@ function serializePaintData(colors: PaintColor[], textNotes: string): string {
   return JSON.stringify({ paintColors: colors, textNotes });
 }
 
-function isValidHex(hex: string): boolean {
-  return /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(hex);
-}
-
-function getContrastColor(hex: string): string {
-  const c = hex.replace("#", "");
-  const full = c.length === 3 ? c.split("").map(ch => ch + ch).join("") : c;
-  const r = parseInt(full.substring(0, 2), 16);
-  const g = parseInt(full.substring(2, 4), 16);
-  const b = parseInt(full.substring(4, 6), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.5 ? "#000000" : "#ffffff";
-}
-
 export default function SystemDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
@@ -167,8 +153,7 @@ export default function SystemDetail() {
   const [showCircuitMap, setShowCircuitMap] = useState(false);
   const [paintColors, setPaintColors] = useState<PaintColor[]>([]);
   const [paintTextNotes, setPaintTextNotes] = useState("");
-  const [isEditingPaint, setIsEditingPaint] = useState(false);
-  const [newPaintEntry, setNewPaintEntry] = useState<PaintColor>({ name: "", color: "#ffffff", brand: "", code: "" });
+  const [newPaintEntry, setNewPaintEntry] = useState<PaintColor>({ room: "", wall: "", color: "", hex: "" });
 
   const { data: home, isLoading: homeLoading } = useQuery({
     queryKey: ["home"],
@@ -269,18 +254,20 @@ export default function SystemDetail() {
   });
 
   const handleAddPaintColor = () => {
-    if (!newPaintEntry.name.trim()) {
-      toast({ title: "Name required", description: "Enter a room or wall name.", variant: "destructive" });
+    const hasAnyField = newPaintEntry.room.trim() || newPaintEntry.wall.trim() || newPaintEntry.color.trim() || newPaintEntry.hex.trim();
+    if (!hasAnyField) {
+      toast({ title: "Empty row", description: "Fill in at least one field.", variant: "destructive" });
       return;
     }
-    if (!isValidHex(newPaintEntry.color)) {
-      toast({ title: "Invalid color", description: "Enter a valid hex color (e.g. #f5e6d3).", variant: "destructive" });
-      return;
-    }
-    const updated = [...paintColors, { ...newPaintEntry, name: newPaintEntry.name.trim(), brand: newPaintEntry.brand.trim(), code: newPaintEntry.code.trim() }];
+    const updated = [...paintColors, {
+      room: newPaintEntry.room.trim(),
+      wall: newPaintEntry.wall.trim(),
+      color: newPaintEntry.color.trim(),
+      hex: newPaintEntry.hex.trim(),
+    }];
     setPaintColors(updated);
     paintMutation.mutate(updated);
-    setNewPaintEntry({ name: "", color: "#ffffff", brand: "", code: "" });
+    setNewPaintEntry({ room: "", wall: "", color: "", hex: "" });
   };
 
   const handleRemovePaintColor = (index: number) => {
@@ -758,132 +745,97 @@ export default function SystemDetail() {
               <div className="flex justify-between items-center">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Palette className="h-4 w-4" />
-                  Paint Colors
-                  {paintColors.length > 0 && (
-                    <Badge variant="secondary" className="ml-1" data-testid="badge-paint-count">{paintColors.length}</Badge>
-                  )}
+                  Add Paint Colors
                 </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsEditingPaint(!isEditingPaint)}
-                  data-testid="button-toggle-add-paint"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Color
-                </Button>
               </div>
             </CardHeader>
             <CardContent>
-              {isEditingPaint && (
-                <div className="mb-4 p-4 rounded-lg border border-dashed border-primary/30 bg-primary/5 space-y-3" data-testid="form-add-paint">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="paint-name" className="text-xs">Room / Wall</Label>
-                      <Input
-                        id="paint-name"
-                        value={newPaintEntry.name}
-                        onChange={(e) => setNewPaintEntry({ ...newPaintEntry, name: e.target.value })}
-                        placeholder="e.g., Living Room, Master Bedroom Accent"
-                        data-testid="input-paint-name"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="paint-color" className="text-xs">Hex Color</Label>
-                      <div className="flex gap-2">
-                        <input
-                          type="color"
-                          value={newPaintEntry.color}
-                          onChange={(e) => setNewPaintEntry({ ...newPaintEntry, color: e.target.value })}
-                          className="h-9 w-12 rounded border cursor-pointer"
-                          data-testid="input-paint-color-picker"
-                        />
+              <div className="overflow-x-auto" data-testid="paint-colors-table">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">Room</th>
+                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">Wall</th>
+                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">Color</th>
+                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">Hex</th>
+                      <th className="w-8 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paintColors.map((entry, index) => (
+                      <tr key={index} className="group border-b border-border/50 hover:bg-muted/30" data-testid={`paint-color-row-${index}`}>
+                        <td className="py-2 pr-3" data-testid={`text-paint-room-${index}`}>{entry.room || <span className="text-muted-foreground/50">—</span>}</td>
+                        <td className="py-2 pr-3" data-testid={`text-paint-wall-${index}`}>{entry.wall || <span className="text-muted-foreground/50">—</span>}</td>
+                        <td className="py-2 pr-3" data-testid={`text-paint-color-${index}`}>{entry.color || <span className="text-muted-foreground/50">—</span>}</td>
+                        <td className="py-2 pr-3 font-mono text-xs" data-testid={`text-paint-hex-${index}`}>{entry.hex || <span className="text-muted-foreground/50">—</span>}</td>
+                        <td className="py-2">
+                          <button
+                            onClick={() => handleRemovePaintColor(index)}
+                            className="h-6 w-6 rounded-full hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                            data-testid={`button-remove-paint-${index}`}
+                          >
+                            <X className="h-3 w-3 text-destructive" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="border-b border-dashed border-primary/20" data-testid="paint-new-row">
+                      <td className="py-2 pr-2">
                         <Input
-                          id="paint-color"
+                          value={newPaintEntry.room}
+                          onChange={(e) => setNewPaintEntry({ ...newPaintEntry, room: e.target.value })}
+                          placeholder="e.g., Living Room"
+                          className="h-8 text-sm"
+                          data-testid="input-paint-room"
+                        />
+                      </td>
+                      <td className="py-2 pr-2">
+                        <Input
+                          value={newPaintEntry.wall}
+                          onChange={(e) => setNewPaintEntry({ ...newPaintEntry, wall: e.target.value })}
+                          placeholder="e.g., Accent Wall"
+                          className="h-8 text-sm"
+                          data-testid="input-paint-wall"
+                        />
+                      </td>
+                      <td className="py-2 pr-2">
+                        <Input
                           value={newPaintEntry.color}
                           onChange={(e) => setNewPaintEntry({ ...newPaintEntry, color: e.target.value })}
-                          placeholder="#f5e6d3"
-                          className="font-mono"
+                          placeholder="e.g., Veranda White"
+                          className="h-8 text-sm"
+                          data-testid="input-paint-color"
+                        />
+                      </td>
+                      <td className="py-2 pr-2">
+                        <Input
+                          value={newPaintEntry.hex}
+                          onChange={(e) => setNewPaintEntry({ ...newPaintEntry, hex: e.target.value })}
+                          placeholder="e.g., #f5e6d3"
+                          className="h-8 text-sm font-mono"
                           data-testid="input-paint-hex"
                         />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="paint-brand" className="text-xs">Brand (optional)</Label>
-                      <Input
-                        id="paint-brand"
-                        value={newPaintEntry.brand}
-                        onChange={(e) => setNewPaintEntry({ ...newPaintEntry, brand: e.target.value })}
-                        placeholder="e.g., Sherwin-Williams, Benjamin Moore"
-                        data-testid="input-paint-brand"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="paint-code" className="text-xs">Color Code (optional)</Label>
-                      <Input
-                        id="paint-code"
-                        value={newPaintEntry.code}
-                        onChange={(e) => setNewPaintEntry({ ...newPaintEntry, code: e.target.value })}
-                        placeholder="e.g., SW 7029, OC-17"
-                        data-testid="input-paint-code"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2 pt-1">
-                    <Button size="sm" onClick={handleAddPaintColor} disabled={paintMutation.isPending} data-testid="button-save-paint-color">
-                      <Save className="h-4 w-4 mr-2" />
-                      {paintMutation.isPending ? "Saving..." : "Add"}
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setIsEditingPaint(false)} data-testid="button-cancel-add-paint">
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {paintColors.length === 0 ? (
-                <p className="text-sm text-muted-foreground" data-testid="text-no-paint-colors">
-                  No paint colors recorded yet. Click "Add Color" to start tracking your home's paint palette.
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="paint-colors-grid">
-                  {paintColors.map((entry, index) => (
-                    <div
-                      key={index}
-                      className="group relative flex items-stretch rounded-lg border overflow-hidden"
-                      data-testid={`paint-color-entry-${index}`}
-                    >
-                      <div
-                        className="w-16 shrink-0 flex items-center justify-center"
-                        style={{ backgroundColor: isValidHex(entry.color) ? entry.color : "#e5e7eb" }}
-                      >
-                        <span
-                          className="text-[10px] font-mono font-bold opacity-80"
-                          style={{ color: isValidHex(entry.color) ? getContrastColor(entry.color) : "#000" }}
+                      </td>
+                      <td className="py-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0"
+                          onClick={handleAddPaintColor}
+                          disabled={paintMutation.isPending}
+                          data-testid="button-add-paint-row"
                         >
-                          {entry.color.toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex-1 p-3 min-w-0">
-                        <p className="font-medium text-sm truncate" data-testid={`text-paint-name-${index}`}>{entry.name}</p>
-                        {(entry.brand || entry.code) && (
-                          <p className="text-xs text-muted-foreground truncate" data-testid={`text-paint-detail-${index}`}>
-                            {[entry.brand, entry.code].filter(Boolean).join(" \u2022 ")}
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => handleRemovePaintColor(index)}
-                        className="absolute top-1 right-1 h-6 w-6 rounded-full bg-background/80 border opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                        data-testid={`button-remove-paint-${index}`}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              {paintColors.length === 0 && (
+                <p className="text-xs text-muted-foreground mt-3" data-testid="text-no-paint-colors">
+                  Fill in any fields above and click + to add a row.
+                </p>
               )}
             </CardContent>
           </Card>
