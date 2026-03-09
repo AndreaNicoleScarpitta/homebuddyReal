@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "220054a640e514d0bb5be4af7eb9b54f2205b2f6de6a85bd1561f0b0b06d6013"
     },
+    "app-store-screenshots": {
+      "source": "skill-zero/s",
+      "sourceType": "github",
+      "computedHash": "b8b97793de01e6a486481e203f1d44116c7b058ea6777e7d58f10ff4df11f80f"
+    },
     "audit-website": {
       "source": "squirrelscan/skills",
       "sourceType": "github",
