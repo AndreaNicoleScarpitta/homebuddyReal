@@ -32,6 +32,9 @@ import {
   ClipboardList,
   Landmark,
   CheckCircle2,
+  Paintbrush,
+  Plus,
+  Palette,
 } from "lucide-react";
 import { Link, useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -57,6 +60,7 @@ const categoryIcons: Record<string, any> = {
   "Water Heater": Flame,
   "Landscaping": Trees,
   "Pest": Bug,
+  "Paint": Paintbrush,
   "Other": HelpCircle,
 };
 
@@ -73,6 +77,7 @@ const notesPlaceholders: Record<string, string> = {
   "Water Heater": "e.g., 50-gallon tank, Serial #WH789, anode rod replaced 2023...",
   "Landscaping": "e.g., Rain Bird irrigation, 6 zones, winterized each November...",
   "Pest": "e.g., Contract #12345, quarterly treatments, termite bond renewal date 3/2026...",
+  "Paint": "e.g., Sherwin-Williams Agreeable Gray SW 7029 in living room, Benjamin Moore White Dove OC-17 for trim...",
 };
 
 const taskStatusColors: Record<string, string> = {
@@ -100,6 +105,55 @@ function DetailSkeleton() {
   );
 }
 
+interface PaintColor {
+  name: string;
+  color: string;
+  brand: string;
+  code: string;
+}
+
+function parsePaintData(notes: string | null | undefined): { colors: PaintColor[]; textNotes: string } {
+  if (!notes) return { colors: [], textNotes: "" };
+  try {
+    const parsed = JSON.parse(notes);
+    const colors: PaintColor[] = [];
+    if (parsed?.paintColors && Array.isArray(parsed.paintColors)) {
+      for (const entry of parsed.paintColors) {
+        if (entry && typeof entry.name === "string" && typeof entry.color === "string") {
+          colors.push({
+            name: entry.name,
+            color: entry.color,
+            brand: typeof entry.brand === "string" ? entry.brand : "",
+            code: typeof entry.code === "string" ? entry.code : "",
+          });
+        }
+      }
+    }
+    const textNotes = typeof parsed?.textNotes === "string" ? parsed.textNotes : "";
+    return { colors, textNotes };
+  } catch {
+    return { colors: [], textNotes: notes || "" };
+  }
+}
+
+function serializePaintData(colors: PaintColor[], textNotes: string): string {
+  return JSON.stringify({ paintColors: colors, textNotes });
+}
+
+function isValidHex(hex: string): boolean {
+  return /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(hex);
+}
+
+function getContrastColor(hex: string): string {
+  const c = hex.replace("#", "");
+  const full = c.length === 3 ? c.split("").map(ch => ch + ch).join("") : c;
+  const r = parseInt(full.substring(0, 2), 16);
+  const g = parseInt(full.substring(2, 4), 16);
+  const b = parseInt(full.substring(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5 ? "#000000" : "#ffffff";
+}
+
 export default function SystemDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
@@ -111,6 +165,10 @@ export default function SystemDetail() {
   const [editNotes, setEditNotes] = useState("");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [showCircuitMap, setShowCircuitMap] = useState(false);
+  const [paintColors, setPaintColors] = useState<PaintColor[]>([]);
+  const [paintTextNotes, setPaintTextNotes] = useState("");
+  const [isEditingPaint, setIsEditingPaint] = useState(false);
+  const [newPaintEntry, setNewPaintEntry] = useState<PaintColor>({ name: "", color: "#ffffff", brand: "", code: "" });
 
   const { data: home, isLoading: homeLoading } = useQuery({
     queryKey: ["home"],
@@ -154,7 +212,14 @@ export default function SystemDetail() {
         recurrenceInterval: system.recurrenceInterval || "",
         cadence: system.cadence || "",
       });
-      setEditNotes(system.notes || "");
+      if (system.category === "Paint") {
+        const { colors, textNotes } = parsePaintData(system.notes);
+        setPaintColors(colors);
+        setPaintTextNotes(textNotes);
+        setEditNotes(textNotes);
+      } else {
+        setEditNotes(system.notes || "");
+      }
     }
   }, [system]);
 
@@ -171,7 +236,14 @@ export default function SystemDetail() {
   });
 
   const notesMutation = useMutation({
-    mutationFn: (notes: string) => updateSystem(id!, { notes }),
+    mutationFn: (text: string) => {
+      if (system?.category === "Paint") {
+        const notes = serializePaintData(paintColors, text);
+        setPaintTextNotes(text);
+        return updateSystem(id!, { notes });
+      }
+      return updateSystem(id!, { notes: text });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["systems"] });
       setIsEditingNotes(false);
@@ -181,6 +253,41 @@ export default function SystemDetail() {
       toast({ title: "Error", description: "Could not save notes.", variant: "destructive" });
     },
   });
+
+  const paintMutation = useMutation({
+    mutationFn: (colors: PaintColor[]) => {
+      const notes = serializePaintData(colors, paintTextNotes);
+      return updateSystem(id!, { notes });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["systems"] });
+      toast({ title: "Paint colors saved" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not save paint colors.", variant: "destructive" });
+    },
+  });
+
+  const handleAddPaintColor = () => {
+    if (!newPaintEntry.name.trim()) {
+      toast({ title: "Name required", description: "Enter a room or wall name.", variant: "destructive" });
+      return;
+    }
+    if (!isValidHex(newPaintEntry.color)) {
+      toast({ title: "Invalid color", description: "Enter a valid hex color (e.g. #f5e6d3).", variant: "destructive" });
+      return;
+    }
+    const updated = [...paintColors, { ...newPaintEntry, name: newPaintEntry.name.trim(), brand: newPaintEntry.brand.trim(), code: newPaintEntry.code.trim() }];
+    setPaintColors(updated);
+    paintMutation.mutate(updated);
+    setNewPaintEntry({ name: "", color: "#ffffff", brand: "", code: "" });
+  };
+
+  const handleRemovePaintColor = (index: number) => {
+    const updated = paintColors.filter((_, i) => i !== index);
+    setPaintColors(updated);
+    paintMutation.mutate(updated);
+  };
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteSystem(id!),
@@ -570,7 +677,7 @@ export default function SystemDetail() {
                 Notes
               </CardTitle>
               {!isEditingNotes ? (
-                <Button variant="ghost" size="sm" onClick={() => { setEditNotes(system.notes || ""); setIsEditingNotes(true); }} data-testid="button-edit-notes">
+                <Button variant="ghost" size="sm" onClick={() => { setEditNotes(system.category === "Paint" ? paintTextNotes : (system.notes || "")); setIsEditingNotes(true); }} data-testid="button-edit-notes">
                   <Pencil className="h-4 w-4 mr-2" />
                   Edit
                 </Button>
@@ -599,7 +706,7 @@ export default function SystemDetail() {
               />
             ) : (
               <p className="text-sm text-muted-foreground whitespace-pre-wrap" data-testid="text-notes">
-                {system.notes || "No notes yet. Click Edit to add notes about this system."}
+                {(system.category === "Paint" ? paintTextNotes : system.notes) || "No notes yet. Click Edit to add notes about this system."}
               </p>
             )}
           </CardContent>
@@ -643,6 +750,143 @@ export default function SystemDetail() {
             isOpen={showCircuitMap}
             onClose={() => setShowCircuitMap(false)}
           />
+        )}
+
+        {system.category === "Paint" && (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Palette className="h-4 w-4" />
+                  Paint Colors
+                  {paintColors.length > 0 && (
+                    <Badge variant="secondary" className="ml-1" data-testid="badge-paint-count">{paintColors.length}</Badge>
+                  )}
+                </CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsEditingPaint(!isEditingPaint)}
+                  data-testid="button-toggle-add-paint"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Color
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isEditingPaint && (
+                <div className="mb-4 p-4 rounded-lg border border-dashed border-primary/30 bg-primary/5 space-y-3" data-testid="form-add-paint">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="paint-name" className="text-xs">Room / Wall</Label>
+                      <Input
+                        id="paint-name"
+                        value={newPaintEntry.name}
+                        onChange={(e) => setNewPaintEntry({ ...newPaintEntry, name: e.target.value })}
+                        placeholder="e.g., Living Room, Master Bedroom Accent"
+                        data-testid="input-paint-name"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="paint-color" className="text-xs">Hex Color</Label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={newPaintEntry.color}
+                          onChange={(e) => setNewPaintEntry({ ...newPaintEntry, color: e.target.value })}
+                          className="h-9 w-12 rounded border cursor-pointer"
+                          data-testid="input-paint-color-picker"
+                        />
+                        <Input
+                          id="paint-color"
+                          value={newPaintEntry.color}
+                          onChange={(e) => setNewPaintEntry({ ...newPaintEntry, color: e.target.value })}
+                          placeholder="#f5e6d3"
+                          className="font-mono"
+                          data-testid="input-paint-hex"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="paint-brand" className="text-xs">Brand (optional)</Label>
+                      <Input
+                        id="paint-brand"
+                        value={newPaintEntry.brand}
+                        onChange={(e) => setNewPaintEntry({ ...newPaintEntry, brand: e.target.value })}
+                        placeholder="e.g., Sherwin-Williams, Benjamin Moore"
+                        data-testid="input-paint-brand"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="paint-code" className="text-xs">Color Code (optional)</Label>
+                      <Input
+                        id="paint-code"
+                        value={newPaintEntry.code}
+                        onChange={(e) => setNewPaintEntry({ ...newPaintEntry, code: e.target.value })}
+                        placeholder="e.g., SW 7029, OC-17"
+                        data-testid="input-paint-code"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <Button size="sm" onClick={handleAddPaintColor} disabled={paintMutation.isPending} data-testid="button-save-paint-color">
+                      <Save className="h-4 w-4 mr-2" />
+                      {paintMutation.isPending ? "Saving..." : "Add"}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setIsEditingPaint(false)} data-testid="button-cancel-add-paint">
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {paintColors.length === 0 ? (
+                <p className="text-sm text-muted-foreground" data-testid="text-no-paint-colors">
+                  No paint colors recorded yet. Click "Add Color" to start tracking your home's paint palette.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="paint-colors-grid">
+                  {paintColors.map((entry, index) => (
+                    <div
+                      key={index}
+                      className="group relative flex items-stretch rounded-lg border overflow-hidden"
+                      data-testid={`paint-color-entry-${index}`}
+                    >
+                      <div
+                        className="w-16 shrink-0 flex items-center justify-center"
+                        style={{ backgroundColor: isValidHex(entry.color) ? entry.color : "#e5e7eb" }}
+                      >
+                        <span
+                          className="text-[10px] font-mono font-bold opacity-80"
+                          style={{ color: isValidHex(entry.color) ? getContrastColor(entry.color) : "#000" }}
+                        >
+                          {entry.color.toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="flex-1 p-3 min-w-0">
+                        <p className="font-medium text-sm truncate" data-testid={`text-paint-name-${index}`}>{entry.name}</p>
+                        {(entry.brand || entry.code) && (
+                          <p className="text-xs text-muted-foreground truncate" data-testid={`text-paint-detail-${index}`}>
+                            {[entry.brand, entry.code].filter(Boolean).join(" \u2022 ")}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleRemovePaintColor(index)}
+                        className="absolute top-1 right-1 h-6 w-6 rounded-full bg-background/80 border opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                        data-testid={`button-remove-paint-${index}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         <Card>

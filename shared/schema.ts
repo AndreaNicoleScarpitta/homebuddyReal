@@ -62,6 +62,7 @@ export const systemCategories = [
   "Water Heater",
   "Landscaping",
   "Pest",
+  "Paint",
   "Other"
 ] as const;
 export type SystemCategory = typeof systemCategories[number];

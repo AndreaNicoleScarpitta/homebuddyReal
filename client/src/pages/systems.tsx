@@ -26,6 +26,7 @@ import {
   ChevronRight,
   Package,
   Landmark,
+  Paintbrush,
 } from "lucide-react";
 import {
   Select,
@@ -55,6 +56,7 @@ const categoryIcons: Record<string, any> = {
   "Water Heater": Flame,
   Landscaping: Trees,
   Pest: Bug,
+  Paint: Paintbrush,
   Other: HelpCircle,
 };
 

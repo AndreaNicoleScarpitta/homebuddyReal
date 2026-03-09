@@ -34,7 +34,8 @@ import {
   X,
   ListChecks,
   RefreshCw,
-  Landmark
+  Landmark,
+  Paintbrush,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createSystem, identifySystemFromImage, createTasksBatch, suggestMaintenanceTasks } from "@/lib/api";
@@ -66,6 +67,7 @@ const categoryIcons: Record<string, any> = {
   "Water Heater": Flame,
   "Landscaping": Trees,
   "Pest": Bug,
+  "Paint": Paintbrush,
   "Other": HelpCircle,
 };
 
@@ -82,6 +84,7 @@ const categoryHints: Record<string, string> = {
   "Water Heater": "Garage or utility room",
   "Landscaping": "Irrigation systems, outdoor lighting",
   "Pest": "Recent pest treatments or contracts",
+  "Paint": "Track paint colors for each room and wall",
   "Other": "Any other home system you want to track",
 };
 
@@ -98,6 +101,7 @@ const notesPlaceholders: Record<string, string> = {
   "Water Heater": "e.g., 50-gallon tank, Serial #WH789, anode rod replaced 2023...",
   "Landscaping": "e.g., Rain Bird irrigation, 6 zones, winterized each November...",
   "Pest": "e.g., Contract #12345, quarterly treatments, termite bond renewal date 3/2026...",
+  "Paint": "e.g., Sherwin-Williams Agreeable Gray SW 7029 in living room, Benjamin Moore White Dove OC-17 for trim...",
 };
 
 const notesHints: Record<string, string> = {
@@ -113,6 +117,7 @@ const notesHints: Record<string, string> = {
   "Water Heater": "Note the tank size, fuel type, serial number, and anode rod replacement date.",
   "Landscaping": "Record irrigation zones, controller model, and winterization schedule.",
   "Pest": "Include contract number, treatment schedule, and any active warranties or bonds.",
+  "Paint": "Record the brand, color name, and color code for each room so you can get exact matches for touch-ups.",
 };
 
 const maintenanceTemplates: Record<string, SuggestedTask[]> = {
