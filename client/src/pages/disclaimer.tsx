@@ -56,7 +56,7 @@ export default function Disclaimer() {
 
   return (
     <Layout>
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="max-w-2xl mx-auto space-y-6 pb-28 md:pb-6">
         <header>
           <div className="flex items-center gap-2 mb-1">
             <ShieldAlert className="h-6 w-6 text-primary" />
@@ -163,7 +163,7 @@ export default function Disclaimer() {
           </div>
         </div>
 
-        <div className="border rounded-lg p-4 bg-background space-y-4">
+        <div className="border rounded-lg p-4 bg-background space-y-4 sticky bottom-16 md:bottom-0 z-10 shadow-lg md:shadow-none md:relative">
           <label
             className="flex items-start gap-3 cursor-pointer select-none"
             data-testid="disclaimer-checkbox-label"

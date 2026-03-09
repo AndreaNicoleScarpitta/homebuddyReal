@@ -14,7 +14,15 @@ import {
   FileImage,
   File,
   Download,
+  Eye,
+  X,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -74,19 +82,28 @@ function formatFileSize(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function canPreview(fileType: string | null): boolean {
+  if (!fileType) return false;
+  return fileType.startsWith("image/") || fileType === "application/pdf";
+}
+
 function DocumentRow({
   doc,
   onDelete,
+  onView,
 }: {
   doc: HomeDocument;
   onDelete: (id: number) => void;
+  onView: (doc: HomeDocument) => void;
 }) {
   const Icon = getFileIcon(doc.fileType);
+  const previewable = canPreview(doc.fileType);
 
   return (
     <div
-      className="flex items-center gap-4 p-4 rounded-xl bg-secondary/30 border border-border/50 hover:bg-secondary/50 transition-colors group"
+      className={`flex items-center gap-4 p-4 rounded-xl bg-secondary/30 border border-border/50 hover:bg-secondary/50 transition-colors group ${previewable && doc.objectPath ? "cursor-pointer" : ""}`}
       data-testid={`card-document-${doc.id}`}
+      onClick={() => previewable && doc.objectPath && onView(doc)}
     >
       <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
         <Icon className="h-5 w-5 text-primary" />
@@ -114,7 +131,16 @@ function DocumentRow({
           </span>
         </div>
       </div>
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+        {doc.objectPath && previewable && (
+          <button
+            onClick={() => onView(doc)}
+            className="p-2 text-muted-foreground hover:text-primary transition-colors md:opacity-50 md:group-hover:opacity-100"
+            data-testid={`button-view-${doc.id}`}
+          >
+            <Eye className="h-4 w-4" />
+          </button>
+        )}
         {doc.objectPath && (
           <a
             href={doc.objectPath}
@@ -141,6 +167,7 @@ function DocumentRow({
 export default function Documents() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [uploadCategory, setUploadCategory] = useState<string>("General");
+  const [previewDoc, setPreviewDoc] = useState<HomeDocument | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -295,6 +322,7 @@ export default function Documents() {
                 key={doc.id}
                 doc={doc}
                 onDelete={(id) => setDeleteConfirmId(id)}
+                onView={(d) => setPreviewDoc(d)}
               />
             ))}
           </div>
@@ -331,6 +359,54 @@ export default function Documents() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <Dialog open={!!previewDoc} onOpenChange={(open) => !open && setPreviewDoc(null)}>
+          <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 gap-0">
+            <DialogHeader className="px-6 pt-6 pb-2">
+              <DialogTitle className="flex items-center gap-2 truncate pr-8" data-testid="text-preview-title">
+                <Eye className="h-4 w-4 shrink-0" />
+                <span className="truncate">{previewDoc?.name}</span>
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-hidden px-6 pb-6" data-testid="document-preview-content">
+              {previewDoc?.fileType?.startsWith("image/") && previewDoc.objectPath && (
+                <div className="flex items-center justify-center h-full max-h-[70vh] overflow-auto">
+                  <img
+                    src={previewDoc.objectPath}
+                    alt={previewDoc.name}
+                    className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                    data-testid="img-document-preview"
+                  />
+                </div>
+              )}
+              {previewDoc?.fileType === "application/pdf" && previewDoc.objectPath && (
+                <iframe
+                  src={previewDoc.objectPath}
+                  className="w-full h-[70vh] rounded-lg border"
+                  title={previewDoc.name}
+                  data-testid="iframe-document-preview"
+                />
+              )}
+            </div>
+            <div className="px-6 pb-4 flex justify-end gap-2">
+              {previewDoc?.objectPath && (
+                <a
+                  href={previewDoc.objectPath}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-md border hover:bg-secondary transition-colors"
+                  data-testid="link-preview-download"
+                >
+                  <Download className="h-4 w-4" />
+                  Download
+                </a>
+              )}
+              <Button variant="outline" onClick={() => setPreviewDoc(null)} data-testid="button-close-preview">
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

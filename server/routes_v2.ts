@@ -1893,8 +1893,8 @@ async function extractTextFromImage(
 ): Promise<string> {
   const OpenAI = (await import("openai")).default;
   const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    baseURL: process.env.AI_PROXY_URL,
+    apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+    baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
   });
 
   const base64 = buffer.toString("base64");

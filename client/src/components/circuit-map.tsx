@@ -304,7 +304,7 @@ export function CircuitMapDialog({ homeId, systemId, isOpen, onClose }: CircuitM
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] h-[90vh] sm:h-auto flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2" data-testid="text-circuit-map-title">
               <Zap className="h-5 w-5 text-primary" />
@@ -663,7 +663,7 @@ function AnnotatingView({
         </Button>
       </div>
 
-      <ScrollArea className="max-h-[50vh]">
+      <ScrollArea className="max-h-[60vh]">
         <div className="space-y-2 pr-2">
           {breakers.map((breaker, index) => (
             <div

@@ -35,7 +35,8 @@ export function FieldTooltip({ termSlug, className = "", screenName }: FieldTool
       <TooltipTrigger asChild>
         <button
           type="button"
-          className={`inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 min-w-[28px] min-h-[28px] md:min-w-[22px] md:min-h-[22px] ${className}`}
+          tabIndex={-1}
+          className={`inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors focus:outline-none min-w-[28px] min-h-[28px] md:min-w-[22px] md:min-h-[22px] ${className}`}
           aria-label={`What is ${term.title}?`}
           data-testid={`tooltip-trigger-${termSlug}`}
         >

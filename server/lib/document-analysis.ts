@@ -100,9 +100,32 @@ Rules:
 
 export async function extractTextFromDocument(buffer: Buffer, mimeType: string): Promise<string> {
   if (mimeType === "application/pdf") {
-    const pdfParse = (await import("pdf-parse")).default;
-    const data = await pdfParse(buffer);
-    return data.text;
+    const fs = await import("fs");
+    const os = await import("os");
+    const path = await import("path");
+    const crypto = await import("crypto");
+    const tmpFile = path.join(os.tmpdir(), `homebuddy-pdf-${crypto.randomUUID()}.pdf`);
+    try {
+      fs.writeFileSync(tmpFile, buffer);
+      const mod = await import("pdf-parse");
+      const PDFParseClass = (mod as any).PDFParse;
+      const VerbosityLevel = (mod as any).VerbosityLevel;
+      if (PDFParseClass && typeof PDFParseClass === "function") {
+        const parser = new PDFParseClass({ verbosity: VerbosityLevel?.ERRORS ?? 0, url: tmpFile });
+        await parser.load();
+        const result = await parser.getText();
+        parser.destroy();
+        return result?.text || "";
+      }
+      const fallback = (mod as any).default;
+      if (typeof fallback === "function") {
+        const data = await fallback(buffer);
+        return data.text || "";
+      }
+      throw new Error("PDF parser could not be loaded.");
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch { /* ignore cleanup errors */ }
+    }
   }
 
   if (mimeType === "text/plain" || mimeType === "text/csv" || mimeType === "text/markdown") {
