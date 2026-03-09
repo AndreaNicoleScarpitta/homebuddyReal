@@ -1885,6 +1885,8 @@ import multer from "multer";
 import { runAnalysisPipeline } from "./lib/analysis-pipeline";
 import type { AnalysisResult, SuggestedSystem } from "./lib/analysis-pipeline";
 import { extractTextFromDocument } from "./lib/document-analysis";
+import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage/objectStorage";
+import { homeDocuments } from "@shared/schema";
 
 async function extractTextFromImage(
   buffer: Buffer,
@@ -1997,6 +1999,51 @@ v2Router.post(
           details: extractionErrors,
         });
         return;
+      }
+
+      const homeRow = await db.execute(sql`
+        SELECT legacy_id FROM projection_home WHERE home_id = ${homeId}
+      `);
+      const legacyHomeId = homeRow.rows.length > 0 ? (homeRow.rows[0] as any).legacy_id : null;
+
+      if (legacyHomeId) {
+        const objectService = new ObjectStorageService();
+        for (const file of files) {
+          try {
+            const objectId = crypto.randomUUID();
+            const privateDir = objectService.getPrivateObjectDir();
+            const fullPath = `${privateDir}/uploads/${objectId}`;
+            const parts = fullPath.replace(/^\//, "").split("/");
+            const bucketName = parts[0];
+            const objectName = parts.slice(1).join("/");
+            const bucket = objectStorageClient.bucket(bucketName);
+            const gcsFile = bucket.file(objectName);
+
+            await new Promise<void>((resolve, reject) => {
+              const stream = gcsFile.createWriteStream({
+                resumable: false,
+                contentType: file.mimetype || "application/octet-stream",
+                metadata: { contentType: file.mimetype || "application/octet-stream" },
+              });
+              stream.on("error", reject);
+              stream.on("finish", () => resolve());
+              stream.end(file.buffer);
+            });
+
+            const objectPath = `/objects/uploads/${objectId}`;
+            await db.insert(homeDocuments).values({
+              homeId: legacyHomeId,
+              name: file.originalname,
+              fileType: file.mimetype || null,
+              fileSize: file.size || null,
+              objectPath,
+              category: "General",
+              notes: "Uploaded via Document Analysis",
+            });
+          } catch (docErr) {
+            console.error(`[file-analysis] Failed to save document record for ${file.originalname}:`, docErr);
+          }
+        }
       }
 
       const systemsResult = await db.execute(sql`
