@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { DashboardDemo, ChatDemo, DocumentAnalysisDemo, TaskGenerationDemo } from "@/components/landing-demos";
 import { trackEvent } from "@/lib/analytics";
 import { useEffect } from "react";
+import { Link } from "wouter";
 
 export default function Landing() {
   useEffect(() => {
@@ -52,22 +53,22 @@ export default function Landing() {
             <span className="text-xl font-heading font-bold text-foreground">Home Buddy</span>
           </a>
           <div className="flex items-center gap-3">
-            <a
+            <Link
               href="/login"
               onClick={() => trackEvent('click', 'landing', 'sign_in_header')}
               className="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground no-underline transition-colors"
               data-testid="button-login"
             >
               Sign In
-            </a>
-            <a
+            </Link>
+            <Link
               href="/signup"
               onClick={() => trackEvent('click', 'landing', 'sign_up_header')}
               className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 no-underline transition-colors"
               data-testid="button-signup-header"
             >
               Sign Up Free
-            </a>
+            </Link>
           </div>
         </nav>
       </header>
@@ -101,7 +102,7 @@ export default function Landing() {
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <a
+                  <Link
                     href="/signup"
                     onClick={() => trackEvent('click', 'landing', 'cta_hero')}
                     className="inline-flex items-center justify-center h-14 px-8 text-lg font-medium rounded-md bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 no-underline transition-all hover:shadow-primary/35 hover:shadow-xl"
@@ -109,7 +110,7 @@ export default function Landing() {
                   >
                     Get Started Free
                     <ArrowRight className="ml-2 h-5 w-5" />
-                  </a>
+                  </Link>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
                     <span>No credit card required</span>
@@ -371,7 +372,7 @@ export default function Landing() {
                 Home Buddy is completely free — no ads, no premium tiers, no data selling. Built by homeowners who got tired of forgetting when they last changed the furnace filter.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <a
+                <Link
                   href="/signup"
                   onClick={() => trackEvent('click', 'landing', 'cta_bottom')}
                   className="inline-flex items-center justify-center h-14 px-10 text-lg font-medium rounded-md bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 no-underline transition-all hover:shadow-primary/35 hover:shadow-xl"
@@ -379,7 +380,7 @@ export default function Landing() {
                 >
                   Start Managing Your Home
                   <ArrowRight className="ml-2 h-5 w-5" />
-                </a>
+                </Link>
               </div>
               <p className="text-sm text-muted-foreground">
                 Free forever. Takes 2 minutes to set up.
@@ -415,13 +416,13 @@ export default function Landing() {
               <h4 className="font-heading font-semibold text-foreground mb-3">Links</h4>
               <ul className="space-y-2 text-sm">
                 <li>
-                  <a href="/signup" className="text-muted-foreground hover:text-foreground no-underline transition-colors">Sign Up Free</a>
+                  <Link href="/signup" className="text-muted-foreground hover:text-foreground no-underline transition-colors">Sign Up Free</Link>
                 </li>
                 <li>
-                  <a href="/login" className="text-muted-foreground hover:text-foreground no-underline transition-colors">Sign In</a>
+                  <Link href="/login" className="text-muted-foreground hover:text-foreground no-underline transition-colors">Sign In</Link>
                 </li>
                 <li>
-                  <a href="/terms" onClick={() => trackEvent('click', 'landing', 'footer_terms')} className="text-muted-foreground hover:text-foreground no-underline transition-colors" data-testid="link-footer-terms">Terms & Conditions</a>
+                  <Link href="/terms" onClick={() => trackEvent('click', 'landing', 'footer_terms')} className="text-muted-foreground hover:text-foreground no-underline transition-colors" data-testid="link-footer-terms">Terms & Conditions</Link>
                 </li>
               </ul>
             </div>

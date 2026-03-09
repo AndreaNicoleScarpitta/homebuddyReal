@@ -8,6 +8,7 @@ import { trackEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
+import { Link } from "wouter";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -136,16 +137,16 @@ export default function Login() {
 
           <p className="text-center text-xs text-muted-foreground leading-relaxed pt-4">
             By continuing, you agree to our{" "}
-            <a href="/terms" className="underline hover:text-foreground" data-testid="link-terms">
+            <Link href="/terms" className="underline hover:text-foreground" data-testid="link-terms">
               Terms of Service & Privacy Policy
-            </a>
+            </Link>
           </p>
 
           <p className="text-center text-sm text-muted-foreground pt-2">
             Don't have an account?{" "}
-            <a href="/signup" className="text-primary font-medium hover:underline no-underline" data-testid="link-login-signup">
+            <Link href="/signup" className="text-primary font-medium hover:underline no-underline" data-testid="link-login-signup">
               Sign up free
-            </a>
+            </Link>
           </p>
         </motion.div>
       </div>

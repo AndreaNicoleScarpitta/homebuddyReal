@@ -18,6 +18,7 @@ import {
 import { motion } from "framer-motion";
 import { trackEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 
@@ -86,7 +87,7 @@ export default function Signup() {
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-background to-background dark:from-orange-950/20 dark:via-background dark:to-background">
       <header className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-md border-b border-border/40">
         <nav className="container mx-auto px-6 h-16 flex justify-between items-center">
-          <a href="/" className="flex items-center gap-2 no-underline" data-testid="link-signup-home">
+          <Link href="/" className="flex items-center gap-2 no-underline" data-testid="link-signup-home">
             <img
               src="/images/home-buddy-icon.png"
               alt="Home Buddy logo"
@@ -95,17 +96,17 @@ export default function Signup() {
               height="32"
             />
             <span className="text-xl font-heading font-bold text-foreground">Home Buddy</span>
-          </a>
+          </Link>
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground hidden sm:inline">Already have an account?</span>
-            <a
+            <Link
               href="/login"
               onClick={() => trackEvent("click", "signup", "sign_in_header")}
               className="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-accent no-underline transition-colors"
               data-testid="link-signup-signin"
             >
               Sign In
-            </a>
+            </Link>
           </div>
         </nav>
       </header>
@@ -242,17 +243,17 @@ export default function Signup() {
 
                 <p className="text-center text-xs text-muted-foreground leading-relaxed">
                   By creating an account, you agree to our{" "}
-                  <a href="/terms" className="underline hover:text-foreground" data-testid="link-signup-terms">
+                  <Link href="/terms" className="underline hover:text-foreground" data-testid="link-signup-terms">
                     Terms of Service & Privacy Policy
-                  </a>
+                  </Link>
                 </p>
               </div>
 
               <p className="text-center text-sm text-muted-foreground mt-6">
                 Already have an account?{" "}
-                <a href="/login" className="text-primary font-medium hover:underline no-underline" data-testid="link-signup-login">
+                <Link href="/login" className="text-primary font-medium hover:underline no-underline" data-testid="link-signup-login">
                   Sign in here
-                </a>
+                </Link>
               </p>
             </motion.div>
           </div>
