@@ -1,4 +1,4 @@
-import { Calendar, MessageSquare, Sparkles, FileText, Scan, CalendarClock, Shield, Heart, Zap, ChevronRight, CheckCircle2 } from "lucide-react";
+import { Calendar, MessageSquare, ArrowRight, Sparkles, FileText, Scan, CalendarClock, Shield, Heart, Zap, ChevronRight, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { DashboardDemo, ChatDemo, DocumentAnalysisDemo, TaskGenerationDemo } from "@/components/landing-demos";
 import { trackEvent, trackSlugPageView } from "@/lib/analytics";
@@ -105,9 +105,21 @@ export default function Landing() {
                   Home Buddy builds a personalized maintenance schedule for your home, tells you what's safe to DIY, and catches problems before they become expensive emergencies.
                 </p>
 
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  <span>Free forever. No credit card required.</span>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <a
+                    href="/api/login"
+                    target="_top"
+                    onClick={() => trackEvent('click', 'landing', 'cta_hero')}
+                    className="inline-flex items-center justify-center h-14 px-8 text-lg font-medium rounded-md bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 no-underline transition-all hover:shadow-primary/35 hover:shadow-xl"
+                    data-testid="button-cta-hero"
+                  >
+                    Sign Up Free
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </a>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <span>No credit card required</span>
+                  </div>
                 </div>
               </motion.div>
 
