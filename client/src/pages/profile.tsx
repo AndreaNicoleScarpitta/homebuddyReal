@@ -11,8 +11,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getHome, getNotificationPreferences, updateNotificationPreferences } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { trackEvent, trackSlugPageView } from "@/lib/analytics";
-import { PAGE_SLUGS } from "@/lib/slug-registry";
+import { trackEvent, trackSlugPageView, trackModalOpen } from "@/lib/analytics";
+import { PAGE_SLUGS, MODAL_SLUGS } from "@/lib/slug-registry";
 import { useSearch } from "wouter";
 import { useEffect, useRef } from "react";
 import {
@@ -432,7 +432,7 @@ export default function Profile() {
                     Permanently remove all your home data including systems, maintenance tasks, chat history, budget information, inspection reports, and event history. Your login account will remain active but all stored data will be gone. This cannot be undone.
                   </p>
                 </div>
-                <AlertDialog>
+                <AlertDialog onOpenChange={(open) => { if (open) trackModalOpen(MODAL_SLUGS.deleteAccount); }}>
                   <AlertDialogTrigger asChild>
                     <Button
                       variant="destructive"

@@ -11,7 +11,8 @@ import { DefinitionsProvider } from "@/hooks/use-definitions";
 import { DefinitionsDrawer } from "@/components/definitions-drawer";
 import { useAuth } from "@/hooks/use-auth";
 import { useAnalytics } from "@/hooks/use-analytics";
-import { initGA } from "@/lib/analytics";
+import { initGA, trackSlugPageView } from "@/lib/analytics";
+import { validateUniqueSlugs, PAGE_SLUGS } from "@/lib/slug-registry";
 import { DonationModal } from "@/components/donation-modal";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
@@ -31,6 +32,10 @@ import SystemDetail from "@/pages/system-detail";
 import Disclaimer from "@/pages/disclaimer";
 
 function PublicTermsPage() {
+  useEffect(() => {
+    trackSlugPageView(PAGE_SLUGS.terms);
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card sticky top-0 z-50">
@@ -131,6 +136,9 @@ function App() {
   useEffect(() => {
     if (import.meta.env.VITE_GA_MEASUREMENT_ID) {
       initGA();
+    }
+    if (import.meta.env.DEV) {
+      validateUniqueSlugs();
     }
   }, []);
 

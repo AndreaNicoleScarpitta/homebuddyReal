@@ -43,8 +43,8 @@ import type { V2System, V2Task } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { trackEvent, trackSlugPageView } from "@/lib/analytics";
-import { PAGE_SLUGS } from "@/lib/slug-registry";
+import { trackEvent, trackSlugPageView, trackModalOpen } from "@/lib/analytics";
+import { PAGE_SLUGS, MODAL_SLUGS } from "@/lib/slug-registry";
 import { systemConditions } from "@shared/schema";
 import { CircuitMapDialog } from "@/components/circuit-map";
 
@@ -391,7 +391,7 @@ export default function SystemDetail() {
               Systems
             </Button>
           </Link>
-          <AlertDialog>
+          <AlertDialog onOpenChange={(open) => { if (open) trackModalOpen(MODAL_SLUGS.deleteSystem); }}>
             <AlertDialogTrigger asChild>
               <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" data-testid="button-delete-system">
                 <Trash2 className="h-4 w-4 mr-2" />
