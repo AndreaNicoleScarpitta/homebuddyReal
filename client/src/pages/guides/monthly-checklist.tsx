@@ -160,7 +160,7 @@ export default function MonthlyChecklist() {
             Track It All Automatically
           </h2>
           <p className="text-muted-foreground leading-relaxed">
-            Generic checklists are a great starting point, but every home is different. Home Buddy generates a personalized maintenance schedule based on your specific home systems, appliance ages, and local climate — so you never have to reference a generic checklist again. Sign up free and let your home tell you what it needs.
+            Generic checklists are a great starting point, but every home is different. Home Buddy generates a personalized maintenance schedule based on your specific home systems, appliance ages, and local climate — so you never have to reference a generic checklist again. Sign up and let your home tell you what it needs.
           </p>
         </div>
       </div>

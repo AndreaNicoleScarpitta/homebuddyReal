@@ -146,8 +146,7 @@ export function DonationModal() {
             Support Home Buddy
           </DialogTitle>
           <DialogDescription className="text-sm leading-relaxed">
-            Home Buddy is completely free to use — no ads, no premium tiers.
-            If it's been helpful, a small one-time donation helps keep it running.
+            If Home Buddy has been helpful, a small one-time donation helps keep it running.
             No pressure at all.
           </DialogDescription>
         </DialogHeader>

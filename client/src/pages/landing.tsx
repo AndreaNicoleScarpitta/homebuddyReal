@@ -8,10 +8,10 @@ import { Link } from "wouter";
 
 export default function Landing() {
   useEffect(() => {
-    document.title = "Home Buddy — Free AI Home Maintenance Planner & Tracker";
+    document.title = "Home Buddy — AI Home Maintenance Planner & Tracker";
     const metaDesc = document.querySelector('meta[name="description"]');
     if (metaDesc) {
-      metaDesc.setAttribute("content", "Home Buddy builds a personalized maintenance schedule for your home. Upload inspection reports, track HVAC, plumbing, roof and electrical systems, and know what's safe to DIY. Free forever.");
+      metaDesc.setAttribute("content", "Home Buddy builds a personalized maintenance schedule for your home. Upload inspection reports, track HVAC, plumbing, roof and electrical systems, and know what's safe to DIY.");
     }
   }, []);
 
@@ -21,7 +21,7 @@ export default function Landing() {
     { value: "14", label: "System categories tracked" },
     { value: "50+", label: "Recurring task templates" },
     { value: "19", label: "AI detection patterns" },
-    { value: "100%", label: "Free, forever" },
+    { value: "24/7", label: "AI-powered insights" },
   ];
 
   const howItWorks = [
@@ -71,7 +71,7 @@ export default function Landing() {
               className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 no-underline transition-colors"
               data-testid="button-signup-header"
             >
-              Sign Up Free
+              Sign Up
             </Link>
           </div>
         </nav>
@@ -93,7 +93,7 @@ export default function Landing() {
               >
                 <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
                   <Sparkles className="h-4 w-4" />
-                  Free. No ads. No premium tier.
+                  AI-powered home maintenance
                 </div>
 
                 <h1 className="text-5xl md:text-7xl font-heading font-bold text-foreground leading-[1.08] tracking-tight">
@@ -113,13 +113,9 @@ export default function Landing() {
                     className="inline-flex items-center justify-center h-14 px-8 text-lg font-medium rounded-md bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 no-underline transition-all hover:shadow-primary/35 hover:shadow-xl"
                     data-testid="button-cta-hero"
                   >
-                    Sign Up Free
+                    Get Started
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </a>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    <span>No credit card required</span>
-                  </div>
                 </div>
               </motion.div>
 
@@ -374,10 +370,7 @@ export default function Landing() {
                 Your home deserves better than a spreadsheet.
               </h2>
               <p className="text-xl text-muted-foreground leading-relaxed">
-                Home Buddy is completely free — no ads, no premium tiers, no data selling. Built by homeowners who got tired of forgetting when they last changed the furnace filter.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Free forever. Takes 2 minutes to set up.
+                Built by homeowners who got tired of forgetting when they last changed the furnace filter. Takes 2 minutes to set up.
               </p>
             </motion.div>
           </div>
@@ -426,7 +419,7 @@ export default function Landing() {
             </div>
           </div>
           <div className="border-t border-border/40 pt-6 text-center text-sm text-muted-foreground">
-            <p>&copy; 2026 Home Buddy. Free AI home maintenance assistant for homeowners.</p>
+            <p>&copy; 2026 Home Buddy. AI-powered home maintenance assistant.</p>
           </div>
         </div>
       </footer>

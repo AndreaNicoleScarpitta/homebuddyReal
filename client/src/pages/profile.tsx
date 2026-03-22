@@ -113,7 +113,7 @@ function SupportCard() {
     const sessionId = params.get("session_id");
     if (donationParam === "success" && sessionId) {
       verifyDonationMutation.mutate(sessionId);
-      toast({ title: "Thank you!", description: "Your donation means a lot. Home Buddy will stay free for everyone." });
+      toast({ title: "Thank you!", description: "Your donation means a lot and helps keep Home Buddy running." });
       trackEvent("donation_completed", "donations", "success");
       window.history.replaceState({}, "", "/profile");
     } else if (donationParam === "cancelled") {
@@ -137,14 +137,13 @@ function SupportCard() {
           <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/10">
             <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
             <p className="text-sm text-muted-foreground">
-              Thank you for your support! Your donation helps keep Home Buddy free for everyone.
+              Thank you for your support! Your donation helps keep Home Buddy running.
             </p>
           </div>
         ) : (
           <>
             <p className="text-sm text-muted-foreground">
-              Home Buddy is completely free — no ads, no premium tiers, no data selling.
-              If you find it helpful, a small one-time donation helps cover hosting costs and keeps development going.
+              If you find Home Buddy helpful, a small one-time donation helps cover hosting costs and keeps development going.
             </p>
             {config?.donations && config.donations.length > 0 ? (
               <div className="grid grid-cols-3 gap-3">

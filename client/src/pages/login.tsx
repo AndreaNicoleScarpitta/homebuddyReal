@@ -113,7 +113,7 @@ export default function Login() {
           <p className="text-center text-sm text-muted-foreground pt-2">
             Don't have an account?{" "}
             <Link href="/signup" className="text-primary font-medium hover:underline no-underline" data-testid="link-login-signup">
-              Sign up free
+              Sign up
             </Link>
           </p>
         </motion.div>

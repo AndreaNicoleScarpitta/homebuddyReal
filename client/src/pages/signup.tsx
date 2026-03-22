@@ -78,7 +78,7 @@ const socialProof = [
   "14 system categories",
   "50+ task templates",
   "19 AI detection patterns",
-  "100% free, forever",
+  "24/7 AI-powered insights",
 ];
 
 export default function Signup() {
@@ -124,7 +124,7 @@ export default function Signup() {
               <div className="space-y-6">
                 <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
                   <Sparkles className="h-4 w-4" />
-                  Free forever. No credit card needed.
+                  AI-powered home maintenance
                 </div>
 
                 <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-foreground leading-[1.08] tracking-tight">
@@ -175,7 +175,7 @@ export default function Signup() {
             >
               <div className="bg-card border border-border/50 rounded-2xl shadow-xl shadow-black/5 p-8 space-y-6">
                 <div className="space-y-2">
-                  <h2 className="text-2xl font-heading font-bold text-foreground">Create your free account</h2>
+                  <h2 className="text-2xl font-heading font-bold text-foreground">Create your account</h2>
                   <p className="text-sm text-muted-foreground">Set up your home profile in under 2 minutes</p>
                 </div>
 

@@ -50,7 +50,7 @@ export function SeoPageLayout({ children, slug, title, description }: SeoPageLay
               target="_top"
               className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 no-underline transition-colors"
             >
-              Sign Up Free
+              Sign Up
             </a>
           </div>
         </nav>
@@ -67,7 +67,7 @@ export function SeoPageLayout({ children, slug, title, description }: SeoPageLay
               Stop relying on memory. Start maintaining with confidence.
             </h2>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              Home Buddy builds a personalized maintenance plan for your home — free forever, no credit card required.
+              Home Buddy builds a personalized maintenance plan for your home — track systems, schedule tasks, and stay ahead of costly repairs.
             </p>
             <a
               href="/api/login"
@@ -76,7 +76,7 @@ export function SeoPageLayout({ children, slug, title, description }: SeoPageLay
               className="inline-flex items-center justify-center h-12 px-8 text-base font-medium rounded-md bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 no-underline transition-all"
               data-testid="button-seo-cta"
             >
-              Get Started Free
+              Get Started
               <ArrowRight className="ml-2 h-4 w-4" />
             </a>
           </div>
@@ -113,7 +113,7 @@ export function SeoPageLayout({ children, slug, title, description }: SeoPageLay
             </div>
           </div>
           <div className="border-t border-border/40 pt-6 text-center text-sm text-muted-foreground">
-            <p>&copy; 2026 Home Buddy. Free AI home maintenance assistant for homeowners.</p>
+            <p>&copy; 2026 Home Buddy. AI-powered home maintenance assistant.</p>
           </div>
         </div>
       </footer>
