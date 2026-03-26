@@ -351,6 +351,15 @@ function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand }: 
                     </div>
                   </div>
                 )}
+                {system?.provider && (
+                  <div className="flex items-center gap-2">
+                    <HardHat className="h-3.5 w-3.5 text-muted-foreground" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Provider</p>
+                      <p className="text-sm font-medium">{system.provider}</p>
+                    </div>
+                  </div>
+                )}
                 {dueDate && (
                   <div className="flex items-center gap-2">
                     <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
@@ -729,7 +738,6 @@ export default function MaintenanceLog() {
                   {logEntries.map((entry, index) => {
                     const isEntryExpanded = expandedLogEntryId === entry.id;
                     const photos = entry.photos ? (() => { try { return JSON.parse(entry.photos); } catch { return []; } })() : [];
-                    const hasExpandableContent = true;
 
                     return (
                       <div key={entry.id}>
@@ -762,9 +770,7 @@ export default function MaintenanceLog() {
                                     ${(entry.cost / 100).toLocaleString()}
                                   </Badge>
                                 )}
-                                {hasExpandableContent && (
-                                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isEntryExpanded ? "rotate-180" : ""}`} />
-                                )}
+                                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isEntryExpanded ? "rotate-180" : ""}`} />
                               </div>
                             </div>
 
