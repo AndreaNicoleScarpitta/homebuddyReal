@@ -51,16 +51,35 @@ export function MaintenanceCard({ task, onComplete }: TaskProps) {
     trackEvent('click', 'task_card', expanded ? 'collapse' : 'expand');
   };
 
+  const urgencyLabel = task.urgency === "now" ? "Urgent" :
+    task.urgency === "soon" ? "Soon" :
+    task.urgency === "monitor" ? "Monitor" : "Later";
+
+  const urgencyA11yClass = task.urgency === "now" ? "border-l-destructive" :
+    task.urgency === "soon" ? "border-l-orange-500" :
+    task.urgency === "monitor" ? "border-l-blue-400" : "border-l-green-500";
+
   return (
-    <Card className={`group overflow-hidden border-l-4 transition-all duration-300 hover:shadow-md ${
-      task.urgency === "now" ? "border-l-destructive" : 
-      task.urgency === "soon" ? "border-l-orange-500" :
-      task.urgency === "monitor" ? "border-l-blue-400" : "border-l-green-500"
-    }`}>
+    <Card className={`group overflow-hidden border-l-4 transition-all duration-300 hover:shadow-md ${urgencyA11yClass}`} role="article" aria-label={`${task.title} — urgency: ${urgencyLabel}`}>
       <CardContent className="p-5">
         <div className="flex justify-between items-start mb-3">
           <div className="space-y-1 flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Urgency badge — visible text label + icon so color is not the only indicator */}
+              <Badge
+                variant="outline"
+                className={`text-xs font-semibold uppercase tracking-wider ${
+                  task.urgency === "now" ? "text-red-700 dark:text-red-400 border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30" :
+                  task.urgency === "soon" ? "text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30" :
+                  task.urgency === "monitor" ? "text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30" :
+                  "text-green-700 dark:text-green-400 border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30"
+                }`}
+                aria-label={`Urgency: ${urgencyLabel}`}
+              >
+                {task.urgency === "now" ? "⚠ Urgent" :
+                 task.urgency === "soon" ? "● Soon" :
+                 task.urgency === "monitor" ? "◉ Monitor" : "○ Later"}
+              </Badge>
               {task.category && (
                 <Badge variant="outline" className="text-xs font-normal uppercase tracking-wider text-muted-foreground">
                   {task.category}

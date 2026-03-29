@@ -2,13 +2,13 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://home-buddy.replit.app/</loc>
-    <lastmod>2026-03-18</lastmod>
+    <lastmod>2026-03-29</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://home-buddy.replit.app/guides/home-maintenance-checklist-by-month</loc>
-    <lastmod>2026-03-18</lastmod>
+    <lastmod>2026-03-29</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -21,6 +21,30 @@
   <url>
     <loc>https://home-buddy.replit.app/guides/what-to-maintain-in-a-new-house</loc>
     <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://home-buddy.replit.app/guides/first-90-days-after-buying-a-house</loc>
+    <lastmod>2026-03-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://home-buddy.replit.app/guides/what-to-fix-after-home-inspection</loc>
+    <lastmod>2026-03-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://home-buddy.replit.app/guides/how-much-does-home-maintenance-cost</loc>
+    <lastmod>2026-03-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://home-buddy.replit.app/guides/printable-home-maintenance-schedule</loc>
+    <lastmod>2026-03-29</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>

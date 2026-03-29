@@ -685,10 +685,13 @@ export default function Chat() {
               {imagePreview && (
                 <div className="mb-3 flex items-start gap-2">
                   <div className="relative">
-                    <img 
-                      src={imagePreview} 
-                      alt="Selected" 
+                    <img
+                      src={imagePreview}
+                      alt="Selected"
                       className="h-20 w-20 object-cover rounded-lg border"
+                      loading="lazy"
+                      width="80"
+                      height="80"
                     />
                     <button
                       onClick={removeImage}

@@ -17,24 +17,29 @@ export function getSession() {
 
   const sessionSecret = process.env.SESSION_SECRET;
   if (!sessionSecret) {
-    throw new Error("SESSION_SECRET environment variable is required");
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("SESSION_SECRET environment variable is required in production");
+    }
+    console.warn("SESSION_SECRET not set — using insecure default for local development only");
   }
+  const resolvedSecret = sessionSecret || "local-dev-secret-DO-NOT-USE-IN-PRODUCTION";
 
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
     conString: process.env.DATABASE_URL,
-    createTableIfMissing: false,
+    createTableIfMissing: true,
     ttl: sessionTtl,
     tableName: "sessions",
   });
   return session({
-    secret: sessionSecret,
+    secret: resolvedSecret,
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
       maxAge: sessionTtl,
     },
   });
@@ -64,14 +69,23 @@ export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
   app.use(getSession());
 
-  const issuerUrl = new URL("https://replit.com/oidc");
-  const clientId = process.env.REPL_ID!;
+  const clientId = process.env.REPL_ID;
 
-  oidcConfig = await client.discovery(issuerUrl, clientId, undefined, undefined, {
-    execute: [client.allowInsecureRequests],
-  });
+  if (clientId) {
+    try {
+      const issuerUrl = new URL("https://replit.com/oidc");
+      oidcConfig = await client.discovery(issuerUrl, clientId);
+    } catch (error) {
+      console.warn("Replit OIDC discovery failed (non-fatal, use test login):", (error as Error).message);
+    }
+  } else {
+    console.warn("REPL_ID not set — Replit OAuth disabled, use test login instead");
+  }
 
   app.get("/api/login", async (req, res) => {
+    if (!oidcConfig) {
+      return res.status(503).json({ message: "Replit OAuth not available. Use test login." });
+    }
     try {
       const code_verifier = client.randomPKCECodeVerifier();
       const code_challenge = await client.calculatePKCECodeChallenge(code_verifier);
@@ -105,6 +119,9 @@ export async function setupAuth(app: Express) {
   });
 
   app.get("/api/callback", async (req, res) => {
+    if (!oidcConfig) {
+      return res.redirect("/?error=auth_not_available");
+    }
     try {
       const { code_verifier, state } = req.session;
 
@@ -164,6 +181,9 @@ export async function setupAuth(app: Express) {
   });
 
   app.post("/api/auth/test-login", async (req, res) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(404).json({ message: "Not found" });
+    }
     try {
       const { username, password } = req.body;
       if (username !== "test" || password !== "password123") {

@@ -77,12 +77,11 @@ function handleApiError(res: any, context: string, error: unknown, statusCode = 
     });
   }
   
-  const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred";
   logError(context, error);
-  
-  return res.status(statusCode).json({ 
+
+  // Never leak raw DB error messages or codes to the client
+  return res.status(statusCode >= 500 ? 500 : statusCode).json({
     message: "Something went wrong. Please try again or contact support if the problem persists.",
-    details: errorMessage,
     code: "SERVER_ERROR"
   });
 }

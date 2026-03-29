@@ -17,6 +17,7 @@ import { applyEvent } from "./projections/applyEvent";
 import { EventTypes, type Actor } from "./eventing/types";
 import { validateTransition, TransitionError } from "./domain/stateMachine";
 import { isAuthenticated } from "./replit_integrations/auth";
+import { logError as logErrorV2 } from "./lib/logger";
 import {
   resolveNamespacePrefix,
   namespaceTaskAttributes,
@@ -81,8 +82,10 @@ async function verifyHomeOwnership(homeId: string, userId: string): Promise<bool
   const result = await db.execute(sql`
     SELECT user_id FROM projection_home WHERE home_id = ${homeId}
   `);
-  if (result.rows.length === 0) return true;
-  return (result.rows[0] as { user_id: string }).user_id === userId;
+  if (result.rows.length === 0) return true; // new home being created
+  const owner = (result.rows[0] as { user_id: string | null }).user_id;
+  if (!owner) return false; // orphaned home — deny access
+  return owner === userId;
 }
 
 async function verifyHomeOwnershipStrict(homeId: string, userId: string): Promise<boolean> {
@@ -102,7 +105,7 @@ async function verifySystemOwnership(systemId: string, userId: string): Promise<
   `);
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as { home_id: string; user_id: string | null };
-  if (!row.user_id) return row.home_id;
+  if (!row.user_id) return null; // orphaned — deny access
   return row.user_id === userId ? row.home_id : null;
 }
 
@@ -115,7 +118,7 @@ async function verifyTaskOwnership(taskId: string, userId: string): Promise<stri
   `);
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as { home_id: string; user_id: string | null };
-  if (!row.user_id) return row.home_id;
+  if (!row.user_id) return null; // orphaned — deny access
   return row.user_id === userId ? row.home_id : null;
 }
 
@@ -128,7 +131,7 @@ async function verifyReportOwnership(reportId: string, userId: string): Promise<
   `);
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as { home_id: string; user_id: string | null };
-  if (!row.user_id) return row.home_id;
+  if (!row.user_id) return null; // orphaned — deny access
   return row.user_id === userId ? row.home_id : null;
 }
 
@@ -142,7 +145,7 @@ async function verifyFindingOwnership(findingId: string, userId: string): Promis
   `);
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as { report_id: string; home_id: string; user_id: string | null };
-  if (!row.user_id) return row.home_id;
+  if (!row.user_id) return null; // orphaned — deny access
   return row.user_id === userId ? row.home_id : null;
 }
 
@@ -308,7 +311,7 @@ v2Router.get("/home", async (req: Request, res: Response) => {
       ...flatAttrs,
     });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    handleError(res, err);
   }
 });
 
@@ -513,7 +516,7 @@ v2Router.get("/homes/:homeId/systems", async (req: Request, res: Response) => {
 
     res.json(systems);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    handleError(res, err);
   }
 });
 
@@ -545,6 +548,34 @@ v2Router.post("/homes/:homeId/systems", async (req: Request, res: Response) => {
         idempotencyKey: req.idempotencyKey!,
       }),
     );
+
+    // Auto-generate best-practice maintenance tasks for the new system
+    const category = attrs.category || req.body.systemType || "Other";
+    const systemName = attrs.name || category;
+    try {
+      const { generateTasksForSystem } = await import("./services/maintenance-templates");
+      // Resolve legacy homeId for task insertion
+      const legacyHomeId = await resolveHomeId(homeId);
+      if (!isNaN(legacyHomeId)) {
+        // Get the legacy system ID from projection
+        const projRow = await db.execute(sql`
+          SELECT (attrs->>'legacyId')::int as legacy_id FROM projection_system WHERE system_id = ${systemId}
+        `);
+        const legacySystemId = (projRow.rows[0] as any)?.legacy_id;
+        if (legacySystemId) {
+          const tasks = generateTasksForSystem(legacyHomeId, legacySystemId, category, systemName);
+          for (const task of tasks) {
+            await db.execute(sql`
+              INSERT INTO maintenance_tasks (home_id, related_system_id, title, description, category, urgency, diy_level, estimated_cost, safety_warning, is_recurring, recurrence_cadence, created_from, due_date)
+              VALUES (${task.homeId}, ${task.relatedSystemId}, ${task.title}, ${task.description}, ${task.category}, ${task.urgency}, ${task.diyLevel}, ${task.estimatedCost}, ${task.safetyWarning}, ${task.isRecurring}, ${task.recurrenceCadence}, ${task.createdFrom}, ${task.dueDate})
+            `);
+          }
+        }
+      }
+    } catch (taskErr) {
+      // Non-fatal: system was created even if task generation fails
+      logErrorV2("v2.autoTaskGeneration", taskErr);
+    }
 
     const flatAttrs = snakeToCamel(attrs);
     res.status(201).json({ id: systemId, homeId, ...flatAttrs, ...result });
@@ -673,38 +704,74 @@ v2Router.get("/homes/:homeId/tasks", async (req: Request, res: Response) => {
       overdue: "pending",
     };
 
-    const tasks = result.rows.map((row: any) => {
-      const meta = row.estimates || {};
-      const eventMeta = meta as Record<string, unknown>;
+    let tasks;
+    if (result.rows.length > 0) {
+      tasks = result.rows.map((row: any) => {
+        const meta = row.estimates || {};
+        const eventMeta = meta as Record<string, unknown>;
 
-      return {
-        id: row.task_id,
-        homeId: row.home_id,
-        relatedSystemId: row.system_id,
-        title: row.title,
-        status: stateToLegacyStatus[row.state] || "pending",
-        state: row.state,
-        dueDate: row.due_at,
-        completedAt: row.completed_at,
-        estimatedCost: eventMeta.estimatedCost ?? null,
-        actualCost: eventMeta.actualCost ?? null,
-        difficulty: eventMeta.difficulty ?? null,
-        description: eventMeta.description ?? null,
-        category: eventMeta.category ?? null,
-        urgency: eventMeta.urgency ?? "later",
-        diyLevel: eventMeta.diyLevel ?? null,
-        safetyWarning: eventMeta.safetyWarning ?? null,
-        createdFrom: eventMeta.createdFrom ?? "manual",
-        isRecurring: eventMeta.isRecurring ?? false,
-        recurrenceCadence: eventMeta.recurrenceCadence ?? null,
-        namespacePrefix: eventMeta.namespacePrefix ?? null,
-        namespacedAttributes: eventMeta.namespacedAttributes ?? null,
-      };
-    });
+        return {
+          id: row.task_id,
+          homeId: row.home_id,
+          relatedSystemId: row.system_id,
+          title: row.title,
+          status: stateToLegacyStatus[row.state] || "pending",
+          state: row.state,
+          dueDate: row.due_at,
+          completedAt: row.completed_at,
+          estimatedCost: eventMeta.estimatedCost ?? null,
+          actualCost: eventMeta.actualCost ?? null,
+          difficulty: eventMeta.difficulty ?? null,
+          description: eventMeta.description ?? null,
+          category: eventMeta.category ?? null,
+          urgency: eventMeta.urgency ?? "later",
+          diyLevel: eventMeta.diyLevel ?? null,
+          safetyWarning: eventMeta.safetyWarning ?? null,
+          createdFrom: eventMeta.createdFrom ?? "manual",
+          isRecurring: eventMeta.isRecurring ?? false,
+          recurrenceCadence: eventMeta.recurrenceCadence ?? null,
+          namespacePrefix: eventMeta.namespacePrefix ?? null,
+          namespacedAttributes: eventMeta.namespacedAttributes ?? null,
+        };
+      });
+    } else {
+      // Fallback: read from legacy maintenance_tasks table
+      const legacyHomeId = await resolveHomeId(homeId);
+      if (!isNaN(legacyHomeId)) {
+        const legacyResult = await db.execute(sql`
+          SELECT * FROM maintenance_tasks WHERE home_id = ${legacyHomeId} ORDER BY due_date ASC NULLS LAST, created_at DESC
+        `);
+        tasks = legacyResult.rows.map((row: any) => ({
+          id: String(row.id),
+          homeId: homeId,
+          relatedSystemId: row.related_system_id ? String(row.related_system_id) : null,
+          title: row.title,
+          status: row.status || "pending",
+          state: row.status === "completed" ? "done" : row.status === "skipped" ? "skipped" : "approved",
+          dueDate: row.due_date,
+          completedAt: row.completed_at,
+          estimatedCost: row.estimated_cost,
+          actualCost: row.actual_cost,
+          difficulty: row.difficulty,
+          description: row.description,
+          category: row.category,
+          urgency: row.urgency || "later",
+          diyLevel: row.diy_level,
+          safetyWarning: row.safety_warning,
+          createdFrom: row.created_from || "manual",
+          isRecurring: row.is_recurring || false,
+          recurrenceCadence: row.recurrence_cadence,
+          namespacePrefix: null,
+          namespacedAttributes: null,
+        }));
+      } else {
+        tasks = [];
+      }
+    }
 
     res.json(tasks);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    handleError(res, err);
   }
 });
 
@@ -862,7 +929,7 @@ Return ONLY a valid JSON object, no markdown or explanation.`;
       namespacedAttributes: namespacedAttrs,
     });
   } catch (err) {
-    console.error("AI task analysis error:", err);
+    logErrorV2("v2.aiTaskAnalysis", err);
     res.status(500).json({ error: "Failed to analyze task" });
   }
 });
@@ -931,7 +998,7 @@ Return ONLY a valid JSON array, no markdown or explanation.`;
 
     res.json({ tasks: namespacedTasks, namespacePrefix: nsPrefix });
   } catch (err) {
-    console.error("AI task suggestion error:", err);
+    logErrorV2("v2.aiTaskSuggestion", err);
     res.status(500).json({ error: "Failed to generate task suggestions" });
   }
 });
@@ -1093,7 +1160,7 @@ v2Router.get("/homes/:homeId/reports", async (req: Request, res: Response) => {
 
     res.json(reports);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    handleError(res, err);
   }
 });
 
@@ -1144,7 +1211,7 @@ v2Router.get("/reports/:reportId", async (req: Request, res: Response) => {
       findings,
     });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    handleError(res, err);
   }
 });
 
@@ -1413,7 +1480,7 @@ v2Router.get("/notifications/preferences", async (req: Request, res: Response) =
       contractorMode: flatPrefs.contractorMode ?? false,
     });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    handleError(res, err);
   }
 });
 
@@ -1496,7 +1563,7 @@ v2Router.get("/homes/:homeId/chat", async (req: Request, res: Response) => {
 
     res.json(messages);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    handleError(res, err);
   }
 });
 
@@ -1529,7 +1596,7 @@ v2Router.get("/homes/:homeId/chat/sessions", async (req: Request, res: Response)
       createdAt: row.created_at,
     })));
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    handleError(res, err);
   }
 });
 
@@ -1700,7 +1767,7 @@ v2Router.get("/homes/:homeId/circuit-maps", async (req: Request, res: Response) 
     }));
     res.json(maps);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    handleError(res, err);
   }
 });
 
@@ -1734,7 +1801,7 @@ v2Router.get("/circuit-maps/:mapId", async (req: Request, res: Response) => {
       updatedAt: row.updated_at,
     });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    handleError(res, err);
   }
 });
 
@@ -2041,7 +2108,7 @@ v2Router.post(
               notes: "Uploaded via Document Analysis",
             });
           } catch (docErr) {
-            console.error(`[file-analysis] Failed to save document record for ${file.originalname}:`, docErr);
+            logErrorV2("v2.fileAnalysis.saveDoc", docErr, { filename: file.originalname });
           }
         }
       }
@@ -2120,7 +2187,7 @@ v2Router.post(
         ...analysisResult,
       });
     } catch (err) {
-      console.error("[file-analysis error]", err);
+      logErrorV2("v2.fileAnalysis", err);
       handleError(res, err);
     }
   }
@@ -2425,18 +2492,845 @@ v2Router.post("/homes/:homeId/confirm-matched-tasks", async (req: Request, res: 
   }
 });
 
+// ===========================================================================
+// HOME GRAPH — COMPONENT ENDPOINTS
+// ===========================================================================
+
+/** Verify user owns a home by V1 homes.id */
+async function verifyV1HomeOwnership(homeId: number, userId: string): Promise<boolean> {
+  const result = await db.execute(sql`
+    SELECT user_id FROM homes WHERE id = ${homeId}
+  `);
+  if (result.rows.length === 0) return false;
+  return (result.rows[0] as { user_id: string }).user_id === userId;
+}
+
+/** Resolve a home ID that might be a UUID (from projection_home) to a legacy integer ID */
+async function resolveHomeId(rawId: string): Promise<number> {
+  const asNum = Number(rawId);
+  if (!isNaN(asNum) && asNum > 0) return asNum;
+  // It's a UUID — look up the legacy_id from projection_home
+  const result = await db.execute(sql`
+    SELECT legacy_id FROM projection_home WHERE home_id = ${rawId}
+  `);
+  if (result.rows.length > 0 && (result.rows[0] as any).legacy_id) {
+    return (result.rows[0] as any).legacy_id;
+  }
+  return NaN;
+}
+
+/** Resolve a system ID that might be a UUID (from projection_system) to a legacy integer ID */
+async function resolveSystemId(rawId: string): Promise<number> {
+  const asNum = Number(rawId);
+  if (!isNaN(asNum) && asNum > 0) return asNum;
+  // It's a UUID — look up the legacy ID from projection_system attrs
+  const result = await db.execute(sql`
+    SELECT (attrs->>'legacyId')::int as legacy_id FROM projection_system WHERE system_id = ${rawId}
+  `);
+  if (result.rows.length > 0 && (result.rows[0] as any).legacy_id) {
+    return (result.rows[0] as any).legacy_id;
+  }
+  return NaN;
+}
+
+/** Verify user owns system by V1 systems.id, returns homeId */
+async function verifyV1SystemOwnership(systemId: number, userId: string): Promise<number | null> {
+  const result = await db.execute(sql`
+    SELECT s.home_id, h.user_id
+    FROM systems s
+    JOIN homes h ON h.id = s.home_id
+    WHERE s.id = ${systemId}
+  `);
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0] as { home_id: number; user_id: string };
+  return row.user_id === userId ? row.home_id : null;
+}
+
+// GET /v2/systems/:systemId/components
+v2Router.get("/systems/:systemId/components", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const systemId = await resolveSystemId(req.params.systemId);
+    if (isNaN(systemId) || !(await verifyV1SystemOwnership(systemId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const result = await db.execute(sql`
+      SELECT * FROM components WHERE system_id = ${systemId} ORDER BY created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// POST /v2/systems/:systemId/components
+v2Router.post("/systems/:systemId/components", async (req: Request, res: Response) => {
+  try {
+    const actor = getActor(req);
+    const userId = getUserId(req);
+    const systemId = await resolveSystemId(req.params.systemId);
+    const homeId = isNaN(systemId) ? null : await verifyV1SystemOwnership(systemId, userId);
+    if (!homeId) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const componentId = crypto.randomUUID();
+    const data = { ...req.body, homeId, systemId };
+    const result = await db.transaction(async (tx) => {
+      const insertResult = await tx.execute(sql`
+        INSERT INTO components (home_id, system_id, name, component_type, material, install_year, condition, notes, photos, provenance_source, provenance_confidence)
+        VALUES (${homeId}, ${systemId}, ${data.name}, ${data.componentType ?? null}, ${data.material ?? null}, ${data.installYear ?? null}, ${data.condition || 'Unknown'}, ${data.notes ?? null}, ${data.photos ?? null}, ${data.provenanceSource || 'manual'}, ${data.provenanceConfidence ?? null})
+        RETURNING *
+      `);
+      await appendAndApply(tx, {
+        aggregateType: "component",
+        aggregateId: componentId,
+        expectedVersion: 0,
+        eventType: EventTypes.ComponentCreated,
+        data,
+        meta: {},
+        actor,
+        idempotencyKey: req.idempotencyKey!,
+      });
+      return insertResult.rows[0];
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// PUT /v2/components/:id
+v2Router.put("/components/:id", async (req: Request, res: Response) => {
+  try {
+    const actor = getActor(req);
+    const userId = getUserId(req);
+    const componentId = Number(req.params.id);
+    const comp = await db.execute(sql`
+      SELECT c.id, c.home_id, h.user_id FROM components c JOIN homes h ON h.id = c.home_id WHERE c.id = ${componentId}
+    `);
+    if (comp.rows.length === 0 || (comp.rows[0] as any).user_id !== userId) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const result = await db.transaction(async (tx) => {
+      const updateResult = await tx.execute(sql`
+        UPDATE components
+        SET name = COALESCE(${req.body.name ?? null}, name),
+            component_type = COALESCE(${req.body.componentType ?? null}, component_type),
+            material = COALESCE(${req.body.material ?? null}, material),
+            install_year = COALESCE(${req.body.installYear ?? null}, install_year),
+            condition = COALESCE(${req.body.condition ?? null}, condition),
+            notes = COALESCE(${req.body.notes ?? null}, notes),
+            updated_at = now()
+        WHERE id = ${componentId}
+        RETURNING *
+      `);
+      await appendAndApply(tx, {
+        aggregateType: "component",
+        aggregateId: String(componentId),
+        expectedVersion: 0,
+        eventType: EventTypes.ComponentUpdated,
+        data: req.body,
+        meta: {},
+        actor,
+        idempotencyKey: req.idempotencyKey!,
+      });
+      return updateResult.rows[0];
+    });
+    res.json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// DELETE /v2/components/:id
+v2Router.delete("/components/:id", async (req: Request, res: Response) => {
+  try {
+    const actor = getActor(req);
+    const userId = getUserId(req);
+    const componentId = Number(req.params.id);
+    const comp = await db.execute(sql`
+      SELECT c.id, c.home_id, h.user_id FROM components c JOIN homes h ON h.id = c.home_id WHERE c.id = ${componentId}
+    `);
+    if (comp.rows.length === 0 || (comp.rows[0] as any).user_id !== userId) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`DELETE FROM components WHERE id = ${componentId}`);
+      await appendAndApply(tx, {
+        aggregateType: "component",
+        aggregateId: String(componentId),
+        expectedVersion: 0,
+        eventType: EventTypes.ComponentDeleted,
+        data: { reason: "User deleted" },
+        meta: {},
+        actor,
+        idempotencyKey: req.idempotencyKey!,
+      });
+    });
+    res.json({ deleted: true });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// ===========================================================================
+// HOME GRAPH — WARRANTY ENDPOINTS
+// ===========================================================================
+
+// GET /v2/homes/:homeId/warranties
+v2Router.get("/homes/:homeId/warranties", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (!(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const result = await db.execute(sql`
+      SELECT * FROM warranties WHERE home_id = ${homeId} ORDER BY expiry_date DESC NULLS LAST
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// POST /v2/homes/:homeId/warranties
+v2Router.post("/homes/:homeId/warranties", async (req: Request, res: Response) => {
+  try {
+    const actor = getActor(req);
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (!(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const warrantyAggId = crypto.randomUUID();
+    const data = { ...req.body, homeId };
+    const result = await db.transaction(async (tx) => {
+      const insertResult = await tx.execute(sql`
+        INSERT INTO warranties (home_id, system_id, component_id, warranty_provider, warranty_type, coverage_summary, start_date, expiry_date, is_transferable, document_id, notes, provenance_source, provenance_confidence)
+        VALUES (${homeId}, ${data.systemId ?? null}, ${data.componentId ?? null}, ${data.warrantyProvider ?? null}, ${data.warrantyType ?? null}, ${data.coverageSummary ?? null}, ${data.startDate ?? null}::timestamptz, ${data.expiryDate ?? null}::timestamptz, ${data.isTransferable ?? false}, ${data.documentId ?? null}, ${data.notes ?? null}, ${data.provenanceSource || 'manual'}, ${data.provenanceConfidence ?? null})
+        RETURNING *
+      `);
+      await appendAndApply(tx, {
+        aggregateType: "warranty",
+        aggregateId: warrantyAggId,
+        expectedVersion: 0,
+        eventType: EventTypes.WarrantyCreated,
+        data,
+        meta: {},
+        actor,
+        idempotencyKey: req.idempotencyKey!,
+      });
+      return insertResult.rows[0];
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// PUT /v2/warranties/:id
+v2Router.put("/warranties/:id", async (req: Request, res: Response) => {
+  try {
+    const actor = getActor(req);
+    const userId = getUserId(req);
+    const warrantyId = Number(req.params.id);
+    const w = await db.execute(sql`
+      SELECT w.id, w.home_id, h.user_id FROM warranties w JOIN homes h ON h.id = w.home_id WHERE w.id = ${warrantyId}
+    `);
+    if (w.rows.length === 0 || (w.rows[0] as any).user_id !== userId) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const result = await db.transaction(async (tx) => {
+      const updateResult = await tx.execute(sql`
+        UPDATE warranties
+        SET warranty_provider = COALESCE(${req.body.warrantyProvider ?? null}, warranty_provider),
+            warranty_type = COALESCE(${req.body.warrantyType ?? null}, warranty_type),
+            coverage_summary = COALESCE(${req.body.coverageSummary ?? null}, coverage_summary),
+            start_date = COALESCE(${req.body.startDate ?? null}::timestamptz, start_date),
+            expiry_date = COALESCE(${req.body.expiryDate ?? null}::timestamptz, expiry_date),
+            is_transferable = COALESCE(${req.body.isTransferable ?? null}, is_transferable),
+            notes = COALESCE(${req.body.notes ?? null}, notes),
+            updated_at = now()
+        WHERE id = ${warrantyId}
+        RETURNING *
+      `);
+      await appendAndApply(tx, {
+        aggregateType: "warranty",
+        aggregateId: String(warrantyId),
+        expectedVersion: 0,
+        eventType: EventTypes.WarrantyUpdated,
+        data: req.body,
+        meta: {},
+        actor,
+        idempotencyKey: req.idempotencyKey!,
+      });
+      return updateResult.rows[0];
+    });
+    res.json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// DELETE /v2/warranties/:id
+v2Router.delete("/warranties/:id", async (req: Request, res: Response) => {
+  try {
+    const actor = getActor(req);
+    const userId = getUserId(req);
+    const warrantyId = Number(req.params.id);
+    const w = await db.execute(sql`
+      SELECT w.id, w.home_id, h.user_id FROM warranties w JOIN homes h ON h.id = w.home_id WHERE w.id = ${warrantyId}
+    `);
+    if (w.rows.length === 0 || (w.rows[0] as any).user_id !== userId) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`DELETE FROM warranties WHERE id = ${warrantyId}`);
+      await appendAndApply(tx, {
+        aggregateType: "warranty",
+        aggregateId: String(warrantyId),
+        expectedVersion: 0,
+        eventType: EventTypes.WarrantyDeleted,
+        data: { reason: "User deleted" },
+        meta: {},
+        actor,
+        idempotencyKey: req.idempotencyKey!,
+      });
+    });
+    res.json({ deleted: true });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// ===========================================================================
+// HOME GRAPH — PERMIT ENDPOINTS
+// ===========================================================================
+
+// GET /v2/homes/:homeId/permits
+v2Router.get("/homes/:homeId/permits", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (!(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const result = await db.execute(sql`
+      SELECT * FROM permits WHERE home_id = ${homeId} ORDER BY issued_date DESC NULLS LAST
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// POST /v2/homes/:homeId/permits
+v2Router.post("/homes/:homeId/permits", async (req: Request, res: Response) => {
+  try {
+    const actor = getActor(req);
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (!(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const permitAggId = crypto.randomUUID();
+    const data = { ...req.body, homeId };
+    const result = await db.transaction(async (tx) => {
+      const insertResult = await tx.execute(sql`
+        INSERT INTO permits (home_id, system_id, permit_number, permit_type, issued_date, status, issuing_authority, description, document_id, provenance_source, provenance_confidence)
+        VALUES (${homeId}, ${data.systemId ?? null}, ${data.permitNumber ?? null}, ${data.permitType ?? null}, ${data.issuedDate ?? null}::timestamptz, ${data.status || 'unknown'}, ${data.issuingAuthority ?? null}, ${data.description ?? null}, ${data.documentId ?? null}, ${data.provenanceSource || 'manual'}, ${data.provenanceConfidence ?? null})
+        RETURNING *
+      `);
+      await appendAndApply(tx, {
+        aggregateType: "home",
+        aggregateId: permitAggId,
+        expectedVersion: 0,
+        eventType: EventTypes.PermitCreated,
+        data,
+        meta: {},
+        actor,
+        idempotencyKey: req.idempotencyKey!,
+      });
+      return insertResult.rows[0];
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// ===========================================================================
+// HOME GRAPH — REPAIR ENDPOINTS
+// ===========================================================================
+
+// GET /v2/homes/:homeId/repairs
+v2Router.get("/homes/:homeId/repairs", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (!(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const result = await db.execute(sql`
+      SELECT * FROM repairs WHERE home_id = ${homeId} ORDER BY repair_date DESC NULLS LAST
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// POST /v2/homes/:homeId/repairs
+v2Router.post("/homes/:homeId/repairs", async (req: Request, res: Response) => {
+  try {
+    const actor = getActor(req);
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (!(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    if (!req.body.title) {
+      res.status(400).json({ error: "title is required" });
+      return;
+    }
+    const repairAggId = crypto.randomUUID();
+    const data = { ...req.body, homeId };
+    const result = await db.transaction(async (tx) => {
+      const insertResult = await tx.execute(sql`
+        INSERT INTO repairs (home_id, system_id, component_id, task_id, contractor_id, title, description, repair_date, cost, parts_used, outcome, provenance_source, provenance_confidence)
+        VALUES (${homeId}, ${data.systemId ?? null}, ${data.componentId ?? null}, ${data.taskId ?? null}, ${data.contractorId ?? null}, ${data.title}, ${data.description ?? null}, ${data.repairDate ?? null}::timestamptz, ${data.cost ?? null}, ${data.partsUsed ?? null}, ${data.outcome || 'resolved'}, ${data.provenanceSource || 'manual'}, ${data.provenanceConfidence ?? null})
+        RETURNING *
+      `);
+      const repairId = (insertResult.rows[0] as any).id;
+      // Also create timeline event
+      await tx.execute(sql`
+        INSERT INTO timeline_events (home_id, event_date, category, title, description, icon, entity_type, entity_id, cost, provenance_source)
+        VALUES (${homeId}, COALESCE(${data.repairDate ?? null}::timestamptz, now()), 'repair', ${data.title}, ${data.description ?? null}, 'wrench', 'repair', ${repairId}, ${data.cost ?? null}, ${data.provenanceSource || 'manual'})
+      `);
+      await appendAndApply(tx, {
+        aggregateType: "home",
+        aggregateId: repairAggId,
+        expectedVersion: 0,
+        eventType: EventTypes.RepairRecorded,
+        data,
+        meta: {},
+        actor,
+        idempotencyKey: req.idempotencyKey!,
+      });
+      return insertResult.rows[0];
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// ===========================================================================
+// HOME GRAPH — REPLACEMENT ENDPOINTS
+// ===========================================================================
+
+// GET /v2/homes/:homeId/replacements
+v2Router.get("/homes/:homeId/replacements", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (!(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const result = await db.execute(sql`
+      SELECT * FROM replacements WHERE home_id = ${homeId} ORDER BY replacement_date DESC NULLS LAST
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// POST /v2/homes/:homeId/replacements
+v2Router.post("/homes/:homeId/replacements", async (req: Request, res: Response) => {
+  try {
+    const actor = getActor(req);
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (!(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const replacementAggId = crypto.randomUUID();
+    const data = { ...req.body, homeId };
+    const result = await db.transaction(async (tx) => {
+      const insertResult = await tx.execute(sql`
+        INSERT INTO replacements (home_id, system_id, component_id, replaced_system_name, replaced_make, replaced_model, replacement_date, cost, contractor_id, reason, document_id, provenance_source, provenance_confidence)
+        VALUES (${homeId}, ${data.systemId ?? null}, ${data.componentId ?? null}, ${data.replacedSystemName ?? null}, ${data.replacedMake ?? null}, ${data.replacedModel ?? null}, ${data.replacementDate ?? null}::timestamptz, ${data.cost ?? null}, ${data.contractorId ?? null}, ${data.reason ?? null}, ${data.documentId ?? null}, ${data.provenanceSource || 'manual'}, ${data.provenanceConfidence ?? null})
+        RETURNING *
+      `);
+      const replacementId = (insertResult.rows[0] as any).id;
+      // Also create timeline event
+      await tx.execute(sql`
+        INSERT INTO timeline_events (home_id, event_date, category, title, description, icon, entity_type, entity_id, cost, provenance_source)
+        VALUES (${homeId}, COALESCE(${data.replacementDate ?? null}::timestamptz, now()), 'replacement', ${data.replacedSystemName || 'System replacement'}, ${data.reason ?? null}, 'refresh-cw', 'replacement', ${replacementId}, ${data.cost ?? null}, ${data.provenanceSource || 'manual'})
+      `);
+      await appendAndApply(tx, {
+        aggregateType: "home",
+        aggregateId: replacementAggId,
+        expectedVersion: 0,
+        eventType: EventTypes.ReplacementRecorded,
+        data,
+        meta: {},
+        actor,
+        idempotencyKey: req.idempotencyKey!,
+      });
+      return insertResult.rows[0];
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// ===========================================================================
+// HOME GRAPH — RECOMMENDATION ENDPOINTS
+// ===========================================================================
+
+// GET /v2/homes/:homeId/recommendations
+v2Router.get("/homes/:homeId/recommendations", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (!(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const statusFilter = req.query.status as string | undefined;
+    let query;
+    if (statusFilter) {
+      query = sql`SELECT * FROM recommendations WHERE home_id = ${homeId} AND status = ${statusFilter} ORDER BY created_at DESC`;
+    } else {
+      query = sql`SELECT * FROM recommendations WHERE home_id = ${homeId} ORDER BY created_at DESC`;
+    }
+    const result = await db.execute(query);
+    res.json(result.rows);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// POST /v2/recommendations/:id/accept
+v2Router.post("/recommendations/:id/accept", async (req: Request, res: Response) => {
+  try {
+    const actor = getActor(req);
+    const userId = getUserId(req);
+    const recId = Number(req.params.id);
+    const rec = await db.execute(sql`
+      SELECT r.id, r.home_id, r.status, h.user_id FROM recommendations r JOIN homes h ON h.id = r.home_id WHERE r.id = ${recId}
+    `);
+    if (rec.rows.length === 0 || (rec.rows[0] as any).user_id !== userId) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const currentStatus = (rec.rows[0] as any).status;
+    if (currentStatus !== "open") {
+      res.status(409).json({ error: `Cannot accept recommendation in '${currentStatus}' status` });
+      return;
+    }
+    const result = await db.transaction(async (tx) => {
+      const updateResult = await tx.execute(sql`
+        UPDATE recommendations SET status = 'accepted', task_id = ${req.body.taskId ?? null}, updated_at = now()
+        WHERE id = ${recId}
+        RETURNING *
+      `);
+      await appendAndApply(tx, {
+        aggregateType: "recommendation",
+        aggregateId: String(recId),
+        expectedVersion: 0,
+        eventType: EventTypes.RecommendationAccepted,
+        data: { taskId: req.body.taskId ?? null },
+        meta: {},
+        actor,
+        idempotencyKey: req.idempotencyKey!,
+      });
+      return updateResult.rows[0];
+    });
+    res.json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// POST /v2/recommendations/:id/dismiss
+v2Router.post("/recommendations/:id/dismiss", async (req: Request, res: Response) => {
+  try {
+    const actor = getActor(req);
+    const userId = getUserId(req);
+    const recId = Number(req.params.id);
+    const rec = await db.execute(sql`
+      SELECT r.id, r.home_id, r.status, h.user_id FROM recommendations r JOIN homes h ON h.id = r.home_id WHERE r.id = ${recId}
+    `);
+    if (rec.rows.length === 0 || (rec.rows[0] as any).user_id !== userId) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const currentStatus = (rec.rows[0] as any).status;
+    if (currentStatus !== "open") {
+      res.status(409).json({ error: `Cannot dismiss recommendation in '${currentStatus}' status` });
+      return;
+    }
+    const result = await db.transaction(async (tx) => {
+      const updateResult = await tx.execute(sql`
+        UPDATE recommendations SET status = 'dismissed', updated_at = now()
+        WHERE id = ${recId}
+        RETURNING *
+      `);
+      await appendAndApply(tx, {
+        aggregateType: "recommendation",
+        aggregateId: String(recId),
+        expectedVersion: 0,
+        eventType: EventTypes.RecommendationDismissed,
+        data: { reason: req.body.reason ?? null },
+        meta: {},
+        actor,
+        idempotencyKey: req.idempotencyKey!,
+      });
+      return updateResult.rows[0];
+    });
+    res.json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// ===========================================================================
+// HOME GRAPH — TIMELINE ENDPOINTS
+// ===========================================================================
+
+// GET /v2/homes/:homeId/timeline
+v2Router.get("/homes/:homeId/timeline", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (!(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const category = req.query.category as string | undefined;
+    const page = Math.max(1, Number(req.query.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 50)));
+    const offset = (page - 1) * limit;
+
+    let query;
+    if (category) {
+      query = sql`
+        SELECT * FROM timeline_events
+        WHERE home_id = ${homeId} AND category = ${category}
+        ORDER BY event_date DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+    } else {
+      query = sql`
+        SELECT * FROM timeline_events
+        WHERE home_id = ${homeId}
+        ORDER BY event_date DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+    }
+    const result = await db.execute(query);
+
+    // Get total count for pagination
+    let countQuery;
+    if (category) {
+      countQuery = sql`SELECT COUNT(*) as total FROM timeline_events WHERE home_id = ${homeId} AND category = ${category}`;
+    } else {
+      countQuery = sql`SELECT COUNT(*) as total FROM timeline_events WHERE home_id = ${homeId}`;
+    }
+    const countResult = await db.execute(countQuery);
+    const total = Number((countResult.rows[0] as any).total);
+
+    res.json({
+      events: result.rows,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Intelligence API (read-only, computed on-the-fly)
+// ---------------------------------------------------------------------------
+
+v2Router.get("/homes/:homeId/intelligence", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (isNaN(homeId) || !(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const { computeHomeIntelligence } = await import("./services/intelligence-engine");
+    const result = await computeHomeIntelligence(homeId);
+    res.json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+v2Router.get("/systems/:systemId/insight", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const systemId = await resolveSystemId(req.params.systemId);
+    if (isNaN(systemId)) {
+      res.status(404).json({ error: "System not found" });
+      return;
+    }
+    const homeId = await verifyV1SystemOwnership(systemId, userId);
+    if (!homeId) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const { computeSystemInsightDetail } = await import("./services/intelligence-engine");
+    const result = await computeSystemInsightDetail(systemId, homeId);
+    res.json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Outcome Learning API
+// ---------------------------------------------------------------------------
+
+// Record a user action (completed task, hired contractor, etc.)
+v2Router.post("/homes/:homeId/actions", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (isNaN(homeId) || !(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const { systemId, relatedRecommendationId, relatedTaskId, actionType, costActual, contractorId, notes } = req.body;
+    const result = await db.execute(sql`
+      INSERT INTO user_actions (home_id, system_id, related_recommendation_id, related_task_id, action_type, cost_actual, contractor_id, notes)
+      VALUES (${homeId}, ${systemId || null}, ${relatedRecommendationId || null}, ${relatedTaskId || null}, ${actionType}, ${costActual || null}, ${contractorId || null}, ${notes || null})
+      RETURNING *
+    `);
+    // Also create a timeline event
+    const action = result.rows[0] as any;
+    await db.execute(sql`
+      INSERT INTO timeline_events (home_id, event_date, category, title, description, icon, entity_type, entity_id, cost, provenance_source)
+      VALUES (${homeId}, now(), 'maintenance', ${`Action: ${actionType.replace(/_/g, " ")}`}, ${notes || null}, 'check-circle', 'action', ${action.id}, ${costActual || null}, 'manual')
+    `);
+    res.json(action);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// Record an outcome (failure, avoided issue, etc.)
+v2Router.post("/homes/:homeId/outcomes", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (isNaN(homeId) || !(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const { systemId, relatedActionId, outcomeType, severity, costImpact, description } = req.body;
+    const result = await db.execute(sql`
+      INSERT INTO outcome_events (home_id, system_id, related_action_id, outcome_type, severity, cost_impact, description)
+      VALUES (${homeId}, ${systemId || null}, ${relatedActionId || null}, ${outcomeType}, ${severity || 'low'}, ${costImpact || null}, ${description || null})
+      RETURNING *
+    `);
+    // Timeline event
+    const outcome = result.rows[0] as any;
+    const iconMap: Record<string, string> = { failure: "alert-triangle", avoided_issue: "shield-check", degraded: "trending-down", improved: "trending-up", no_change: "minus", unknown: "help-circle" };
+    await db.execute(sql`
+      INSERT INTO timeline_events (home_id, event_date, category, title, description, icon, entity_type, entity_id, cost, provenance_source)
+      VALUES (${homeId}, now(), ${outcomeType === 'failure' ? 'repair' : 'maintenance'}, ${`Outcome: ${outcomeType.replace(/_/g, " ")}`}, ${description || null}, ${iconMap[outcomeType] || 'circle'}, 'outcome', ${outcome.id}, ${costImpact || null}, 'manual')
+    `);
+    res.json(outcome);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// Get actions for a home
+v2Router.get("/homes/:homeId/actions", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (isNaN(homeId) || !(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const result = await db.execute(sql`
+      SELECT * FROM user_actions WHERE home_id = ${homeId} ORDER BY action_date DESC LIMIT 50
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// Get outcomes for a home
+v2Router.get("/homes/:homeId/outcomes", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (isNaN(homeId) || !(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const result = await db.execute(sql`
+      SELECT * FROM outcome_events WHERE home_id = ${homeId} ORDER BY occurred_at DESC LIMIT 50
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// Get learning summary
+v2Router.get("/homes/:homeId/learning-summary", async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const homeId = await resolveHomeId(req.params.homeId);
+    if (isNaN(homeId) || !(await verifyV1HomeOwnership(homeId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const { computeLearningSummary } = await import("./services/learning-engine");
+    const summary = await computeLearningSummary(homeId);
+    res.json(summary);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
 function handleError(res: Response, err: unknown): void {
   if (err instanceof TransitionError) {
     res.status(409).json({
-      error: err.message,
-      currentState: err.currentState,
-      eventType: err.eventType,
-      aggregateType: err.aggregateType,
+      error: "This action conflicts with the current state. Please refresh and try again.",
     });
     return;
   }
   const error = err as Error & { status?: number; code?: string };
-  console.error("[v2 error]", error.message, error.stack);
+  // Log full details server-side, but never expose DB codes or stack traces to client
+  logErrorV2("v2.handleError", error, { dbCode: error.code });
   if (error.code === "23505") {
     res.status(409).json({ error: "Conflict: this operation was already processed" });
     return;

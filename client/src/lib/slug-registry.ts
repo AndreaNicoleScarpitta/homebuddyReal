@@ -20,6 +20,10 @@ export const PAGE_SLUGS = {
   guideMonthlyChecklist: "guide-monthly-checklist",
   guideAnnualSchedule: "guide-annual-schedule",
   guideNewHomeowner: "guide-new-homeowner",
+  guideFirst90Days: "guide-first-90-days",
+  guideHomeInspection: "guide-home-inspection",
+  guideMaintenanceCost: "guide-maintenance-cost",
+  guidePrintableSchedule: "guide-printable-schedule",
 } as const;
 
 export const MODAL_SLUGS = {

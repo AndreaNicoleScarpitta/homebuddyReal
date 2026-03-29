@@ -7,10 +7,17 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { logEnvironmentStatus } from "./lib/env-validation";
+import { logger } from "./lib/logger";
 import { bootstrapMigrationTracking } from "./lib/db-bootstrap";
 import { WebhookHandlers } from "./webhookHandlers";
 import { registerDonationRoutes } from "./donation-routes";
-import { startNotificationScheduler } from "./jobs/notificationScheduler";
+import { startNotificationScheduler, stopNotificationScheduler } from "./jobs/notificationScheduler";
+import { pool } from "./db";
+import crypto from "crypto";
+import cookieParser from "cookie-parser";
+import compression from "compression";
+import { csrfProtection, registerCsrfRoute } from "./lib/csrf";
+import { registerOpenApiRoute } from "./openapi";
 
 const app = express();
 const httpServer = createServer(app);
@@ -34,7 +41,7 @@ app.post(
       await WebhookHandlers.processWebhook(req.body as Buffer, sig);
       res.status(200).json({ received: true });
     } catch (error: any) {
-      console.error('Webhook error:', error.message);
+      logger.error({ err: error.message }, "Webhook error");
       res.status(400).json({ error: 'Webhook processing error' });
     }
   }
@@ -50,15 +57,36 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false, limit: "10mb" }));
+app.use(cookieParser());
+
+// Gzip/brotli compression for all responses
+app.use(compression());
+
+// Health check — no auth, no rate limit, lightweight
+app.get("/api/health", async (_req, res) => {
+  try {
+    const result = await pool.query("SELECT 1 AS ok");
+    res.json({ status: "healthy", db: "connected", timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(503).json({ status: "unhealthy", db: "disconnected", error: (err as Error).message });
+  }
+});
 
 const isDev = process.env.NODE_ENV !== "production";
+
+// Generate a per-request nonce for CSP to avoid 'unsafe-inline'
+app.use((_req, res, next) => {
+  res.locals.cspNonce = crypto.randomBytes(16).toString("base64");
+  next();
+});
+
 app.use(
   helmet({
     contentSecurityPolicy: isDev ? false : {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "https://www.googletagmanager.com", "https://www.google-analytics.com"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        scriptSrc: ["'self'", ((_req: any, res: any) => `'nonce-${res.locals.cspNonce}'`) as any, "https://www.googletagmanager.com", "https://www.google-analytics.com"],
+        styleSrc: ["'self'", ((_req: any, res: any) => `'nonce-${res.locals.cspNonce}'`) as any, "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "blob:", "https://www.google-analytics.com"],
         connectSrc: ["'self'", "https://www.google-analytics.com", "https://analytics.google.com", "https://checkout.stripe.com", "https://api.stripe.com"],
@@ -82,14 +110,7 @@ app.use(
 );
 
 export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
+  logger.info({ source }, message);
 }
 
 app.use((req, res, next) => {
@@ -129,26 +150,32 @@ app.use((req, res, next) => {
     const { getStripeSync } = await import('./stripeClient');
     const databaseUrl = process.env.DATABASE_URL;
     if (databaseUrl) {
-      console.log('Initializing Stripe schema...');
+      logger.info("Initializing Stripe schema...");
       await runMigrations({ databaseUrl });
-      console.log('Stripe schema ready');
+      logger.info("Stripe schema ready");
       const stripeSync = await getStripeSync();
       const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
       const webhookResult = await stripeSync.findOrCreateManagedWebhook(
         `${webhookBaseUrl}/api/stripe/webhook`
       );
-      console.log('Stripe webhook configured:', webhookResult?.webhook?.url || 'OK');
+      logger.info({ url: webhookResult?.webhook?.url || "OK" }, "Stripe webhook configured");
       stripeSync.syncBackfill()
-        .then(() => console.log('Stripe data synced'))
-        .catch((err: any) => console.error('Error syncing Stripe data:', err));
+        .then(() => logger.info("Stripe data synced"))
+        .catch((err: any) => logger.error({ err: err.message }, "Error syncing Stripe data"));
     }
   } catch (error) {
-    console.error('Failed to initialize Stripe (non-fatal):', error);
+    logger.error({ err: (error as Error).message }, "Failed to initialize Stripe (non-fatal)");
   }
 
   // Setup auth BEFORE registering other routes
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerCsrfRoute(app);
+  registerOpenApiRoute(app);
+
+  // CSRF protection for all mutation routes (after auth so session is available)
+  app.use("/api", csrfProtection);
+  app.use("/v2", csrfProtection);
 
   registerDonationRoutes(app);
 
@@ -198,10 +225,10 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
+    // Never leak internal error details (DB codes, stack traces) to clients
+    const message = status >= 500 ? "Internal Server Error" : (err.message || "Internal Server Error");
+    logger.error({ err: err.message, stack: err.stack, code: err.code, status }, "Unhandled route error");
     res.status(status).json({ message });
-    throw err;
   });
 
   app.get("/downloads/Home-Buddy-UX-Workflow.pdf", (_req, res) => {
@@ -228,11 +255,33 @@ app.use((req, res, next) => {
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
     },
     () => {
       log(`serving on port ${port}`);
       startNotificationScheduler();
     },
   );
+
+  // Graceful shutdown
+  const shutdown = (signal: string) => {
+    log(`${signal} received — shutting down gracefully`);
+    stopNotificationScheduler();
+    httpServer.close(() => {
+      log("HTTP server closed");
+      pool.end().then(() => {
+        log("Database pool drained");
+        process.exit(0);
+      }).catch((err) => {
+        logger.error({ err: err.message }, "Error draining pool");
+        process.exit(1);
+      });
+    });
+    // Force exit after 10 seconds if graceful shutdown stalls
+    setTimeout(() => {
+      logger.error("Forced shutdown after timeout");
+      process.exit(1);
+    }, 10_000).unref();
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 })();

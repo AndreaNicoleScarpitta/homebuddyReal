@@ -48,7 +48,7 @@ export default function Landing() {
         <nav className="container mx-auto px-6 h-16 flex justify-between items-center" aria-label="Main navigation">
           <Link href="/" className="flex items-center gap-2 no-underline" aria-label="Home Buddy - Home">
             <img
-              src="/images/home-buddy-icon.png"
+              src="/images/home-buddy-icon.webp"
               alt="Home Buddy logo"
               className="h-8 w-8 rounded-lg object-cover"
               width="32"
@@ -357,6 +357,84 @@ export default function Landing() {
           </div>
         </section>
 
+        {/* Homeowner Guides / Articles Section */}
+        <section className="py-24 bg-muted/20">
+          <div className="container mx-auto px-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-center mb-12"
+            >
+              <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
+                Homeowner Guides
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                Honest, practical advice for people who own a house and want to keep it from falling apart.
+              </p>
+            </motion.div>
+
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-5xl mx-auto">
+              {[
+                {
+                  title: "Home Maintenance Checklist by Month",
+                  description: "A month-by-month breakdown of what your home needs—because your house won't text you.",
+                  href: "/guides/home-maintenance-checklist-by-month",
+                  trackId: "article_monthly_checklist",
+                },
+                {
+                  title: "First 90 Days After Buying a House",
+                  description: "The essential tasks to handle in your first three months as a new homeowner.",
+                  href: "/guides/first-90-days-after-buying-a-house",
+                  trackId: "article_first_90_days",
+                },
+                {
+                  title: "What to Fix First After a Home Inspection",
+                  description: "How to turn an overwhelming inspection report into a clear, manageable plan.",
+                  href: "/guides/what-to-fix-after-home-inspection",
+                  trackId: "article_home_inspection",
+                },
+                {
+                  title: "How Much Does Home Maintenance Cost?",
+                  description: "The real cost of owning a home, where the money goes, and how to stop being surprised.",
+                  href: "/guides/how-much-does-home-maintenance-cost",
+                  trackId: "article_maintenance_cost",
+                },
+                {
+                  title: "Printable Schedule (And Why It Fails)",
+                  description: "Why printable checklists feel great but rarely work—and what actually keeps you on track.",
+                  href: "/guides/printable-home-maintenance-schedule",
+                  trackId: "article_printable_schedule",
+                },
+              ].map((article, i) => (
+                <motion.div
+                  key={article.href}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  viewport={{ once: true }}
+                >
+                  <Link
+                    href={article.href}
+                    onClick={() => trackEvent('click', 'landing', article.trackId)}
+                    className="block rounded-lg bg-card border border-border/50 p-6 hover:border-primary/30 hover:shadow-md transition-all duration-200 no-underline h-full"
+                  >
+                    <h3 className="font-heading font-semibold text-foreground mb-2 text-lg">
+                      {article.title}
+                    </h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                      {article.description}
+                    </p>
+                    <span className="text-sm font-medium text-primary inline-flex items-center gap-1">
+                      Read article <ArrowRight className="h-3.5 w-3.5" />
+                    </span>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section className="py-24 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-t from-primary/5 to-transparent" />
           <div className="container mx-auto px-6 relative">
@@ -382,7 +460,7 @@ export default function Landing() {
           <div className="grid sm:grid-cols-3 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <img src="/images/home-buddy-icon.png" alt="Home Buddy" className="h-6 w-6 rounded" width="24" height="24" />
+                <img src="/images/home-buddy-icon.webp" alt="Home Buddy" className="h-6 w-6 rounded" width="24" height="24" />
                 <span className="font-heading font-bold text-foreground">Home Buddy</span>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
@@ -400,6 +478,18 @@ export default function Landing() {
                 </li>
                 <li>
                   <Link href="/guides/what-to-maintain-in-a-new-house" onClick={() => trackEvent('click', 'landing', 'footer_guide_new_homeowner')} className="text-muted-foreground hover:text-foreground no-underline transition-colors" data-testid="link-guide-new-homeowner">New Homeowner Guide</Link>
+                </li>
+                <li>
+                  <Link href="/guides/first-90-days-after-buying-a-house" onClick={() => trackEvent('click', 'landing', 'footer_guide_first_90')} className="text-muted-foreground hover:text-foreground no-underline transition-colors">First 90 Days</Link>
+                </li>
+                <li>
+                  <Link href="/guides/what-to-fix-after-home-inspection" onClick={() => trackEvent('click', 'landing', 'footer_guide_inspection')} className="text-muted-foreground hover:text-foreground no-underline transition-colors">After a Home Inspection</Link>
+                </li>
+                <li>
+                  <Link href="/guides/how-much-does-home-maintenance-cost" onClick={() => trackEvent('click', 'landing', 'footer_guide_cost')} className="text-muted-foreground hover:text-foreground no-underline transition-colors">Maintenance Costs</Link>
+                </li>
+                <li>
+                  <Link href="/guides/printable-home-maintenance-schedule" onClick={() => trackEvent('click', 'landing', 'footer_guide_printable')} className="text-muted-foreground hover:text-foreground no-underline transition-colors">Printable Schedule</Link>
                 </li>
               </ul>
             </div>
