@@ -18,6 +18,9 @@ import cookieParser from "cookie-parser";
 import compression from "compression";
 import { csrfProtection, registerCsrfRoute } from "./lib/csrf";
 import { registerOpenApiRoute } from "./openapi";
+import { agentRouter } from "./agents/routes";
+// Register all agent handlers at startup
+import "./agents/index";
 
 const app = express();
 const httpServer = createServer(app);
@@ -59,8 +62,10 @@ app.use(
 app.use(express.urlencoded({ extended: false, limit: "10mb" }));
 app.use(cookieParser());
 
-// Gzip/brotli compression for all responses
-app.use(compression());
+// Gzip/brotli compression — production only (interferes with Vite HMR in dev)
+if (process.env.NODE_ENV === "production") {
+  app.use(compression());
+}
 
 // Health check — no auth, no rate limit, lightweight
 app.get("/api/health", async (_req, res) => {
@@ -221,6 +226,7 @@ app.use((req, res, next) => {
   app.use("/v2", readLimiter);
 
   app.use("/v2", v2Router);
+  app.use("/api/agents", agentRouter);
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

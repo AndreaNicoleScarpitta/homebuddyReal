@@ -1,4 +1,4 @@
-import { pgTable, varchar, integer, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, varchar, integer, text, timestamp, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -8,6 +8,8 @@ export * from "./models/auth";
 export * from "./models/chat";
 // Export event sourcing models (state-machine + immutable event log)
 export * from "./models/eventing";
+// Export agent system models
+export * from "./models/agents";
 import { users } from "./models/auth";
 
 // Homes table - stores user's home profile with Zillow-style fields
@@ -47,6 +49,25 @@ export const homes = pgTable("homes", {
 export const insertHomeSchema = createInsertSchema(homes).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertHome = Omit<typeof homes.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
 export type Home = typeof homes.$inferSelect;
+
+// Home Graph enums
+export const provenanceSources = ["manual", "ai-inferred", "document-extracted", "inspection"] as const;
+export type ProvenanceSource = typeof provenanceSources[number];
+
+export const warrantyTypes = ["manufacturer", "extended", "home-warranty", "labor", "other"] as const;
+export type WarrantyType = typeof warrantyTypes[number];
+
+export const permitTypes = ["building", "electrical", "plumbing", "mechanical", "roofing", "other"] as const;
+export type PermitType = typeof permitTypes[number];
+
+export const repairOutcomes = ["resolved", "partial", "temporary", "failed"] as const;
+export type RepairOutcome = typeof repairOutcomes[number];
+
+export const recommendationStatuses = ["open", "accepted", "dismissed", "completed"] as const;
+export type RecommendationStatus = typeof recommendationStatuses[number];
+
+export const timelineCategories = ["repair", "replacement", "inspection", "maintenance", "purchase", "permit", "warranty", "milestone", "document"] as const;
+export type TimelineCategory = typeof timelineCategories[number];
 
 // System categories enum
 export const systemCategories = [
@@ -284,6 +305,7 @@ export const homeDocuments = pgTable("home_documents", {
   objectPath: text("object_path").notNull(),
   category: varchar("category", { length: 100 }).default("general"),
   notes: text("notes"),
+  extractedData: text("extracted_data"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("home_documents_home_id_idx").on(table.homeId),
@@ -428,6 +450,274 @@ export const insertNotificationPreferencesSchema = createInsertSchema(notificati
 export type InsertNotificationPreferences = Omit<typeof notificationPreferences.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
 export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
 
+// Components table - sub-parts of a system (e.g., compressor in HVAC)
+export const components = pgTable("components", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  systemId: integer("system_id").notNull().references(() => systems.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  componentType: varchar("component_type", { length: 100 }),
+  material: varchar("material", { length: 100 }),
+  installYear: integer("install_year"),
+  condition: varchar("condition", { length: 50 }).default("Unknown"),
+  notes: text("notes"),
+  photos: text("photos"),
+  provenanceSource: varchar("provenance_source", { length: 50 }).default("manual"),
+  provenanceConfidence: integer("provenance_confidence"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("components_home_id_idx").on(table.homeId),
+  index("components_system_id_idx").on(table.systemId),
+]);
+
+// @ts-expect-error drizzle-zod omit type inference
+export const insertComponentSchema = createInsertSchema(components).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertComponent = Omit<typeof components.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
+export type Component = typeof components.$inferSelect;
+
+// Warranties table - warranty records for systems or components
+export const warranties = pgTable("warranties", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  systemId: integer("system_id").references(() => systems.id, { onDelete: "set null" }),
+  componentId: integer("component_id").references(() => components.id, { onDelete: "set null" }),
+  warrantyProvider: varchar("warranty_provider", { length: 255 }),
+  warrantyType: varchar("warranty_type", { length: 100 }),
+  coverageSummary: text("coverage_summary"),
+  startDate: timestamp("start_date"),
+  expiryDate: timestamp("expiry_date"),
+  isTransferable: boolean("is_transferable").default(false),
+  documentId: integer("document_id").references(() => homeDocuments.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  provenanceSource: varchar("provenance_source", { length: 50 }).default("manual"),
+  provenanceConfidence: integer("provenance_confidence"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("warranties_home_id_idx").on(table.homeId),
+  index("warranties_system_id_idx").on(table.systemId),
+  index("warranties_expiry_idx").on(table.expiryDate),
+]);
+
+// @ts-expect-error drizzle-zod omit type inference
+export const insertWarrantySchema = createInsertSchema(warranties).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWarranty = Omit<typeof warranties.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
+export type Warranty = typeof warranties.$inferSelect;
+
+// Permits table - building/renovation permits
+export const permits = pgTable("permits", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  systemId: integer("system_id").references(() => systems.id, { onDelete: "set null" }),
+  permitNumber: varchar("permit_number", { length: 100 }),
+  permitType: varchar("permit_type", { length: 100 }),
+  issuedDate: timestamp("issued_date"),
+  status: varchar("status", { length: 50 }).default("unknown"),
+  issuingAuthority: varchar("issuing_authority", { length: 255 }),
+  description: text("description"),
+  documentId: integer("document_id").references(() => homeDocuments.id, { onDelete: "set null" }),
+  provenanceSource: varchar("provenance_source", { length: 50 }).default("manual"),
+  provenanceConfidence: integer("provenance_confidence"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("permits_home_id_idx").on(table.homeId),
+]);
+
+// @ts-expect-error drizzle-zod omit type inference
+export const insertPermitSchema = createInsertSchema(permits).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPermit = Omit<typeof permits.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
+export type Permit = typeof permits.$inferSelect;
+
+// Repairs table - repair history
+export const repairs = pgTable("repairs", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  systemId: integer("system_id").references(() => systems.id, { onDelete: "set null" }),
+  componentId: integer("component_id").references(() => components.id, { onDelete: "set null" }),
+  taskId: integer("task_id").references(() => maintenanceTasks.id, { onDelete: "set null" }),
+  contractorId: integer("contractor_id").references(() => contractors.id, { onDelete: "set null" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  repairDate: timestamp("repair_date"),
+  cost: integer("cost"),
+  partsUsed: text("parts_used"),
+  outcome: varchar("outcome", { length: 50 }).default("resolved"),
+  provenanceSource: varchar("provenance_source", { length: 50 }).default("manual"),
+  provenanceConfidence: integer("provenance_confidence"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("repairs_home_id_idx").on(table.homeId),
+  index("repairs_system_id_idx").on(table.systemId),
+  index("repairs_date_idx").on(table.repairDate),
+]);
+
+// @ts-expect-error drizzle-zod omit type inference
+export const insertRepairSchema = createInsertSchema(repairs).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertRepair = Omit<typeof repairs.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
+export type Repair = typeof repairs.$inferSelect;
+
+// Replacements table - system/component replacement history
+export const replacements = pgTable("replacements", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  systemId: integer("system_id").references(() => systems.id, { onDelete: "set null" }),
+  componentId: integer("component_id").references(() => components.id, { onDelete: "set null" }),
+  replacedSystemName: varchar("replaced_system_name", { length: 255 }),
+  replacedMake: varchar("replaced_make", { length: 100 }),
+  replacedModel: varchar("replaced_model", { length: 100 }),
+  replacementDate: timestamp("replacement_date"),
+  cost: integer("cost"),
+  contractorId: integer("contractor_id").references(() => contractors.id, { onDelete: "set null" }),
+  reason: text("reason"),
+  documentId: integer("document_id").references(() => homeDocuments.id, { onDelete: "set null" }),
+  provenanceSource: varchar("provenance_source", { length: 50 }).default("manual"),
+  provenanceConfidence: integer("provenance_confidence"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("replacements_home_id_idx").on(table.homeId),
+  index("replacements_date_idx").on(table.replacementDate),
+]);
+
+// @ts-expect-error drizzle-zod omit type inference
+export const insertReplacementSchema = createInsertSchema(replacements).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertReplacement = Omit<typeof replacements.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
+export type Replacement = typeof replacements.$inferSelect;
+
+// Recommendations table - AI-generated or inspection-derived recommendations
+export const recommendations = pgTable("recommendations", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  systemId: integer("system_id").references(() => systems.id, { onDelete: "set null" }),
+  componentId: integer("component_id").references(() => components.id, { onDelete: "set null" }),
+  findingId: integer("finding_id").references(() => inspectionFindings.id, { onDelete: "set null" }),
+  source: varchar("source", { length: 50 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  urgency: varchar("urgency", { length: 50 }).default("later"),
+  confidence: integer("confidence"),
+  rationale: text("rationale"),
+  estimatedCost: varchar("estimated_cost", { length: 100 }),
+  status: varchar("status", { length: 50 }).default("open"),
+  taskId: integer("task_id").references(() => maintenanceTasks.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("recommendations_home_id_idx").on(table.homeId),
+  index("recommendations_status_idx").on(table.status),
+]);
+
+// @ts-expect-error drizzle-zod omit type inference
+export const insertRecommendationSchema = createInsertSchema(recommendations).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertRecommendation = Omit<typeof recommendations.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
+export type Recommendation = typeof recommendations.$inferSelect;
+
+// Timeline events table - unified timeline of all home events
+export const timelineEvents = pgTable("timeline_events", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  eventDate: timestamp("event_date").notNull(),
+  category: varchar("category", { length: 50 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  icon: varchar("icon", { length: 50 }),
+  entityType: varchar("entity_type", { length: 50 }),
+  entityId: integer("entity_id"),
+  cost: integer("cost"),
+  provenanceSource: varchar("provenance_source", { length: 50 }),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("timeline_events_home_id_idx").on(table.homeId),
+  index("timeline_events_date_idx").on(table.eventDate),
+  index("timeline_events_category_idx").on(table.category),
+]);
+
+// @ts-expect-error drizzle-zod omit type inference
+export const insertTimelineEventSchema = createInsertSchema(timelineEvents).omit({ id: true, createdAt: true });
+export type InsertTimelineEvent = Omit<typeof timelineEvents.$inferInsert, 'id' | 'createdAt'>;
+export type TimelineEvent = typeof timelineEvents.$inferSelect;
+
+// User action types enum
+export const actionTypes = ["completed_task", "ignored_task", "deferred", "manual_fix", "hired_contractor", "dismissed_recommendation"] as const;
+export type ActionType = typeof actionTypes[number];
+
+// User actions table - tracks what users do in response to recommendations/tasks
+export const userActions = pgTable("user_actions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  systemId: integer("system_id").references(() => systems.id, { onDelete: "set null" }),
+  relatedRecommendationId: integer("related_recommendation_id").references(() => recommendations.id, { onDelete: "set null" }),
+  relatedTaskId: integer("related_task_id").references(() => maintenanceTasks.id, { onDelete: "set null" }),
+  actionType: varchar("action_type", { length: 50 }).notNull(),
+  actionDate: timestamp("action_date").defaultNow(),
+  costActual: integer("cost_actual"),
+  contractorId: integer("contractor_id").references(() => contractors.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("user_actions_home_id_idx").on(table.homeId),
+  index("user_actions_system_id_idx").on(table.systemId),
+  index("user_actions_date_idx").on(table.actionDate),
+]);
+
+// @ts-expect-error drizzle-zod omit type inference
+export const insertUserActionSchema = createInsertSchema(userActions).omit({ id: true, createdAt: true });
+export type InsertUserAction = Omit<typeof userActions.$inferInsert, 'id' | 'createdAt'>;
+export type UserAction = typeof userActions.$inferSelect;
+
+// Outcome event types enum
+export const outcomeTypes = ["failure", "avoided_issue", "degraded", "improved", "no_change", "unknown"] as const;
+export type OutcomeType = typeof outcomeTypes[number];
+
+// Outcome events table - tracks what actually happened to systems
+export const outcomeEvents = pgTable("outcome_events", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  systemId: integer("system_id").references(() => systems.id, { onDelete: "set null" }),
+  relatedActionId: integer("related_action_id").references(() => userActions.id, { onDelete: "set null" }),
+  outcomeType: varchar("outcome_type", { length: 50 }).notNull(),
+  severity: varchar("severity", { length: 50 }).default("low"),
+  costImpact: integer("cost_impact"),
+  description: text("description"),
+  occurredAt: timestamp("occurred_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("outcome_events_home_id_idx").on(table.homeId),
+  index("outcome_events_system_id_idx").on(table.systemId),
+  index("outcome_events_date_idx").on(table.occurredAt),
+]);
+
+// @ts-expect-error drizzle-zod omit type inference
+export const insertOutcomeEventSchema = createInsertSchema(outcomeEvents).omit({ id: true, createdAt: true });
+export type InsertOutcomeEvent = Omit<typeof outcomeEvents.$inferInsert, 'id' | 'createdAt'>;
+export type OutcomeEvent = typeof outcomeEvents.$inferSelect;
+
+// Learning adjustments table - stores calibrated engine parameters per home
+export const learningAdjustments = pgTable("learning_adjustments", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  parameterKey: varchar("parameter_key", { length: 100 }).notNull(),
+  parameterValue: text("parameter_value").notNull(),
+  reason: text("reason"),
+  dataPoints: integer("data_points").default(0),
+  confidence: integer("confidence").default(50),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("learning_adjustments_home_id_idx").on(table.homeId),
+  index("learning_adjustments_key_idx").on(table.parameterKey),
+  uniqueIndex("learning_adjustments_home_param_unique").on(table.homeId, table.parameterKey),
+]);
+
+// @ts-expect-error drizzle-zod omit type inference
+export const insertLearningAdjustmentSchema = createInsertSchema(learningAdjustments).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertLearningAdjustment = Omit<typeof learningAdjustments.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>;
+export type LearningAdjustment = typeof learningAdjustments.$inferSelect;
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   homes: many(homes),
@@ -444,6 +734,16 @@ export const homesRelations = relations(homes, ({ one, many }) => ({
   chatMessages: many(chatMessages),
   funds: many(funds),
   inspectionReports: many(inspectionReports),
+  components: many(components),
+  warranties: many(warranties),
+  permits: many(permits),
+  repairs: many(repairs),
+  replacements: many(replacements),
+  recommendations: many(recommendations),
+  timelineEvents: many(timelineEvents),
+  userActions: many(userActions),
+  outcomeEvents: many(outcomeEvents),
+  learningAdjustments: many(learningAdjustments),
 }));
 
 export const systemsRelations = relations(systems, ({ one, many }) => ({
@@ -453,6 +753,14 @@ export const systemsRelations = relations(systems, ({ one, many }) => ({
   }),
   tasks: many(maintenanceTasks),
   logEntries: many(maintenanceLogEntries),
+  components: many(components),
+  warranties: many(warranties),
+  permits: many(permits),
+  repairs: many(repairs),
+  replacements: many(replacements),
+  recommendations: many(recommendations),
+  userActions: many(userActions),
+  outcomeEvents: many(outcomeEvents),
 }));
 
 export const maintenanceTasksRelations = relations(maintenanceTasks, ({ one, many }) => ({
@@ -564,5 +872,175 @@ export const notificationPreferencesRelations = relations(notificationPreference
   user: one(users, {
     fields: [notificationPreferences.userId],
     references: [users.id],
+  }),
+}));
+
+export const componentsRelations = relations(components, ({ one, many }) => ({
+  home: one(homes, {
+    fields: [components.homeId],
+    references: [homes.id],
+  }),
+  system: one(systems, {
+    fields: [components.systemId],
+    references: [systems.id],
+  }),
+  warranties: many(warranties),
+  repairs: many(repairs),
+  replacements: many(replacements),
+  recommendations: many(recommendations),
+}));
+
+export const warrantiesRelations = relations(warranties, ({ one }) => ({
+  home: one(homes, {
+    fields: [warranties.homeId],
+    references: [homes.id],
+  }),
+  system: one(systems, {
+    fields: [warranties.systemId],
+    references: [systems.id],
+  }),
+  component: one(components, {
+    fields: [warranties.componentId],
+    references: [components.id],
+  }),
+  document: one(homeDocuments, {
+    fields: [warranties.documentId],
+    references: [homeDocuments.id],
+  }),
+}));
+
+export const permitsRelations = relations(permits, ({ one }) => ({
+  home: one(homes, {
+    fields: [permits.homeId],
+    references: [homes.id],
+  }),
+  system: one(systems, {
+    fields: [permits.systemId],
+    references: [systems.id],
+  }),
+  document: one(homeDocuments, {
+    fields: [permits.documentId],
+    references: [homeDocuments.id],
+  }),
+}));
+
+export const repairsRelations = relations(repairs, ({ one }) => ({
+  home: one(homes, {
+    fields: [repairs.homeId],
+    references: [homes.id],
+  }),
+  system: one(systems, {
+    fields: [repairs.systemId],
+    references: [systems.id],
+  }),
+  component: one(components, {
+    fields: [repairs.componentId],
+    references: [components.id],
+  }),
+  task: one(maintenanceTasks, {
+    fields: [repairs.taskId],
+    references: [maintenanceTasks.id],
+  }),
+  contractor: one(contractors, {
+    fields: [repairs.contractorId],
+    references: [contractors.id],
+  }),
+}));
+
+export const replacementsRelations = relations(replacements, ({ one }) => ({
+  home: one(homes, {
+    fields: [replacements.homeId],
+    references: [homes.id],
+  }),
+  system: one(systems, {
+    fields: [replacements.systemId],
+    references: [systems.id],
+  }),
+  component: one(components, {
+    fields: [replacements.componentId],
+    references: [components.id],
+  }),
+  contractor: one(contractors, {
+    fields: [replacements.contractorId],
+    references: [contractors.id],
+  }),
+  document: one(homeDocuments, {
+    fields: [replacements.documentId],
+    references: [homeDocuments.id],
+  }),
+}));
+
+export const recommendationsRelations = relations(recommendations, ({ one }) => ({
+  home: one(homes, {
+    fields: [recommendations.homeId],
+    references: [homes.id],
+  }),
+  system: one(systems, {
+    fields: [recommendations.systemId],
+    references: [systems.id],
+  }),
+  component: one(components, {
+    fields: [recommendations.componentId],
+    references: [components.id],
+  }),
+  finding: one(inspectionFindings, {
+    fields: [recommendations.findingId],
+    references: [inspectionFindings.id],
+  }),
+  task: one(maintenanceTasks, {
+    fields: [recommendations.taskId],
+    references: [maintenanceTasks.id],
+  }),
+}));
+
+export const timelineEventsRelations = relations(timelineEvents, ({ one }) => ({
+  home: one(homes, {
+    fields: [timelineEvents.homeId],
+    references: [homes.id],
+  }),
+}));
+
+export const userActionsRelations = relations(userActions, ({ one }) => ({
+  home: one(homes, {
+    fields: [userActions.homeId],
+    references: [homes.id],
+  }),
+  system: one(systems, {
+    fields: [userActions.systemId],
+    references: [systems.id],
+  }),
+  recommendation: one(recommendations, {
+    fields: [userActions.relatedRecommendationId],
+    references: [recommendations.id],
+  }),
+  task: one(maintenanceTasks, {
+    fields: [userActions.relatedTaskId],
+    references: [maintenanceTasks.id],
+  }),
+  contractor: one(contractors, {
+    fields: [userActions.contractorId],
+    references: [contractors.id],
+  }),
+}));
+
+export const outcomeEventsRelations = relations(outcomeEvents, ({ one }) => ({
+  home: one(homes, {
+    fields: [outcomeEvents.homeId],
+    references: [homes.id],
+  }),
+  system: one(systems, {
+    fields: [outcomeEvents.systemId],
+    references: [systems.id],
+  }),
+  relatedAction: one(userActions, {
+    fields: [outcomeEvents.relatedActionId],
+    references: [userActions.id],
+  }),
+}));
+
+export const learningAdjustmentsRelations = relations(learningAdjustments, ({ one }) => ({
+  home: one(homes, {
+    fields: [learningAdjustments.homeId],
+    references: [homes.id],
   }),
 }));
