@@ -1,11 +1,14 @@
-import { useEffect } from "react";
-import { buttonVariants } from "@/components/ui/button";
-import { Home, Shield, Mail } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Home, Shield, Mail, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { trackEvent, trackSlugPageView } from "@/lib/analytics";
 import { PAGE_SLUGS } from "@/lib/slug-registry";
 import { cn } from "@/lib/utils";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 
 const GoogleIcon = () => (
   <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -16,34 +19,53 @@ const GoogleIcon = () => (
   </svg>
 );
 
-const AppleIcon = () => (
-  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-  </svg>
-);
-
-const GitHubIcon = () => (
-  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-  </svg>
-);
-
-const XIcon = () => (
-  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-  </svg>
-);
-
-const authProviders = [
-  { name: "Google", icon: GoogleIcon, testId: "button-login-google" },
-  { name: "Apple", icon: AppleIcon, testId: "button-login-apple" },
-  { name: "GitHub", icon: GitHubIcon, testId: "button-login-github" },
-  { name: "X", icon: XIcon, testId: "button-login-x" },
-  { name: "email", icon: Mail, testId: "button-login-email" },
-];
-
 export default function Login() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
   useEffect(() => { trackSlugPageView(PAGE_SLUGS.login); }, []);
+
+  useEffect(() => {
+    // Surface OAuth errors from query string
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get("error");
+    if (err) {
+      const msg: Record<string, string> = {
+        google_unavailable: "Google sign-in is not configured yet.",
+        google_no_email: "Google didn't return an email — try again.",
+        auth_failed: "Sign-in failed. Please try again.",
+        session_failed: "Session couldn't be saved. Please try again.",
+      };
+      toast({ title: "Sign-in error", description: msg[err] || err, variant: "destructive" });
+      window.history.replaceState({}, "", "/login");
+    }
+  }, [toast]);
+
+  async function handleEmailLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    trackEvent("login_attempt", "auth", "email");
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Invalid email or password");
+      trackEvent("login_success", "auth", "email");
+      setLocation("/");
+    } catch (err: any) {
+      toast({ title: "Couldn't sign you in", description: err.message, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -65,7 +87,7 @@ export default function Login() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-sm space-y-8"
+          className="w-full max-w-sm space-y-6"
         >
           <div className="lg:hidden flex items-center gap-2 mb-8">
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
@@ -79,24 +101,56 @@ export default function Login() {
             <p className="text-muted-foreground mt-1">Sign in to manage your home</p>
           </div>
 
-          <div className="space-y-3">
-            {authProviders.map((provider) => (
+          {!showEmailForm ? (
+            <div className="space-y-3">
               <a
-                key={provider.name}
-                href="/api/login"
-                target="_top"
-                onClick={() => trackEvent('login_attempt', 'auth', provider.name.toLowerCase())}
+                href="/auth/google"
+                onClick={() => trackEvent("login_attempt", "auth", "google")}
                 className={cn(
                   buttonVariants({ variant: "outline", size: "default" }),
-                  "w-full h-11 text-sm font-medium gap-3 justify-center no-underline border-border hover:bg-accent"
+                  "w-full h-11 text-sm font-medium gap-3 justify-center no-underline",
                 )}
-                data-testid={provider.testId}
+                data-testid="button-login-google"
               >
-                <provider.icon />
-                Continue with {provider.name}
+                <GoogleIcon />
+                Continue with Google
               </a>
-            ))}
-          </div>
+
+              <button
+                type="button"
+                onClick={() => setShowEmailForm(true)}
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "default" }),
+                  "w-full h-11 text-sm font-medium gap-3 justify-center",
+                )}
+                data-testid="button-login-email"
+              >
+                <Mail className="h-5 w-5" />
+                Continue with email
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleEmailLogin} className="space-y-4" data-testid="form-login-email">
+              <div className="space-y-2">
+                <Label htmlFor="login-email">Email</Label>
+                <Input id="login-email" type="email" autoComplete="email" required value={email}
+                  onChange={(e) => setEmail(e.target.value)} data-testid="input-login-email" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="login-password">Password</Label>
+                <Input id="login-password" type="password" autoComplete="current-password" required
+                  value={password} onChange={(e) => setPassword(e.target.value)}
+                  data-testid="input-login-password" />
+              </div>
+              <Button type="submit" className="w-full h-11" disabled={submitting} data-testid="button-submit-login">
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
+              </Button>
+              <button type="button" onClick={() => setShowEmailForm(false)}
+                className="text-sm text-muted-foreground hover:text-foreground w-full text-center">
+                ← Other sign-in options
+              </button>
+            </form>
+          )}
 
           <div className="flex items-center gap-2 text-sm text-muted-foreground justify-center">
             <Shield className="h-4 w-4" />

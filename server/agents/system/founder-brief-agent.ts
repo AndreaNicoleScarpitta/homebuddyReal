@@ -20,10 +20,19 @@ import { db } from "../../db";
 import { sql } from "drizzle-orm";
 import { sendEmail } from "../../lib/email";
 import { logInfo, logWarn } from "../../lib/logger";
+import { ga4Configured, getSummary, getTopPages, getTrafficSources, getFunnel } from "../../lib/ga4";
 
 function pct(n: number, d: number): string {
   if (d === 0) return "—";
   return `${((n / d) * 100).toFixed(1)}%`;
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function safeQuery<T = any>(fn: () => Promise<T>, fallback: T): Promise<T> {
@@ -132,6 +141,16 @@ registerAgent("founder-brief-agent", async (ctx: AgentContext) => {
     return (r.rows[0] as { n: number })?.n ?? 0;
   }, 0);
 
+  // ── GA4 (if configured) ────────────────────────────────────────────────
+  const gaEnabled = ga4Configured();
+  const gaSummary = gaEnabled ? await getSummary(7) : null;
+  const gaSummaryPrev = gaEnabled ? await getSummary(14) : null; // includes prev week + this week
+  const gaTopPages = gaEnabled ? await getTopPages(7, 5) : [];
+  const gaSources = gaEnabled ? await getTrafficSources(7, 5) : [];
+  const gaFunnel = gaEnabled
+    ? await getFunnel(["/", "/signup", "/onboarding", "/dashboard"], 7)
+    : [];
+
   // ── ANOMALIES ──────────────────────────────────────────────────────────
   const anomalies: string[] = [];
   if (signupsPrev7d > 0 && signups7d < signupsPrev7d * 0.6) {
@@ -142,6 +161,18 @@ registerAgent("founder-brief-agent", async (ctx: AgentContext) => {
   }
   if (overdueTasks > 0 && totalHomes > 0 && overdueTasks / totalHomes > 5) {
     anomalies.push(`High overdue-task density: ${(overdueTasks / totalHomes).toFixed(1)} per home on average`);
+  }
+
+  // GA4-derived anomalies: approximate "this week vs last week" from the 14d sum - 7d sum
+  if (gaSummary && gaSummaryPrev) {
+    const lastWeekSessions = Math.max(0, gaSummaryPrev.sessions - gaSummary.sessions);
+    if (lastWeekSessions > 0 && gaSummary.sessions < lastWeekSessions * 0.7) {
+      const drop = Math.round((1 - gaSummary.sessions / lastWeekSessions) * 100);
+      anomalies.push(`Site sessions dropped ${drop}% week-over-week (${lastWeekSessions} → ${gaSummary.sessions})`);
+    }
+    if (gaSummary.bounceRate > 0.75 && gaSummary.sessions > 50) {
+      anomalies.push(`Bounce rate is ${(gaSummary.bounceRate * 100).toFixed(0)}% — above healthy threshold`);
+    }
   }
 
   // ── BUILD EMAIL ────────────────────────────────────────────────────────
@@ -233,6 +264,90 @@ registerAgent("founder-brief-agent", async (ctx: AgentContext) => {
           </tr>
         </table>
 
+        ${gaSummary ? `
+          <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;margin:0 0 12px 0;">Site Traffic (last 7d)</h2>
+          <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+            <tr>
+              <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;">Visitors</td>
+              <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;">${gaSummary.activeUsers.toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;">Sessions</td>
+              <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;">${gaSummary.sessions.toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;">Page views</td>
+              <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;">${gaSummary.pageViews.toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;">Engagement rate</td>
+              <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;">${(gaSummary.engagementRate * 100).toFixed(0)}%</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;">Bounce rate</td>
+              <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;color:${gaSummary.bounceRate > 0.7 ? "#dc2626" : "#1f2937"};">${(gaSummary.bounceRate * 100).toFixed(0)}%</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 0;">Conversions</td>
+              <td style="padding:10px 0;text-align:right;font-weight:600;color:#16a34a;">${gaSummary.conversions.toLocaleString()}</td>
+            </tr>
+          </table>
+
+          ${gaTopPages.length > 0 ? `
+            <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:#9ca3af;margin:16px 0 8px 0;">Top pages</h3>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:13px;">
+              ${gaTopPages.map((p) => `
+                <tr>
+                  <td style="padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#6b7280;">${escapeHtml(p.path)}</span>
+                  </td>
+                  <td style="padding:6px 0;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:500;">${p.pageViews.toLocaleString()}</td>
+                </tr>
+              `).join("")}
+            </table>
+          ` : ""}
+
+          ${gaSources.length > 0 ? `
+            <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:#9ca3af;margin:16px 0 8px 0;">Traffic sources</h3>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:13px;">
+              ${gaSources.map((s) => `
+                <tr>
+                  <td style="padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="font-weight:500;">${escapeHtml(s.source)}</span>
+                    <span style="color:#9ca3af;margin-left:6px;">/ ${escapeHtml(s.medium)}</span>
+                  </td>
+                  <td style="padding:6px 0;border-bottom:1px solid #f3f4f6;text-align:right;">${s.sessions.toLocaleString()} sessions</td>
+                </tr>
+              `).join("")}
+            </table>
+          ` : ""}
+
+          ${gaFunnel.length > 0 && gaFunnel.some((s) => s.users > 0) ? `
+            <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:#9ca3af;margin:16px 0 8px 0;">Funnel (last 7d)</h3>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:24px;font-size:13px;">
+              ${gaFunnel.map((step, i) => {
+                const prev = i > 0 ? gaFunnel[i - 1].users : 0;
+                const dropoff = prev > 0 ? Math.round((1 - step.users / prev) * 100) : null;
+                return `
+                  <tr>
+                    <td style="padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                      <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#6b7280;">${escapeHtml(step.path)}</span>
+                    </td>
+                    <td style="padding:6px 0;border-bottom:1px solid #f3f4f6;text-align:right;">
+                      <span style="font-weight:500;">${step.users.toLocaleString()}</span>
+                      ${dropoff !== null && dropoff > 0 ? `<span style="color:${dropoff > 50 ? "#dc2626" : "#ea580c"};font-size:11px;margin-left:8px;">−${dropoff}%</span>` : ""}
+                    </td>
+                  </tr>
+                `;
+              }).join("")}
+            </table>
+          ` : ""}
+        ` : `
+          <div style="background:#f9fafb;border:1px dashed #d1d5db;border-radius:8px;padding:16px;margin-bottom:20px;font-size:12px;color:#6b7280;">
+            <strong style="color:#374151;">GA4 not connected.</strong> Set <code>GA4_PROPERTY_ID</code> and <code>GA4_SERVICE_ACCOUNT_JSON</code> to see traffic, top pages, sources, and funnel metrics in this brief. See <code>docs/ga4-setup.md</code>.
+          </div>
+        `}
+
         ${anomalies.length > 0 ? `
           <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:0.05em;color:#dc2626;margin:0 0 12px 0;">⚠ Anomalies</h2>
           <ul style="margin:0 0 24px 0;padding-left:18px;color:#7f1d1d;font-size:13px;line-height:1.6;">
@@ -278,6 +393,12 @@ registerAgent("founder-brief-agent", async (ctx: AgentContext) => {
       totalUsers, signups24h, signups7d, signupsPrev7d, activeUsers24h,
       totalHomes, activeHomes7d, openTasks, overdueTasks, completedTasks24h,
       agentRuns24h, agentFailures24h, pendingApprovals, anomalies,
+      ga4: gaSummary ? {
+        summary: gaSummary,
+        topPages: gaTopPages,
+        sources: gaSources,
+        funnel: gaFunnel,
+      } : null,
     },
   });
 });

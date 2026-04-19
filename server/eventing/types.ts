@@ -32,6 +32,9 @@ export const AggregateTypes = [
   "circuit_map",
   "file_analysis",
   "suggested_system",
+  "component",
+  "warranty",
+  "recommendation",
 ] as const;
 export type AggregateType = (typeof AggregateTypes)[number];
 
@@ -90,6 +93,21 @@ export const EventTypes = {
   SuggestedSystemDeclined: "SuggestedSystemDeclined",
 
   RetryRequested: "RetryRequested",
+
+  // Home Graph events
+  ComponentCreated: "ComponentCreated",
+  ComponentUpdated: "ComponentUpdated",
+  ComponentDeleted: "ComponentDeleted",
+  WarrantyCreated: "WarrantyCreated",
+  WarrantyUpdated: "WarrantyUpdated",
+  WarrantyDeleted: "WarrantyDeleted",
+  RecommendationCreated: "RecommendationCreated",
+  RecommendationAccepted: "RecommendationAccepted",
+  RecommendationDismissed: "RecommendationDismissed",
+  RepairRecorded: "RepairRecorded",
+  ReplacementRecorded: "ReplacementRecorded",
+  PermitCreated: "PermitCreated",
+  TimelineEventRecorded: "TimelineEventRecorded",
 } as const;
 export type EventType = (typeof EventTypes)[keyof typeof EventTypes];
 
@@ -296,6 +314,146 @@ export const RetryRequestedData = z.object({
   reason: z.string().optional(),
 });
 
+// Home Graph event data schemas
+export const ComponentCreatedData = z.object({
+  homeId: z.number(),
+  systemId: z.number(),
+  name: z.string(),
+  componentType: z.string().optional(),
+  material: z.string().optional(),
+  installYear: z.number().optional(),
+  condition: z.string().optional(),
+  notes: z.string().optional(),
+  provenanceSource: z.string().optional(),
+  provenanceConfidence: z.number().optional(),
+});
+
+export const ComponentUpdatedData = z.object({
+  name: z.string().optional(),
+  componentType: z.string().optional(),
+  material: z.string().optional(),
+  installYear: z.number().optional(),
+  condition: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const ComponentDeletedData = z.object({
+  reason: z.string().optional(),
+});
+
+export const WarrantyCreatedData = z.object({
+  homeId: z.number(),
+  systemId: z.number().optional(),
+  componentId: z.number().optional(),
+  warrantyProvider: z.string().optional(),
+  warrantyType: z.string().optional(),
+  coverageSummary: z.string().optional(),
+  startDate: z.string().optional(),
+  expiryDate: z.string().optional(),
+  isTransferable: z.boolean().optional(),
+  documentId: z.number().optional(),
+  notes: z.string().optional(),
+  provenanceSource: z.string().optional(),
+  provenanceConfidence: z.number().optional(),
+});
+
+export const WarrantyUpdatedData = z.object({
+  warrantyProvider: z.string().optional(),
+  warrantyType: z.string().optional(),
+  coverageSummary: z.string().optional(),
+  startDate: z.string().optional(),
+  expiryDate: z.string().optional(),
+  isTransferable: z.boolean().optional(),
+  notes: z.string().optional(),
+});
+
+export const WarrantyDeletedData = z.object({
+  reason: z.string().optional(),
+});
+
+export const RecommendationCreatedData = z.object({
+  homeId: z.number(),
+  systemId: z.number().optional(),
+  componentId: z.number().optional(),
+  findingId: z.number().optional(),
+  source: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  urgency: z.string().optional(),
+  confidence: z.number().optional(),
+  rationale: z.string().optional(),
+  estimatedCost: z.string().optional(),
+  provenanceSource: z.string().optional(),
+});
+
+export const RecommendationAcceptedData = z.object({
+  taskId: z.number().optional(),
+});
+
+export const RecommendationDismissedData = z.object({
+  reason: z.string().optional(),
+});
+
+export const RepairRecordedData = z.object({
+  homeId: z.number(),
+  systemId: z.number().optional(),
+  componentId: z.number().optional(),
+  taskId: z.number().optional(),
+  contractorId: z.number().optional(),
+  title: z.string(),
+  description: z.string().optional(),
+  repairDate: z.string().optional(),
+  cost: z.number().optional(),
+  partsUsed: z.string().optional(),
+  outcome: z.string().optional(),
+  provenanceSource: z.string().optional(),
+  provenanceConfidence: z.number().optional(),
+});
+
+export const ReplacementRecordedData = z.object({
+  homeId: z.number(),
+  systemId: z.number().optional(),
+  componentId: z.number().optional(),
+  replacedSystemName: z.string().optional(),
+  replacedMake: z.string().optional(),
+  replacedModel: z.string().optional(),
+  replacementDate: z.string().optional(),
+  cost: z.number().optional(),
+  contractorId: z.number().optional(),
+  reason: z.string().optional(),
+  documentId: z.number().optional(),
+  provenanceSource: z.string().optional(),
+  provenanceConfidence: z.number().optional(),
+});
+
+export const PermitCreatedData = z.object({
+  homeId: z.number(),
+  systemId: z.number().optional(),
+  permitNumber: z.string().optional(),
+  permitType: z.string().optional(),
+  issuedDate: z.string().optional(),
+  status: z.string().optional(),
+  issuingAuthority: z.string().optional(),
+  description: z.string().optional(),
+  documentId: z.number().optional(),
+  provenanceSource: z.string().optional(),
+  provenanceConfidence: z.number().optional(),
+});
+
+export const TimelineEventRecordedData = z.object({
+  homeId: z.number(),
+  eventDate: z.string(),
+  category: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  icon: z.string().optional(),
+  entityType: z.string().optional(),
+  entityId: z.number().optional(),
+  cost: z.number().optional(),
+  provenanceSource: z.string().optional(),
+  metadata: z.string().optional(),
+});
+
 export const EventDataSchemas: Record<string, z.ZodTypeAny> = {
   [EventTypes.HomeAttributesUpdated]: HomeAttributesUpdatedData,
   [EventTypes.SystemAttributesUpserted]: SystemAttributesUpsertedData,
@@ -335,6 +493,19 @@ export const EventDataSchemas: Record<string, z.ZodTypeAny> = {
   [EventTypes.SuggestedSystemApproved]: SuggestedSystemApprovedData,
   [EventTypes.SuggestedSystemDeclined]: SuggestedSystemDeclinedData,
   [EventTypes.RetryRequested]: RetryRequestedData,
+  [EventTypes.ComponentCreated]: ComponentCreatedData,
+  [EventTypes.ComponentUpdated]: ComponentUpdatedData,
+  [EventTypes.ComponentDeleted]: ComponentDeletedData,
+  [EventTypes.WarrantyCreated]: WarrantyCreatedData,
+  [EventTypes.WarrantyUpdated]: WarrantyUpdatedData,
+  [EventTypes.WarrantyDeleted]: WarrantyDeletedData,
+  [EventTypes.RecommendationCreated]: RecommendationCreatedData,
+  [EventTypes.RecommendationAccepted]: RecommendationAcceptedData,
+  [EventTypes.RecommendationDismissed]: RecommendationDismissedData,
+  [EventTypes.RepairRecorded]: RepairRecordedData,
+  [EventTypes.ReplacementRecorded]: ReplacementRecordedData,
+  [EventTypes.PermitCreated]: PermitCreatedData,
+  [EventTypes.TimelineEventRecorded]: TimelineEventRecordedData,
 };
 
 // ---------------------------------------------------------------------------

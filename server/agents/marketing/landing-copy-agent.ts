@@ -1,12 +1,17 @@
 /**
  * Landing Copy Agent
  * Generates A/B test copy variations for the Home Buddy landing page.
+ *
+ * Now GA4-aware: pulls landing-page traffic, engagement, bounce rate, and
+ * conversion data so the writer knows where the page actually leaks.
+ *
  * Input: { section, numVariants, angle }
  * Output: copy_variant (one per variant)
  */
 
 import { registerAgent, type AgentContext } from "../runner";
 import { logInfo } from "../../lib/logger";
+import { getTopPages, getTrafficSources, ga4Configured } from "../../lib/ga4";
 import OpenAI from "openai";
 
 const SECTIONS = {
@@ -37,7 +42,40 @@ registerAgent("landing-copy-agent", async (ctx: AgentContext) => {
 
   const sectionDef = SECTIONS[section] || SECTIONS.hero;
 
-  logInfo("agent.landing-copy", `Generating ${numVariants} ${section} variants with angle: ${angle}`);
+  // --- GA4 performance context ----------------------------------------------
+  let ga4Context = "";
+  if (ga4Configured()) {
+    try {
+      const [topPages, sources] = await Promise.all([
+        getTopPages(28, 15),
+        getTrafficSources(28, 8),
+      ]);
+
+      // Focus on landing ("/") specifically
+      const landing = topPages.find((p) => p.path === "/" || p.path === "");
+      if (landing) {
+        const bouncePct = Math.round(landing.bounceRate * 100);
+        const convRate = landing.activeUsers > 0 ? ((landing.conversions / landing.activeUsers) * 100).toFixed(1) : "0.0";
+        ga4Context += `\n\nLanding page actual performance (last 28 days):\n` +
+          `  - Users: ${landing.activeUsers}\n` +
+          `  - Pageviews: ${landing.pageViews}\n` +
+          `  - Bounce rate: ${bouncePct}%  ${bouncePct > 70 ? "⚠️ high — hero is failing to hook" : ""}\n` +
+          `  - Avg engagement: ${Math.round(landing.avgEngagementTime)}s  ${landing.avgEngagementTime < 15 ? "⚠️ low — they're not reading" : ""}\n` +
+          `  - Conversion rate: ${convRate}%\n`;
+      }
+
+      if (sources.length) {
+        const topSources = sources.slice(0, 5);
+        ga4Context += `\nWhere visitors come from (top 5):\n` +
+          topSources.map((s) => `  - ${s.source} / ${s.medium}: ${s.sessions} sessions, ${s.conversions} conversions`).join("\n") +
+          `\n\nWrite copy that resonates with the top traffic intent (e.g. if mostly organic search → address what they searched for).`;
+      }
+    } catch (err: any) {
+      logInfo("agent.landing-copy", `GA4 context fetch failed (non-fatal): ${err?.message}`);
+    }
+  }
+
+  logInfo("agent.landing-copy", `Generating ${numVariants} ${section} variants with angle: ${angle}${ga4Context ? " (GA4-informed)" : ""}`);
 
   const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY });
 
@@ -60,11 +98,12 @@ Design aesthetic: Minimalist, construction orange accent, anxiety-aware UX.`,
 Section: ${sectionDef.description}
 Current copy: ${sectionDef.currentCopy}
 Angle to explore: ${angle}
+${ga4Context}
 
 For each variant provide:
 - Variant label (A, B, C...)
 - The copy (appropriate for the section)
-- Hypothesis (why this might outperform current)
+- Hypothesis (why this might outperform current — reference the GA4 data above if relevant)
 - Best for (which user segment)
 
 Return as JSON array: [{ variant, copy, hypothesis, bestFor }]`,
@@ -87,7 +126,7 @@ Return as JSON array: [{ variant, copy, hypothesis, bestFor }]`,
       outputType: "copy_variant",
       title: `${section} — Variant ${v.variant} — ${angle}`,
       content: v.copy,
-      metadata: { section, variant: v.variant, hypothesis: v.hypothesis, bestFor: v.bestFor, angle },
+      metadata: { section, variant: v.variant, hypothesis: v.hypothesis, bestFor: v.bestFor, angle, ga4Informed: Boolean(ga4Context) },
     });
   }
 });

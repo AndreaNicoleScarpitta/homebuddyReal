@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import multer from "multer";
 import { randomUUID } from "crypto";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { isAuthenticated } from "../auth";
 
@@ -9,45 +10,26 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-function parseObjectPath(fullPath: string): { bucketName: string; objectName: string } {
-  const parts = fullPath.replace(/^\//, "").split("/");
-  const bucketName = parts[0];
-  const objectName = parts.slice(1).join("/");
-  return { bucketName, objectName };
-}
-
 export function registerObjectStorageRoutes(app: Express): void {
   const objectStorageService = new ObjectStorageService();
 
   app.post("/api/uploads/upload", isAuthenticated, upload.single("file"), async (req, res) => {
     try {
       const file = req.file;
-      if (!file) {
-        return res.status(400).json({ error: "No file provided" });
-      }
+      if (!file) return res.status(400).json({ error: "No file provided" });
 
       const privateObjectDir = objectStorageService.getPrivateObjectDir();
       const objectId = randomUUID();
-      const fullPath = `${privateObjectDir}/uploads/${objectId}`;
-      const { bucketName, objectName } = parseObjectPath(fullPath);
+      const key = `${privateObjectDir}/${objectId}`;
 
-      const bucket = objectStorageClient.bucket(bucketName);
-      const gcsFile = bucket.file(objectName);
+      await objectStorageClient.send(new PutObjectCommand({
+        Bucket: objectStorageService.getBucket(),
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype || "application/octet-stream",
+      }));
 
-      await new Promise<void>((resolve, reject) => {
-        const stream = gcsFile.createWriteStream({
-          resumable: false,
-          contentType: file.mimetype || "application/octet-stream",
-          metadata: {
-            contentType: file.mimetype || "application/octet-stream",
-          },
-        });
-        stream.on("error", reject);
-        stream.on("finish", () => resolve());
-        stream.end(file.buffer);
-      });
-
-      const objectPath = `/objects/uploads/${objectId}`;
+      const objectPath = `/objects/${objectId}`;
 
       res.json({
         objectPath,

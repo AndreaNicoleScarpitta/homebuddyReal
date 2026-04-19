@@ -18,8 +18,10 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
-  provider: varchar("provider"),
+  provider: varchar("provider"),       // "local" | "google" | "replit" (legacy)
   providerId: varchar("provider_id"),
+  passwordHash: varchar("password_hash"), // bcrypt hash — only set for provider="local"
+  emailVerified: boolean("email_verified").default(false),
   dataStorageOptOut: boolean("data_storage_opt_out").default(false),
   disclaimerAccepted: boolean("disclaimer_accepted").default(false),
   disclaimerAcceptedAt: timestamp("disclaimer_accepted_at"),
@@ -28,11 +30,26 @@ export const users = pgTable("users", {
   hasDonated: boolean("has_donated").default(false),
   donationPromptSnoozeUntilLoginCount: integer("donation_prompt_snooze_until_login_count"),
   stripeCustomerId: varchar("stripe_customer_id"),
+  stripeSubscriptionId: varchar("stripe_subscription_id"),
+  plan: varchar("plan", { length: 20 }).notNull().default("free"), // "free" | "plus" | "pro"
+  planStatus: varchar("plan_status", { length: 30 }).notNull().default("active"), // "active" | "past_due" | "canceled" | "trialing"
+  planRenewsAt: timestamp("plan_renews_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   uniqueIndex("users_uuid_idx").on(table.uuid),
 ]);
+
+// Object ACL policies live in the DB instead of being stamped into R2 object metadata,
+// because R2/S3 user metadata can't be mutated without re-uploading the object.
+export const objectAcl = pgTable("object_acl", {
+  objectKey: varchar("object_key").primaryKey(),
+  ownerId: varchar("owner_id"),
+  visibility: varchar("visibility", { length: 10 }).notNull().default("private"), // "public" | "private"
+  rules: jsonb("rules"), // Array<{group:{type,id}, permission:"read"|"write"}>
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
 
 export const disclaimerAuditLog = pgTable("disclaimer_audit_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

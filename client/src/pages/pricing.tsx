@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Check, Home, Sparkles, Crown, ArrowRight } from "lucide-react";
+import { usePlan } from "@/hooks/use-plan";
+import { Check, Home, Sparkles, Crown, ArrowRight, Settings } from "lucide-react";
 import { trackSlugPageView } from "@/lib/analytics";
 
 interface Plan {
-  id: "free" | "plus" | "pro";
+  id: "free" | "plus" | "premium";
   name: string;
   priceMonthly: number;
   features: string[];
@@ -20,19 +21,20 @@ interface Plan {
 const PLAN_ICONS: Record<string, React.ElementType> = {
   free: Home,
   plus: Sparkles,
-  pro: Crown,
+  premium: Crown,
 };
 
 const PLAN_TAGLINES: Record<string, string> = {
-  free: "Get your home organized",
-  plus: "For the homeowner who wants to get ahead",
-  pro: "For portfolios and power users",
+  free: "For one home, up to 4 systems",
+  plus: "Two homes, every system tracked",
+  premium: "Up to four homes — for landlords and multi-property owners",
 };
 
 export default function PricingPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { isAuthenticated } = useAuth();
+  const { plan: currentPlan, data: planData, isPaid } = usePlan();
 
   useEffect(() => {
     trackSlugPageView("pricing");
@@ -48,7 +50,7 @@ export default function PricingPage() {
   });
 
   const checkoutMutation = useMutation({
-    mutationFn: async (plan: "plus" | "pro") => {
+    mutationFn: async (plan: "plus" | "premium") => {
       const res = await fetch("/api/billing/create-checkout-session", {
         method: "POST",
         credentials: "include",
@@ -69,7 +71,31 @@ export default function PricingPage() {
     },
   });
 
+  const portalMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/billing/portal", { method: "POST", credentials: "include" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Unable to open billing portal");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => { if (data.url) window.location.href = data.url; },
+    onError: (err: Error) => {
+      toast({ title: "Billing portal unavailable", description: err.message, variant: "destructive" });
+    },
+  });
+
   const handlePlanClick = (plan: Plan) => {
+    // Current plan → open billing portal (if paid) or go to dashboard (if free)
+    if (plan.id === currentPlan) {
+      if (isPaid && planData?.hasStripeCustomer) {
+        portalMutation.mutate();
+      } else {
+        setLocation(isAuthenticated ? "/dashboard" : "/signup");
+      }
+      return;
+    }
     if (plan.id === "free") {
       setLocation(isAuthenticated ? "/dashboard" : "/signup");
       return;
@@ -78,7 +104,14 @@ export default function PricingPage() {
       setLocation(`/signup?next=/pricing`);
       return;
     }
-    checkoutMutation.mutate(plan.id as "plus" | "pro");
+    checkoutMutation.mutate(plan.id as "plus" | "premium");
+  };
+
+  const buttonLabel = (plan: Plan): string => {
+    if (plan.id === currentPlan) return isPaid ? "Manage billing" : "Current plan";
+    if (plan.priceMonthly === 0) return "Start free";
+    const isDowngrade = currentPlan === "premium" && plan.id === "plus";
+    return isDowngrade ? "Downgrade" : "Get " + plan.name;
   };
 
   return (
@@ -119,6 +152,51 @@ export default function PricingPage() {
         </p>
       </div>
 
+      {/* Current usage snapshot (authenticated only) */}
+      {isAuthenticated && planData && (
+        <div className="max-w-4xl mx-auto px-6 pb-10">
+          <div className="border border-border rounded-xl p-6 bg-card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-heading font-semibold text-foreground">Your usage this month</h3>
+              <span className="text-xs text-muted-foreground">
+                {planData.planName} plan
+              </span>
+            </div>
+            <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4">
+              {([
+                { label: "Homes", current: planData.usage.homes, limit: planData.limits.maxHomes },
+                { label: "Active tasks", current: planData.usage.activeTasks, limit: planData.limits.maxActiveTasks },
+                { label: "Doc analyses", current: planData.usage.docAnalysesThisMonth, limit: planData.limits.maxDocAnalysesPerMonth },
+                { label: "AI reports", current: planData.usage.aiReportsThisMonth, limit: planData.limits.maxAiReportsPerMonth },
+              ] as const).map((row) => {
+                const pct = row.limit ? Math.min(100, Math.round((row.current / row.limit) * 100)) : 0;
+                const atLimit = row.limit !== null && row.current >= row.limit;
+                return (
+                  <div key={row.label}>
+                    <div className="flex items-baseline justify-between mb-1.5">
+                      <span className="text-xs text-muted-foreground">{row.label}</span>
+                      <span className={`text-sm font-semibold ${atLimit ? "text-destructive" : "text-foreground"}`}>
+                        {row.current}<span className="text-muted-foreground">/{row.limit ?? "∞"}</span>
+                      </span>
+                    </div>
+                    {row.limit !== null ? (
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all ${atLimit ? "bg-destructive" : pct > 80 ? "bg-amber-500" : "bg-primary"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-1.5 bg-primary/20 rounded-full" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Plans grid */}
       <div className="max-w-6xl mx-auto px-6 pb-16">
         {isLoading ? (
@@ -132,14 +210,23 @@ export default function PricingPage() {
             {plans.map((plan) => {
               const Icon = PLAN_ICONS[plan.id];
               const isPopular = plan.popular;
+              const isCurrent = isAuthenticated && plan.id === currentPlan;
               return (
                 <div
                   key={plan.id}
                   className={`relative border rounded-2xl p-8 bg-card transition-all ${
-                    isPopular ? "border-primary shadow-lg scale-[1.02]" : "border-border hover:border-primary/30"
+                    isCurrent ? "border-primary ring-2 ring-primary/30 shadow-lg" :
+                    isPopular ? "border-primary shadow-lg scale-[1.02]" :
+                    "border-border hover:border-primary/30"
                   }`}
+                  data-testid={`pricing-card-${plan.id}`}
                 >
-                  {isPopular && (
+                  {isCurrent && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge className="bg-primary text-primary-foreground">Your plan</Badge>
+                    </div>
+                  )}
+                  {!isCurrent && isPopular && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                       <Badge className="bg-primary text-primary-foreground">Most popular</Badge>
                     </div>
@@ -170,14 +257,26 @@ export default function PricingPage() {
 
                   <Button
                     onClick={() => handlePlanClick(plan)}
-                    disabled={!plan.available || checkoutMutation.isPending}
+                    disabled={(!plan.available && plan.id !== "free" && !isCurrent) || checkoutMutation.isPending || portalMutation.isPending}
                     className="w-full gap-1.5"
-                    variant={isPopular ? "default" : "outline"}
+                    variant={isCurrent ? "outline" : isPopular ? "default" : "outline"}
                     size="lg"
+                    data-testid={`button-plan-${plan.id}`}
                   >
-                    {plan.priceMonthly === 0 ? "Start free" : "Get " + plan.name}
-                    <ArrowRight className="h-4 w-4" />
+                    {isCurrent && isPaid ? <Settings className="h-4 w-4" /> : null}
+                    {buttonLabel(plan)}
+                    {!isCurrent && <ArrowRight className="h-4 w-4" />}
                   </Button>
+                  {isCurrent && planData?.planStatus === "past_due" && (
+                    <p className="text-xs text-destructive mt-2 text-center font-medium">
+                      Payment past due — update card in billing portal
+                    </p>
+                  )}
+                  {isCurrent && planData?.planRenewsAt && planData.planStatus === "active" && (
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      Renews {new Date(planData.planRenewsAt).toLocaleDateString()}
+                    </p>
+                  )}
 
                   {!plan.available && plan.id !== "free" && (
                     <p className="text-xs text-muted-foreground mt-2 text-center">

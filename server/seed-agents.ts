@@ -91,6 +91,27 @@ Write in a calm, conversational tone — like Drew explaining something to a ner
     isBuiltIn: true,
   },
 
+  {
+    slug: "seo-performance-agent",
+    name: "SEO Performance Analyst",
+    type: "marketing",
+    status: "active",
+    trigger: "scheduled",
+    schedule: "0 8 * * 1",  // Mondays at 8am
+    description: "Weekly GA4 analysis: decaying pages, surging pages, high-bounce pages, and leaky guides with traffic but no conversion.",
+    purpose: "Turn raw GA4 data into a prioritized weekly action list — know which articles to refresh, double down on, or fix before rankings slip.",
+    config: {
+      decayThresholdPct: -25,
+      surgeThresholdPct: 50,
+      highBounceThreshold: 0.8,
+      minPageviewsForAlert: 20,
+    },
+    modelId: "gpt-4o",
+    maxTokens: 100,  // SQL/GA4 only — no AI currently
+    temperature: 50,
+    isBuiltIn: true,
+  },
+
   // ── ENGAGEMENT ─────────────────────────────────────────────────────────────
   {
     slug: "maintenance-reminder-agent",

@@ -8,6 +8,7 @@ import { useDefinitions } from "@/hooks/use-definitions";
 import logoImage from "@assets/generated_images/orange_house_logo_with_grey_gear..png";
 import { trackEvent, trackModalOpen } from "@/lib/analytics";
 import { MODAL_SLUGS } from "@/lib/slug-registry";
+import { PlanBadge } from "@/components/plan-badge";
 
 // Primary surfaces — the core of what homeowners need
 const primaryNav = [
@@ -59,6 +60,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <img src={logoImage} alt="Home Buddy" className="w-7 h-7 rounded-lg" loading="lazy" width="28" height="28" />
           <span className="font-heading font-semibold text-base tracking-tight">Home Buddy</span>
         </div>
+        <div className="flex items-center gap-2">
+          <PlanBadge compact />
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" className="h-9 w-9" data-testid="button-menu">
@@ -150,15 +153,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </nav>
           </SheetContent>
         </Sheet>
+        </div>
       </header>
 
       {/* Desktop Sidebar — calm, spacious, minimal */}
       <aside className="hidden md:flex flex-col w-60 border-r bg-card h-screen sticky top-0">
         {/* Logo */}
         <div className="px-6 pt-6 pb-4">
-          <div className="flex items-center gap-2.5">
-            <img src={logoImage} alt="Home Buddy" className="w-8 h-8 rounded-lg" loading="lazy" width="32" height="32" />
-            <span className="font-heading font-semibold text-lg tracking-tight">Home Buddy</span>
+          <div className="flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5">
+              <img src={logoImage} alt="Home Buddy" className="w-8 h-8 rounded-lg" loading="lazy" width="32" height="32" />
+              <span className="font-heading font-semibold text-lg tracking-tight">Home Buddy</span>
+            </div>
+            <PlanBadge compact />
           </div>
         </div>
 

@@ -2,10 +2,10 @@
  * Billing routes — Stripe Checkout + Customer Portal
  *
  * Env vars used:
- *   STRIPE_PRICE_PLUS   — Stripe Price ID for the Plus tier
- *   STRIPE_PRICE_PRO    — Stripe Price ID for the Pro tier
+ *   STRIPE_PRICE_PLUS     — Stripe Price ID for the Plus tier ($5/mo)
+ *   STRIPE_PRICE_PREMIUM  — Stripe Price ID for the Premium tier ($9/mo)
  *
- * POST /api/billing/create-checkout-session { plan: "plus" | "pro" }
+ * POST /api/billing/create-checkout-session { plan: "plus" | "premium" }
  * POST /api/billing/portal   — opens Stripe Customer Portal
  * GET  /api/billing/plans    — returns plan metadata (public)
  */
@@ -25,37 +25,39 @@ const PLANS = {
     priceId: null,
     features: [
       "1 home",
-      "Up to 10 active tasks",
-      "Manual task entry",
+      "Up to 4 systems per home",
+      "Manual task tracking",
       "Basic reminders",
+      "Document analysis (2/mo)",
       "Community support",
     ],
   },
   plus: {
     id: "plus",
     name: "Plus",
-    priceMonthly: 9,
+    priceMonthly: 5,
     priceId: process.env.STRIPE_PRICE_PLUS || null,
     features: [
-      "Up to 3 homes",
-      "Unlimited tasks",
+      "2 homes",
+      "Unlimited systems per home",
       "AI task suggestions",
       "Document analysis (10/mo)",
+      "AI home reports (2/mo)",
       "Smart reminders",
       "Email support",
     ],
     popular: true,
   },
-  pro: {
-    id: "pro",
-    name: "Pro",
-    priceMonthly: 19,
-    priceId: process.env.STRIPE_PRICE_PRO || null,
+  premium: {
+    id: "premium",
+    name: "Premium",
+    priceMonthly: 9,
+    priceId: process.env.STRIPE_PRICE_PREMIUM || null,
     features: [
-      "Unlimited homes",
-      "Unlimited tasks",
-      "AI-powered home reports",
+      "4 homes",
+      "Unlimited systems per home",
       "Unlimited document analysis",
+      "Unlimited AI home reports",
       "Seasonal prep campaigns",
       "Priority support",
       "Early access to new features",
@@ -85,12 +87,12 @@ export function registerBillingRoutes(app: Express): void {
 
   app.post("/api/billing/create-checkout-session", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { plan } = req.body as { plan: "plus" | "pro" };
+      const { plan } = req.body as { plan: "plus" | "premium" };
       const user = (req as any).user;
 
-      const config = plan === "plus" ? PLANS.plus : plan === "pro" ? PLANS.pro : null;
+      const config = plan === "plus" ? PLANS.plus : plan === "premium" ? PLANS.premium : null;
       if (!config || !config.priceId) {
-        return res.status(400).json({ error: "Invalid plan or pricing not configured. Set STRIPE_PRICE_PLUS / STRIPE_PRICE_PRO env vars." });
+        return res.status(400).json({ error: "Invalid plan or pricing not configured. Set STRIPE_PRICE_PLUS / STRIPE_PRICE_PREMIUM env vars." });
       }
 
       const stripe = await getUncachableStripeClient();

@@ -1953,6 +1953,7 @@ import { runAnalysisPipeline } from "./lib/analysis-pipeline";
 import type { AnalysisResult, SuggestedSystem } from "./lib/analysis-pipeline";
 import { extractTextFromDocument } from "./lib/document-analysis";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage/objectStorage";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { homeDocuments } from "@shared/schema";
 
 async function extractTextFromImage(
@@ -2079,25 +2080,16 @@ v2Router.post(
           try {
             const objectId = crypto.randomUUID();
             const privateDir = objectService.getPrivateObjectDir();
-            const fullPath = `${privateDir}/uploads/${objectId}`;
-            const parts = fullPath.replace(/^\//, "").split("/");
-            const bucketName = parts[0];
-            const objectName = parts.slice(1).join("/");
-            const bucket = objectStorageClient.bucket(bucketName);
-            const gcsFile = bucket.file(objectName);
+            const key = `${privateDir}/${objectId}`;
 
-            await new Promise<void>((resolve, reject) => {
-              const stream = gcsFile.createWriteStream({
-                resumable: false,
-                contentType: file.mimetype || "application/octet-stream",
-                metadata: { contentType: file.mimetype || "application/octet-stream" },
-              });
-              stream.on("error", reject);
-              stream.on("finish", () => resolve());
-              stream.end(file.buffer);
-            });
+            await objectStorageClient.send(new PutObjectCommand({
+              Bucket: objectService.getBucket(),
+              Key: key,
+              Body: file.buffer,
+              ContentType: file.mimetype || "application/octet-stream",
+            }));
 
-            const objectPath = `/objects/uploads/${objectId}`;
+            const objectPath = `/objects/${objectId}`;
             await db.insert(homeDocuments).values({
               homeId: legacyHomeId,
               name: file.originalname,

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   Shield,
   CheckCircle2,
@@ -8,13 +8,17 @@ import {
   CalendarClock,
   Paintbrush,
   Mail,
+  Loader2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { trackEvent, trackSlugPageView } from "@/lib/analytics";
 import { PAGE_SLUGS } from "@/lib/slug-registry";
 import { cn } from "@/lib/utils";
-import { Link } from "wouter";
-import { buttonVariants } from "@/components/ui/button";
+import { Link, useLocation } from "wouter";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 
 const GoogleIcon = () => (
   <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -42,14 +46,6 @@ const XIcon = () => (
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
   </svg>
 );
-
-const authProviders = [
-  { name: "Google", icon: GoogleIcon, testId: "button-signup-google" },
-  { name: "Apple", icon: AppleIcon, testId: "button-signup-apple" },
-  { name: "GitHub", icon: GitHubIcon, testId: "button-signup-github" },
-  { name: "X", icon: XIcon, testId: "button-signup-x" },
-  { name: "email", icon: Mail, testId: "button-signup-email" },
-];
 
 const benefits = [
   {
@@ -82,7 +78,37 @@ const socialProof = [
 ];
 
 export default function Signup() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
   useEffect(() => { trackSlugPageView(PAGE_SLUGS.signup); }, []);
+
+  async function handleEmailSignup(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    trackEvent("signup_attempt", "auth", "email");
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, firstName: firstName || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Signup failed");
+      trackEvent("signup_success", "auth", "email");
+      setLocation("/");
+    } catch (err: any) {
+      toast({ title: "Couldn't create account", description: err.message, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-background to-background dark:from-orange-950/20 dark:via-background dark:to-background">
@@ -179,24 +205,63 @@ export default function Signup() {
                   <p className="text-sm text-muted-foreground">Set up your home profile in under 2 minutes</p>
                 </div>
 
-                <div className="space-y-3">
-                  {authProviders.map((provider) => (
+                {!showEmailForm ? (
+                  <div className="space-y-3">
                     <a
-                      key={provider.name}
-                      href="/api/login"
-                      target="_top"
-                      onClick={() => trackEvent("signup_attempt", "auth", provider.name.toLowerCase())}
+                      href="/auth/google"
+                      onClick={() => trackEvent("signup_attempt", "auth", "google")}
                       className={cn(
                         buttonVariants({ variant: "outline", size: "default" }),
-                        "w-full h-11 text-sm font-medium gap-3 justify-center no-underline border-border hover:bg-accent"
+                        "w-full h-11 text-sm font-medium gap-3 justify-center no-underline",
                       )}
-                      data-testid={provider.testId}
+                      data-testid="button-signup-google"
                     >
-                      <provider.icon />
-                      Continue with {provider.name}
+                      <GoogleIcon />
+                      Continue with Google
                     </a>
-                  ))}
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowEmailForm(true)}
+                      className={cn(
+                        buttonVariants({ variant: "outline", size: "default" }),
+                        "w-full h-11 text-sm font-medium gap-3 justify-center",
+                      )}
+                      data-testid="button-signup-email"
+                    >
+                      <Mail className="h-5 w-5" />
+                      Sign up with email
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleEmailSignup} className="space-y-4" data-testid="form-signup-email">
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-firstname">First name (optional)</Label>
+                      <Input id="signup-firstname" type="text" autoComplete="given-name"
+                        value={firstName} onChange={(e) => setFirstName(e.target.value)}
+                        data-testid="input-signup-firstname" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-email">Email</Label>
+                      <Input id="signup-email" type="email" autoComplete="email" required
+                        value={email} onChange={(e) => setEmail(e.target.value)}
+                        data-testid="input-signup-email" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-password">Password</Label>
+                      <Input id="signup-password" type="password" autoComplete="new-password" required
+                        minLength={8} value={password} onChange={(e) => setPassword(e.target.value)}
+                        data-testid="input-signup-password" />
+                      <p className="text-xs text-muted-foreground">At least 8 characters</p>
+                    </div>
+                    <Button type="submit" className="w-full h-11" disabled={submitting} data-testid="button-submit-signup">
+                      {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}
+                    </Button>
+                    <button type="button" onClick={() => setShowEmailForm(false)}
+                      className="text-sm text-muted-foreground hover:text-foreground w-full text-center">
+                      ← Other sign-up options
+                    </button>
+                  </form>
+                )}
 
                 <div className="flex items-center gap-2 text-sm text-muted-foreground justify-center pt-2">
                   <Shield className="h-4 w-4" />

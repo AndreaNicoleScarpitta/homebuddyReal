@@ -445,6 +445,147 @@ export async function applyEvent(tx: DrizzleTx, event: EventRow): Promise<void> 
     case EventTypes.RetryRequested:
       break;
 
+    // ----- Component -----
+    case EventTypes.ComponentCreated: {
+      await tx.execute(sql`
+        INSERT INTO components (home_id, system_id, name, component_type, material, install_year, condition, notes, provenance_source, provenance_confidence)
+        VALUES (${data.homeId as number}, ${data.systemId as number}, ${data.name as string}, ${(data.componentType as string) ?? null}, ${(data.material as string) ?? null}, ${(data.installYear as number) ?? null}, ${(data.condition as string) || 'Unknown'}, ${(data.notes as string) ?? null}, ${(data.provenanceSource as string) || 'manual'}, ${(data.provenanceConfidence as number) ?? null})
+      `);
+      break;
+    }
+
+    case EventTypes.ComponentUpdated: {
+      await tx.execute(sql`
+        UPDATE components
+        SET name = COALESCE(${(data.name as string) ?? null}, name),
+            component_type = COALESCE(${(data.componentType as string) ?? null}, component_type),
+            material = COALESCE(${(data.material as string) ?? null}, material),
+            install_year = COALESCE(${(data.installYear as number) ?? null}, install_year),
+            condition = COALESCE(${(data.condition as string) ?? null}, condition),
+            notes = COALESCE(${(data.notes as string) ?? null}, notes),
+            updated_at = now()
+        WHERE id = ${Number(id)}
+      `);
+      break;
+    }
+
+    case EventTypes.ComponentDeleted: {
+      await tx.execute(sql`DELETE FROM components WHERE id = ${Number(id)}`);
+      break;
+    }
+
+    // ----- Warranty -----
+    case EventTypes.WarrantyCreated: {
+      await tx.execute(sql`
+        INSERT INTO warranties (home_id, system_id, component_id, warranty_provider, warranty_type, coverage_summary, start_date, expiry_date, is_transferable, document_id, notes, provenance_source, provenance_confidence)
+        VALUES (${data.homeId as number}, ${(data.systemId as number) ?? null}, ${(data.componentId as number) ?? null}, ${(data.warrantyProvider as string) ?? null}, ${(data.warrantyType as string) ?? null}, ${(data.coverageSummary as string) ?? null}, ${(data.startDate as string) ?? null}::timestamptz, ${(data.expiryDate as string) ?? null}::timestamptz, ${(data.isTransferable as boolean) ?? false}, ${(data.documentId as number) ?? null}, ${(data.notes as string) ?? null}, ${(data.provenanceSource as string) || 'manual'}, ${(data.provenanceConfidence as number) ?? null})
+      `);
+      break;
+    }
+
+    case EventTypes.WarrantyUpdated: {
+      await tx.execute(sql`
+        UPDATE warranties
+        SET warranty_provider = COALESCE(${(data.warrantyProvider as string) ?? null}, warranty_provider),
+            warranty_type = COALESCE(${(data.warrantyType as string) ?? null}, warranty_type),
+            coverage_summary = COALESCE(${(data.coverageSummary as string) ?? null}, coverage_summary),
+            start_date = COALESCE(${(data.startDate as string) ?? null}::timestamptz, start_date),
+            expiry_date = COALESCE(${(data.expiryDate as string) ?? null}::timestamptz, expiry_date),
+            notes = COALESCE(${(data.notes as string) ?? null}, notes),
+            updated_at = now()
+        WHERE id = ${Number(id)}
+      `);
+      break;
+    }
+
+    case EventTypes.WarrantyDeleted: {
+      await tx.execute(sql`DELETE FROM warranties WHERE id = ${Number(id)}`);
+      break;
+    }
+
+    // ----- Recommendation -----
+    case EventTypes.RecommendationCreated: {
+      await tx.execute(sql`
+        INSERT INTO recommendations (home_id, system_id, component_id, finding_id, source, title, description, urgency, confidence, rationale, estimated_cost, status)
+        VALUES (${data.homeId as number}, ${(data.systemId as number) ?? null}, ${(data.componentId as number) ?? null}, ${(data.findingId as number) ?? null}, ${data.source as string}, ${data.title as string}, ${(data.description as string) ?? null}, ${(data.urgency as string) || 'later'}, ${(data.confidence as number) ?? null}, ${(data.rationale as string) ?? null}, ${(data.estimatedCost as string) ?? null}, 'open')
+      `);
+      break;
+    }
+
+    case EventTypes.RecommendationAccepted: {
+      await tx.execute(sql`
+        UPDATE recommendations
+        SET status = 'accepted',
+            task_id = COALESCE(${(data.taskId as number) ?? null}, task_id),
+            updated_at = now()
+        WHERE id = ${Number(id)}
+      `);
+      break;
+    }
+
+    case EventTypes.RecommendationDismissed: {
+      await tx.execute(sql`
+        UPDATE recommendations
+        SET status = 'dismissed', updated_at = now()
+        WHERE id = ${Number(id)}
+      `);
+      break;
+    }
+
+    // ----- Repair -----
+    case EventTypes.RepairRecorded: {
+      const repairResult = await tx.execute(sql`
+        INSERT INTO repairs (home_id, system_id, component_id, task_id, contractor_id, title, description, repair_date, cost, parts_used, outcome, provenance_source, provenance_confidence)
+        VALUES (${data.homeId as number}, ${(data.systemId as number) ?? null}, ${(data.componentId as number) ?? null}, ${(data.taskId as number) ?? null}, ${(data.contractorId as number) ?? null}, ${data.title as string}, ${(data.description as string) ?? null}, ${(data.repairDate as string) ?? null}::timestamptz, ${(data.cost as number) ?? null}, ${(data.partsUsed as string) ?? null}, ${(data.outcome as string) || 'resolved'}, ${(data.provenanceSource as string) || 'manual'}, ${(data.provenanceConfidence as number) ?? null})
+        RETURNING id
+      `);
+      const repairId = (repairResult.rows[0] as { id: number })?.id;
+      await tx.execute(sql`
+        INSERT INTO timeline_events (home_id, event_date, category, title, description, icon, entity_type, entity_id, cost, provenance_source)
+        VALUES (${data.homeId as number}, COALESCE(${(data.repairDate as string) ?? null}::timestamptz, now()), 'repair', ${data.title as string}, ${(data.description as string) ?? null}, 'wrench', 'repair', ${repairId}, ${(data.cost as number) ?? null}, ${(data.provenanceSource as string) || 'manual'})
+      `);
+      break;
+    }
+
+    // ----- Replacement -----
+    case EventTypes.ReplacementRecorded: {
+      const replacementResult = await tx.execute(sql`
+        INSERT INTO replacements (home_id, system_id, component_id, replaced_system_name, replaced_make, replaced_model, replacement_date, cost, contractor_id, reason, document_id, provenance_source, provenance_confidence)
+        VALUES (${data.homeId as number}, ${(data.systemId as number) ?? null}, ${(data.componentId as number) ?? null}, ${(data.replacedSystemName as string) ?? null}, ${(data.replacedMake as string) ?? null}, ${(data.replacedModel as string) ?? null}, ${(data.replacementDate as string) ?? null}::timestamptz, ${(data.cost as number) ?? null}, ${(data.contractorId as number) ?? null}, ${(data.reason as string) ?? null}, ${(data.documentId as number) ?? null}, ${(data.provenanceSource as string) || 'manual'}, ${(data.provenanceConfidence as number) ?? null})
+        RETURNING id
+      `);
+      const replacementId = (replacementResult.rows[0] as { id: number })?.id;
+      await tx.execute(sql`
+        INSERT INTO timeline_events (home_id, event_date, category, title, description, icon, entity_type, entity_id, cost, provenance_source)
+        VALUES (${data.homeId as number}, COALESCE(${(data.replacementDate as string) ?? null}::timestamptz, now()), 'replacement', ${(data.replacedSystemName as string) || 'System replacement'}, ${(data.reason as string) ?? null}, 'refresh-cw', 'replacement', ${replacementId}, ${(data.cost as number) ?? null}, ${(data.provenanceSource as string) || 'manual'})
+      `);
+      break;
+    }
+
+    // ----- Permit -----
+    case EventTypes.PermitCreated: {
+      const permitResult = await tx.execute(sql`
+        INSERT INTO permits (home_id, system_id, permit_number, permit_type, issued_date, status, issuing_authority, description, document_id, provenance_source, provenance_confidence)
+        VALUES (${data.homeId as number}, ${(data.systemId as number) ?? null}, ${(data.permitNumber as string) ?? null}, ${(data.permitType as string) ?? null}, ${(data.issuedDate as string) ?? null}::timestamptz, ${(data.status as string) || 'unknown'}, ${(data.issuingAuthority as string) ?? null}, ${(data.description as string) ?? null}, ${(data.documentId as number) ?? null}, ${(data.provenanceSource as string) || 'manual'}, ${(data.provenanceConfidence as number) ?? null})
+        RETURNING id
+      `);
+      const permitId = (permitResult.rows[0] as { id: number })?.id;
+      await tx.execute(sql`
+        INSERT INTO timeline_events (home_id, event_date, category, title, description, icon, entity_type, entity_id, provenance_source)
+        VALUES (${data.homeId as number}, COALESCE(${(data.issuedDate as string) ?? null}::timestamptz, now()), 'permit', ${(data.permitType as string) || 'Permit'}, ${(data.description as string) ?? null}, 'file-text', 'permit', ${permitId}, ${(data.provenanceSource as string) || 'manual'})
+      `);
+      break;
+    }
+
+    // ----- Timeline Event -----
+    case EventTypes.TimelineEventRecorded: {
+      await tx.execute(sql`
+        INSERT INTO timeline_events (home_id, event_date, category, title, description, icon, entity_type, entity_id, cost, provenance_source, metadata)
+        VALUES (${data.homeId as number}, ${data.eventDate as string}::timestamptz, ${data.category as string}, ${data.title as string}, ${(data.description as string) ?? null}, ${(data.icon as string) ?? null}, ${(data.entityType as string) ?? null}, ${(data.entityId as number) ?? null}, ${(data.cost as number) ?? null}, ${(data.provenanceSource as string) ?? null}, ${(data.metadata as string) ?? null})
+      `);
+      break;
+    }
+
     default:
       break;
   }

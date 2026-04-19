@@ -4,7 +4,9 @@ import { eq, sql } from "drizzle-orm";
 
 export interface IAuthStorage {
   getUser(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  createLocalUser(data: { email: string; passwordHash: string; firstName?: string | null; lastName?: string | null }): Promise<User>;
   updateUserPrivacy(id: string, dataStorageOptOut: boolean): Promise<User>;
   acceptDisclaimer(id: string, version: string, ipAddress?: string): Promise<User>;
   incrementLoginCount(id: string): Promise<User>;
@@ -16,6 +18,32 @@ export interface IAuthStorage {
 class AuthStorage implements IAuthStorage {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const normalized = email.trim().toLowerCase();
+    const [user] = await db.select().from(users).where(eq(users.email, normalized));
+    return user;
+  }
+
+  async createLocalUser(data: {
+    email: string;
+    passwordHash: string;
+    firstName?: string | null;
+    lastName?: string | null;
+  }): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values({
+        email: data.email.trim().toLowerCase(),
+        passwordHash: data.passwordHash,
+        firstName: data.firstName ?? null,
+        lastName: data.lastName ?? null,
+        provider: "local",
+        emailVerified: false,
+      })
+      .returning();
     return user;
   }
 

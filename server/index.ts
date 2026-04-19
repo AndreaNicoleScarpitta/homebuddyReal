@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -5,13 +6,14 @@ import { registerRoutes } from "./routes";
 import { v2Router } from "./routes_v2";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { setupAuth, registerAuthRoutes, registerLocalAuthRoutes } from "./replit_integrations/auth";
 import { logEnvironmentStatus } from "./lib/env-validation";
 import { logger } from "./lib/logger";
 import { bootstrapMigrationTracking } from "./lib/db-bootstrap";
 import { WebhookHandlers } from "./webhookHandlers";
 import { registerDonationRoutes } from "./donation-routes";
 import { registerBillingRoutes } from "./billing-routes";
+import { registerMeRoutes } from "./me-routes";
 import { startNotificationScheduler, stopNotificationScheduler } from "./jobs/notificationScheduler";
 import { startAgentScheduler, stopAgentScheduler } from "./jobs/agentScheduler";
 import { pool } from "./db";
@@ -177,6 +179,7 @@ app.use((req, res, next) => {
   // Setup auth BEFORE registering other routes
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerLocalAuthRoutes(app);
   registerCsrfRoute(app);
   registerOpenApiRoute(app);
 
@@ -186,6 +189,7 @@ app.use((req, res, next) => {
 
   registerDonationRoutes(app);
   registerBillingRoutes(app);
+  registerMeRoutes(app);
 
   const mutationLimiter = rateLimit({
     windowMs: 60 * 1000,

@@ -35,6 +35,9 @@ import {
   Paintbrush,
   Plus,
   Palette,
+  Wrench,
+  Sparkles,
+  Brain,
 } from "lucide-react";
 import { Link, useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -47,6 +50,11 @@ import { trackEvent, trackSlugPageView, trackModalOpen } from "@/lib/analytics";
 import { PAGE_SLUGS, MODAL_SLUGS } from "@/lib/slug-registry";
 import { systemConditions } from "@shared/schema";
 import { CircuitMapDialog } from "@/components/circuit-map";
+import { ComponentList } from "@/components/home-graph/component-list";
+import { WarrantySection } from "@/components/home-graph/warranty-card";
+import { RecommendationCard } from "@/components/home-graph/recommendation-card";
+import { getRepairs, getRecommendations, getSystemInsight, type V2Repair, type V2Recommendation, type SystemInsightResponse } from "@/lib/api";
+import { RecordActionDialog, RecordOutcomeDialog } from "@/components/learning/outcome-prompt";
 
 const categoryIcons: Record<string, any> = {
   "Roof": Home,
@@ -174,6 +182,26 @@ export default function SystemDetail() {
     queryKey: ["tasks", home?.id],
     queryFn: () => getTasks(home!.id),
     enabled: !!home?.id,
+  });
+
+  const homeId = home?.legacyId || home?.id;
+
+  const { data: repairs = [] } = useQuery({
+    queryKey: ["repairs", homeId],
+    queryFn: () => getRepairs(homeId!),
+    enabled: !!homeId,
+  });
+
+  const { data: allRecommendations = [] } = useQuery({
+    queryKey: ["recommendations", homeId],
+    queryFn: () => getRecommendations(homeId!),
+    enabled: !!homeId,
+  });
+
+  const { data: systemInsight } = useQuery({
+    queryKey: ["systemInsight", id],
+    queryFn: () => getSystemInsight(id!),
+    enabled: !!id,
   });
 
   const system = systems.find(s => String(s.id) === String(id));
@@ -945,6 +973,143 @@ export default function SystemDetail() {
             </p>
           </CardContent>
         </Card>
+
+        {systemInsight && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Brain className="h-4 w-4" />
+                System Intelligence
+                <Badge variant="outline" className={`text-xs ml-auto ${
+                  systemInsight.insight.conditionStatus === "good" ? "bg-green-100 text-green-700" :
+                  systemInsight.insight.conditionStatus === "watch" ? "bg-amber-100 text-amber-700" :
+                  "bg-red-100 text-red-700"
+                }`}>
+                  {systemInsight.insight.conditionStatus === "good" ? "Good" :
+                   systemInsight.insight.conditionStatus === "watch" ? "Watch" : "At Risk"}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {systemInsight.insight.keyFindings.length > 0 && (
+                <div className="space-y-1">
+                  {systemInsight.insight.keyFindings.map((f, i) => (
+                    <p key={i} className="text-sm text-muted-foreground">· {f}</p>
+                  ))}
+                </div>
+              )}
+              {systemInsight.prediction && (
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t">
+                  <div>
+                    <p className="text-xs text-muted-foreground">12-month risk</p>
+                    <p className="text-lg font-semibold">{Math.round(systemInsight.prediction.failureProbability12Months * 100)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">24-month risk</p>
+                    <p className="text-lg font-semibold">{Math.round(systemInsight.prediction.failureProbability24Months * 100)}%</p>
+                  </div>
+                </div>
+              )}
+              {systemInsight.costProjection && (
+                <div className="pt-2 border-t">
+                  <p className="text-xs text-muted-foreground">Estimated costs</p>
+                  <p className="text-sm">Repair: ${Math.round(systemInsight.costProjection.repairCostRange[0]/100).toLocaleString()}–${Math.round(systemInsight.costProjection.repairCostRange[1]/100).toLocaleString()}</p>
+                  <p className="text-sm">Replace: ${Math.round(systemInsight.costProjection.replacementCostRange[0]/100).toLocaleString()}–${Math.round(systemInsight.costProjection.replacementCostRange[1]/100).toLocaleString()}</p>
+                </div>
+              )}
+              {systemInsight.inactionInsight && (
+                <div className="pt-2 border-t bg-amber-50/50 dark:bg-amber-950/20 rounded-lg p-3 -mx-1">
+                  <p className="text-sm">{systemInsight.inactionInsight.riskSummary}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Recommended action {systemInsight.inactionInsight.recommendedActionWindow}</p>
+                </div>
+              )}
+              {systemInsight.insight.missingDataSignals.length > 0 && (
+                <div className="pt-2 border-t">
+                  <p className="text-xs text-muted-foreground mb-1">For better insights:</p>
+                  {systemInsight.insight.missingDataSignals.map((s, i) => (
+                    <p key={i} className="text-xs text-blue-600">· {s}</p>
+                  ))}
+                </div>
+              )}
+              {homeId && (
+                <div className="flex gap-2 mt-3">
+                  <RecordActionDialog homeId={homeId} systemId={system?.legacyId || Number(id)} systemName={system?.name} />
+                  <RecordOutcomeDialog homeId={homeId} systemId={system?.legacyId || Number(id)} systemName={system?.name} />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {homeId && (
+          <Card>
+            <CardContent className="pt-6">
+              <ComponentList systemId={id!} homeId={homeId} />
+            </CardContent>
+          </Card>
+        )}
+
+        {homeId && (
+          <Card>
+            <CardContent className="pt-6">
+              <WarrantySection homeId={homeId} systemId={system?.legacyId || id} />
+            </CardContent>
+          </Card>
+        )}
+
+        {homeId && (() => {
+          const legacySystemId = system?.legacyId || id;
+          const systemRepairs = repairs.filter(r => r.systemId != null && String(r.systemId) === String(legacySystemId));
+          return systemRepairs.length > 0 ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Wrench className="h-4 w-4" />
+                  Repair History ({systemRepairs.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {systemRepairs.map((repair) => (
+                    <div key={repair.id} className="flex items-start justify-between p-3 rounded-lg border bg-card">
+                      <div>
+                        <p className="font-medium text-sm">{repair.title}</p>
+                        {repair.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{repair.description}</p>}
+                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                          {repair.repairDate && <span>{new Date(repair.repairDate).toLocaleDateString()}</span>}
+                          {repair.cost != null && repair.cost > 0 && <span className="font-medium text-foreground">${(repair.cost / 100).toLocaleString()}</span>}
+                          {repair.outcome && <Badge variant="outline" className="text-xs capitalize">{repair.outcome}</Badge>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null;
+        })()}
+
+        {homeId && (() => {
+          const legacySystemIdForRecs = system?.legacyId || id;
+          const systemRecs = allRecommendations.filter(r => r.systemId != null && String(r.systemId) === String(legacySystemIdForRecs));
+          return systemRecs.length > 0 ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Sparkles className="h-4 w-4" />
+                  Recommendations ({systemRecs.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {systemRecs.map((rec) => (
+                    <RecommendationCard key={rec.id} rec={rec} homeId={homeId} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null;
+        })()}
       </div>
     </Layout>
   );

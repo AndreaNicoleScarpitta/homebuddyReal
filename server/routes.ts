@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { isAuthenticated } from "./replit_integrations/auth";
+import { requireUnderLimit, requireUnderSystemsLimit } from "./lib/plans";
 import { logInfo, logError, logWarn } from "./lib/logger";
 import { authStorage } from "./replit_integrations/auth/storage";
 import multer from "multer";
@@ -151,7 +152,7 @@ export async function registerRoutes(
     }
   });
   
-  app.post("/api/home", isAuthenticated, async (req: any, res) => {
+  app.post("/api/home", isAuthenticated, requireUnderLimit("homes"), async (req: any, res) => {
     try {
       const userId = req.user.id;
       const homeData = insertHomeSchema.parse({ ...req.body, userId }) as unknown as InsertHome;
@@ -192,7 +193,7 @@ export async function registerRoutes(
     }
   });
   
-  app.post("/api/home/:homeId/systems", isAuthenticated, async (req: any, res) => {
+  app.post("/api/home/:homeId/systems", isAuthenticated, requireUnderSystemsLimit(), async (req: any, res) => {
     try {
       const homeId = validateIntParam(req.params.homeId);
       if (homeId === null) return res.status(400).json({ message: "Invalid home ID", code: "VALIDATION_ERROR" });
@@ -363,7 +364,7 @@ export async function registerRoutes(
     },
   });
 
-  app.post("/api/home/:homeId/analyze-document", isAuthenticated, upload.single("document"), async (req: any, res) => {
+  app.post("/api/home/:homeId/analyze-document", isAuthenticated, requireUnderLimit("docAnalyses"), upload.single("document"), async (req: any, res) => {
     try {
       const homeId = validateIntParam(req.params.homeId);
       if (homeId === null) return res.status(400).json({ message: "Invalid home ID", code: "VALIDATION_ERROR" });

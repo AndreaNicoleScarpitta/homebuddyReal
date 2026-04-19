@@ -1,37 +1,20 @@
-import { File } from "@google-cloud/storage";
+/**
+ * Object ACL — DB-backed (works with R2/S3; no GCS metadata dependency).
+ *
+ * The previous Replit/GCS implementation stored ACL as custom object metadata.
+ * R2/S3 don't allow mutating user metadata in place, so we persist ACL in
+ * the `object_acl` table instead, keyed by the object key (e.g. "uploads/<uuid>").
+ */
 
-const ACL_POLICY_METADATA_KEY = "custom:aclPolicy";
+import { db } from "../../db";
+import { objectAcl } from "@shared/models/auth";
+import { eq } from "drizzle-orm";
 
-// The type of the access group.
-//
-// Can be flexibly defined according to the use case.
-//
-// Examples:
-// - USER_LIST: the users from a list stored in the database;
-// - EMAIL_DOMAIN: the users whose email is in a specific domain;
-// - GROUP_MEMBER: the users who are members of a specific group;
-// - SUBSCRIBER: the users who are subscribers of a specific service / content
-//   creator.
+// Kept for signature compatibility with legacy call sites.
 export enum ObjectAccessGroupType {}
 
-// The logic user group that can access the object.
 export interface ObjectAccessGroup {
-  // The type of the access group.
   type: ObjectAccessGroupType;
-  // The logic id that is enough to identify the qualified group members.
-  //
-  // It may have different format for different types. For example:
-  // - for USER_LIST, the id could be the user list db entity id, and the
-  //   user list db entity could contain a bunch of user ids. User needs
-  //   to be a member of the user list to be able to access the object.
-  // - for EMAIL_DOMAIN, the id could be the email domain, and the user needs
-  //   to have an email with the domain to be able to access the object.
-  // - for GROUP_MEMBER, the id could be the group db entity id, and the
-  //   group db entity could contain a bunch of user ids. User needs to be
-  //   a member of the group to be able to access the object.
-  // - for SUBSCRIBER, the id could be the subscriber db entity id, and the
-  //   subscriber db entity could contain a bunch of user ids. User needs to
-  //   be a subscriber to be able to access the object.
   id: string;
 }
 
@@ -45,137 +28,88 @@ export interface ObjectAclRule {
   permission: ObjectPermission;
 }
 
-// The ACL policy of the object.
-// This would be set as part of the object custom metadata:
-// - key: "custom:aclPolicy"
-// - value: JSON string of the ObjectAclPolicy object.
 export interface ObjectAclPolicy {
   owner: string;
   visibility: "public" | "private";
   aclRules?: Array<ObjectAclRule>;
 }
 
-// Check if the requested permission is allowed based on the granted permission.
-function isPermissionAllowed(
-  requested: ObjectPermission,
-  granted: ObjectPermission,
-): boolean {
-  // Users granted with read or write permissions can read the object.
+/** Lightweight handle for an object in R2 — replaces GCS File reference. */
+export interface ObjectRef {
+  key: string;
+}
+
+function isPermissionAllowed(requested: ObjectPermission, granted: ObjectPermission): boolean {
   if (requested === ObjectPermission.READ) {
     return [ObjectPermission.READ, ObjectPermission.WRITE].includes(granted);
   }
-
-  // Only users granted with write permissions can write the object.
   return granted === ObjectPermission.WRITE;
 }
 
-// The base class for all access groups.
-//
-// Different types of access groups can be implemented according to the use case.
 abstract class BaseObjectAccessGroup implements ObjectAccessGroup {
-  constructor(
-    public readonly type: ObjectAccessGroupType,
-    public readonly id: string,
-  ) {}
-
-  // Check if the user is a member of the group.
+  constructor(public readonly type: ObjectAccessGroupType, public readonly id: string) {}
   public abstract hasMember(userId: string): Promise<boolean>;
 }
 
-function createObjectAccessGroup(
-  group: ObjectAccessGroup,
-): BaseObjectAccessGroup {
+function createObjectAccessGroup(group: ObjectAccessGroup): BaseObjectAccessGroup {
   switch (group.type) {
-    // Implement the case for each type of access group to instantiate.
-    //
-    // For example:
-    // case "USER_LIST":
-    //   return new UserListAccessGroup(group.id);
-    // case "EMAIL_DOMAIN":
-    //   return new EmailDomainAccessGroup(group.id);
-    // case "GROUP_MEMBER":
-    //   return new GroupMemberAccessGroup(group.id);
-    // case "SUBSCRIBER":
-    //   return new SubscriberAccessGroup(group.id);
     default:
       throw new Error(`Unknown access group type: ${group.type}`);
   }
 }
 
-// Sets the ACL policy to the object metadata.
-export async function setObjectAclPolicy(
-  objectFile: File,
-  aclPolicy: ObjectAclPolicy,
-): Promise<void> {
-  const [exists] = await objectFile.exists();
-  if (!exists) {
-    throw new Error(`Object not found: ${objectFile.name}`);
-  }
-
-  await objectFile.setMetadata({
-    metadata: {
-      [ACL_POLICY_METADATA_KEY]: JSON.stringify(aclPolicy),
-    },
-  });
+export async function setObjectAclPolicy(object: ObjectRef, policy: ObjectAclPolicy): Promise<void> {
+  await db
+    .insert(objectAcl)
+    .values({
+      objectKey: object.key,
+      ownerId: policy.owner,
+      visibility: policy.visibility,
+      rules: policy.aclRules ?? null,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: objectAcl.objectKey,
+      set: {
+        ownerId: policy.owner,
+        visibility: policy.visibility,
+        rules: policy.aclRules ?? null,
+        updatedAt: new Date(),
+      },
+    });
 }
 
-// Gets the ACL policy from the object metadata.
-export async function getObjectAclPolicy(
-  objectFile: File,
-): Promise<ObjectAclPolicy | null> {
-  const [metadata] = await objectFile.getMetadata();
-  const aclPolicy = metadata?.metadata?.[ACL_POLICY_METADATA_KEY];
-  if (!aclPolicy) {
-    return null;
-  }
-  return JSON.parse(aclPolicy as string);
+export async function getObjectAclPolicy(object: ObjectRef): Promise<ObjectAclPolicy | null> {
+  const [row] = await db.select().from(objectAcl).where(eq(objectAcl.objectKey, object.key));
+  if (!row) return null;
+  return {
+    owner: row.ownerId ?? "",
+    visibility: (row.visibility as "public" | "private") ?? "private",
+    aclRules: (row.rules as ObjectAclRule[]) ?? undefined,
+  };
 }
 
-// Checks if the user can access the object.
 export async function canAccessObject({
   userId,
   objectFile,
   requestedPermission,
 }: {
   userId?: string;
-  objectFile: File;
+  objectFile: ObjectRef;
   requestedPermission: ObjectPermission;
 }): Promise<boolean> {
-  // When this function is called, the acl policy is required.
-  const aclPolicy = await getObjectAclPolicy(objectFile);
-  if (!aclPolicy) {
-    return false;
-  }
+  const policy = await getObjectAclPolicy(objectFile);
+  if (!policy) return false;
 
-  // Public objects are always accessible for read.
-  if (
-    aclPolicy.visibility === "public" &&
-    requestedPermission === ObjectPermission.READ
-  ) {
-    return true;
-  }
+  if (policy.visibility === "public" && requestedPermission === ObjectPermission.READ) return true;
+  if (!userId) return false;
+  if (policy.owner === userId) return true;
 
-  // Access control requires the user id.
-  if (!userId) {
-    return false;
-  }
-
-  // The owner of the object can always access it.
-  if (aclPolicy.owner === userId) {
-    return true;
-  }
-
-  // Go through the ACL rules to check if the user has the required permission.
-  for (const rule of aclPolicy.aclRules || []) {
-    const accessGroup = createObjectAccessGroup(rule.group);
-    if (
-      (await accessGroup.hasMember(userId)) &&
-      isPermissionAllowed(requestedPermission, rule.permission)
-    ) {
+  for (const rule of policy.aclRules || []) {
+    const g = createObjectAccessGroup(rule.group);
+    if ((await g.hasMember(userId)) && isPermissionAllowed(requestedPermission, rule.permission)) {
       return true;
     }
   }
-
   return false;
 }
-
