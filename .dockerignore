@@ -1,9 +1,0 @@
-node_modules
-dist
-.git
-.github
-*.md
-playwright-report
-test-results
-.husky
-.env*
