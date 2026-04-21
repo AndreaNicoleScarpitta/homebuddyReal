@@ -25,8 +25,8 @@ const PLAN_ICONS: Record<string, React.ElementType> = {
 };
 
 const PLAN_TAGLINES: Record<string, string> = {
-  free: "For one home, up to 4 systems",
-  plus: "Two homes, every system tracked",
+  free: "Track one home, every system — see if Home Buddy is for you",
+  plus: "AI suggestions, reports, and smarter reminders for your home",
   premium: "Up to four homes — for landlords and multi-property owners",
 };
 

@@ -14,6 +14,7 @@ import { WebhookHandlers } from "./webhookHandlers";
 import { registerDonationRoutes } from "./donation-routes";
 import { registerBillingRoutes } from "./billing-routes";
 import { registerMeRoutes } from "./me-routes";
+import { registerCalendarRoutes } from "./calendar-routes";
 import { startNotificationScheduler, stopNotificationScheduler } from "./jobs/notificationScheduler";
 import { startAgentScheduler, stopAgentScheduler } from "./jobs/agentScheduler";
 import { pool } from "./db";
@@ -190,6 +191,7 @@ app.use((req, res, next) => {
   registerDonationRoutes(app);
   registerBillingRoutes(app);
   registerMeRoutes(app);
+  registerCalendarRoutes(app);
 
   const mutationLimiter = rateLimit({
     windowMs: 60 * 1000,

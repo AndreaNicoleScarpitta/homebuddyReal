@@ -49,9 +49,20 @@ export const PLANS: Record<PlanId, { id: PlanId; name: string; priceMonthly: num
     priceMonthly: 0,
     limits: {
       maxHomes: 1,
-      maxSystemsPerHome: 4,
+      // Free users can track every system in their home — capping at 4 was
+      // gating the core "is my home OK?" value prop behind a paywall. A
+      // typical house easily has 6+ systems (HVAC, water heater, roof,
+      // electrical, plumbing, appliances…), so the cap just made free
+      // users bounce before they saw any value. Monetize on advanced
+      // features (AI suggestions, reports, seasonal campaigns), not on
+      // whether users can even describe their home.
+      maxSystemsPerHome: null,
       maxActiveTasks: null,
-      maxDocAnalysesPerMonth: 2,
+      // Bumped from 2/mo → 5/mo. Two analyses per month is not enough to
+      // experience what the AI actually does; by the time a user taps the
+      // feature for a third inspection report they're paywalled out
+      // before they had a chance to say "this is useful."
+      maxDocAnalysesPerMonth: 5,
       maxAiReportsPerMonth: 0,
       aiTaskSuggestions: false,
       seasonalCampaigns: false,

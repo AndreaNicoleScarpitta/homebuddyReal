@@ -25,10 +25,10 @@ const PLANS = {
     priceId: null,
     features: [
       "1 home",
-      "Up to 4 systems per home",
+      "Unlimited systems per home",
       "Manual task tracking",
-      "Basic reminders",
-      "Document analysis (2/mo)",
+      "Calendar subscription feed",
+      "Document analysis (5/mo)",
       "Community support",
     ],
   },

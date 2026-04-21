@@ -272,6 +272,7 @@ export default function DocumentAnalysis() {
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isAcceptingAll, setIsAcceptingAll] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<FileAnalysisResultV2 | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
@@ -423,6 +424,108 @@ export default function DocumentAnalysis() {
     }
   };
 
+  /**
+   * One-click "accept everything the AI found." This is the product
+   * shortcut for the common case — user uploads a document, skims the
+   * findings, and wants them all added to their home. Without this they
+   * have to approve each suggested system individually AND then tap the
+   * matched-tasks confirm button, which added friction between "upload"
+   * and "value" that was killing engagement.
+   *
+   * We still drive the existing single-item endpoints rather than add a
+   * bulk server route — the fan-out is small (usually 0–3 suggestions
+   * plus one matched-tasks call) and reusing the existing endpoints
+   * means the server-side audit trail, event log, and approval events
+   * look identical whether the user clicked once or N times.
+   *
+   * If any step fails we surface it and keep the rest of the UI usable
+   * so the user can finish manually rather than starting over.
+   */
+  const handleAcceptAll = async () => {
+    if (!home || !analysisResult) return;
+
+    const toApprove = analysisResult.suggestedSystems.filter(
+      (s) => !decidedSuggestions.has(s.id)
+    );
+    const allMatchedTasks = analysisResult.matchedSystemTasks;
+    const updates = analysisResult.matchedSystemUpdates;
+
+    if (toApprove.length === 0 && allMatchedTasks.length === 0 && updates.length === 0) {
+      toast({ title: "Nothing to accept", description: "No findings to add." });
+      return;
+    }
+
+    setIsAcceptingAll(true);
+    let approvedCount = 0;
+    let failedApprovals = 0;
+    const newlyDecided = new Map(decidedSuggestions);
+
+    try {
+      // Approve suggestions sequentially. Small N, and serial is friendlier
+      // to the server-side event log than parallel fan-out.
+      for (const suggestion of toApprove) {
+        try {
+          await approveSuggestion(suggestion.id, {
+            homeId: home.id,
+            systemName: suggestion.name,
+            systemCategory: suggestion.category,
+            pendingTasks: suggestion.pendingTasks,
+            pendingAttributes: suggestion.pendingAttributes,
+          });
+          newlyDecided.set(suggestion.id, "approved");
+          approvedCount += 1;
+        } catch (err) {
+          failedApprovals += 1;
+          // Don't throw — keep going so other items still land.
+        }
+      }
+      setDecidedSuggestions(newlyDecided);
+
+      // Then confirm all matched tasks (ignore the user's selection state —
+      // "accept all" means all). If there are no matched tasks but suggestion
+      // approvals happened, we still want to invalidate caches.
+      let matchedCount = 0;
+      if (allMatchedTasks.length > 0 || updates.length > 0) {
+        await confirmMatchedTasks(home.id, allMatchedTasks, updates);
+        matchedCount = allMatchedTasks.length;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["systems"] });
+
+      const totalAdded = approvedCount + matchedCount;
+      if (failedApprovals > 0) {
+        toast({
+          title: "Partially accepted",
+          description: `Added ${totalAdded} item${totalAdded !== 1 ? "s" : ""}. ${failedApprovals} suggestion${failedApprovals !== 1 ? "s" : ""} failed — you can retry them individually.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Everything added",
+          description: `${approvedCount} system${approvedCount !== 1 ? "s" : ""} approved, ${matchedCount} task${matchedCount !== 1 ? "s" : ""} added.`,
+        });
+      }
+      trackEvent("accept_all_clicked", "file_upload", "bulk", totalAdded);
+
+      // Only reset the full view if everything succeeded.
+      if (failedApprovals === 0) {
+        setAnalysisResult(null);
+        setSelectedTaskIds(new Set());
+        setSelectedFiles([]);
+        setDecidedSuggestions(new Map());
+      }
+    } catch (err) {
+      toast({
+        title: "Accept all failed",
+        description: err instanceof Error ? err.message : "Something went wrong. You can still accept items individually.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAcceptingAll(false);
+    }
+  };
+
   const toggleTask = (taskId: string) => {
     setSelectedTaskIds((prev) => {
       const next = new Set(prev);
@@ -543,6 +646,59 @@ export default function DocumentAnalysis() {
             </div>
           </div>
         )}
+
+        {hasResults && (() => {
+          // Show the "Accept everything" shortcut only when there's something
+          // new to accept — don't show a no-op button once the user has
+          // approved/declined everything.
+          const remainingSuggestions = analysisResult!.suggestedSystems.filter(
+            (s) => !decidedSuggestions.has(s.id)
+          ).length;
+          const matchedCount = analysisResult!.matchedSystemTasks.length;
+          const totalAvailable = remainingSuggestions + matchedCount;
+          if (totalAvailable === 0) return null;
+          return (
+            <div
+              className="rounded-xl border border-primary/30 bg-primary/5 p-4"
+              data-testid="accept-all-panel"
+            >
+              <div className="flex items-start gap-3 flex-wrap">
+                <Sparkles className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                <div className="flex-1 min-w-[200px]">
+                  <h3 className="font-semibold text-sm">Add everything AI found?</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {matchedCount > 0 && (
+                      <span>{matchedCount} task{matchedCount !== 1 ? "s" : ""}</span>
+                    )}
+                    {matchedCount > 0 && remainingSuggestions > 0 && <span> + </span>}
+                    {remainingSuggestions > 0 && (
+                      <span>{remainingSuggestions} new system{remainingSuggestions !== 1 ? "s" : ""}</span>
+                    )}
+                    <span> will be added to your home. You can edit or delete anything later.</span>
+                  </p>
+                </div>
+                <Button
+                  onClick={handleAcceptAll}
+                  disabled={isAcceptingAll || isConfirming || processingId !== null}
+                  data-testid="button-accept-all"
+                  className="shrink-0"
+                >
+                  {isAcceptingAll ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Accept all
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
 
         {pendingSuggestions.length > 0 && (
           <div className="space-y-3" data-testid="suggested-systems-section">

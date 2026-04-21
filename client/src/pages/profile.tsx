@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { User, MapPin, Home, Shield, Trash2, Wrench, Heart, Coffee, Sparkles, CheckCircle2 } from "lucide-react";
+import { User, MapPin, Home, Shield, Trash2, Wrench, Heart, Coffee, Sparkles, CheckCircle2, Calendar, Copy, Check } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getHome, getNotificationPreferences, updateNotificationPreferences } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -15,7 +15,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { trackEvent, trackSlugPageView, trackModalOpen } from "@/lib/analytics";
 import { PAGE_SLUGS, MODAL_SLUGS } from "@/lib/slug-registry";
 import { useSearch } from "wouter";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -185,6 +185,137 @@ function SupportCard() {
             <p className="text-xs text-muted-foreground text-center">
               One-time payment via Stripe. No recurring charges.
             </p>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Calendar subscription surface. The user copies the URL here and pastes
+ * it into Google Calendar / Apple Calendar / Outlook's "Subscribe from
+ * URL" dialog. Once subscribed, maintenance tasks show up next to their
+ * normal calendar events, which is dramatically more engagement-friendly
+ * than emails.
+ */
+function CalendarSubscriptionCard() {
+  const { toast } = useToast();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["calendarFeed"],
+    queryFn: async () => {
+      const res = await fetch("/api/me/calendar-feed", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load calendar feed URL");
+      return res.json() as Promise<{ url: string; webcalUrl: string; token: string }>;
+    },
+    // The URL is stable for a given user + SESSION_SECRET, so cache indefinitely.
+    staleTime: Infinity,
+  });
+
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!data?.url) return;
+    try {
+      await navigator.clipboard.writeText(data.url);
+      setCopied(true);
+      trackEvent("calendar_url_copied", "calendar", "copy");
+      toast({ title: "Calendar URL copied" });
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({
+        title: "Copy failed",
+        description: "Your browser blocked clipboard access. Select the URL manually.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg font-heading flex items-center gap-2">
+          <Calendar className="h-5 w-5 text-primary" />
+          Calendar Subscription
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Subscribe to your maintenance tasks in any calendar app. Tasks with a
+          due date will show up next to your normal events and update automatically.
+        </p>
+
+        {isLoading && <Skeleton className="h-20 w-full" />}
+
+        {error && (
+          <p className="text-sm text-destructive">
+            Could not load your calendar URL. Refresh the page and try again.
+          </p>
+        )}
+
+        {data && (
+          <>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                readOnly
+                value={data.url}
+                onFocus={(e) => e.currentTarget.select()}
+                className="font-mono text-xs"
+                data-testid="input-calendar-url"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCopy}
+                data-testid="button-copy-calendar-url"
+                className="shrink-0"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-4 w-4 mr-1" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 mr-1" />
+                    Copy URL
+                  </>
+                )}
+              </Button>
+              <Button
+                asChild
+                variant="secondary"
+                className="shrink-0"
+                data-testid="button-subscribe-calendar"
+              >
+                <a
+                  href={data.webcalUrl}
+                  onClick={() => trackEvent("calendar_subscribe_clicked", "calendar", "webcal")}
+                >
+                  Subscribe
+                </a>
+              </Button>
+            </div>
+
+            <details className="text-xs text-muted-foreground">
+              <summary className="cursor-pointer hover:text-foreground">
+                How to add this to your calendar
+              </summary>
+              <div className="mt-2 space-y-1.5 pl-2 border-l-2 border-muted">
+                <p>
+                  <strong>Google Calendar:</strong> Settings → Add calendar → From URL → paste the URL above.
+                </p>
+                <p>
+                  <strong>Apple Calendar:</strong> File → New Calendar Subscription → paste the URL, or tap "Subscribe" above on iOS.
+                </p>
+                <p>
+                  <strong>Outlook:</strong> Calendar → Add calendar → Subscribe from web → paste the URL.
+                </p>
+                <p className="italic">
+                  The feed updates as you add tasks. Clients usually re-poll every few hours.
+                </p>
+              </div>
+            </details>
           </>
         )}
       </CardContent>
@@ -404,6 +535,8 @@ export default function Profile() {
           <BillingCard />
 
           <NotificationSettings />
+
+          <CalendarSubscriptionCard />
 
           <ContractorModeCard />
 
