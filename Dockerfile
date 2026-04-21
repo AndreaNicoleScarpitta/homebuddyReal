@@ -19,10 +19,11 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json* ./
 RUN npm ci --include=dev && npm cache clean --force
 
-# Copy built artifacts + files needed by db:push
+# Copy built artifacts + files needed by db:push and startup scripts
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=build /app/shared ./shared
+COPY --from=build /app/script ./script
 
 EXPOSE 5000
 
