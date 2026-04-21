@@ -30,7 +30,19 @@ export const v2Router = Router();
 
 v2Router.use(requireIdempotencyKey);
 
-if (process.env.NODE_ENV !== "production") {
+// Test-user header bypass: lets integration tests inject a user via
+// `x-test-user-id` without going through OIDC. Double-gated:
+//   1. NODE_ENV !== "production"
+//   2. ALLOW_TEST_USER_HEADER === "1" (explicit opt-in)
+//
+// The second gate matters because non-production builds still get deployed
+// (staging, preview envs). A stray NODE_ENV=development on a public host
+// would otherwise let anyone spoof any user id. Require an explicit env
+// flag that no deployed environment should ever set.
+if (
+  process.env.NODE_ENV !== "production" &&
+  process.env.ALLOW_TEST_USER_HEADER === "1"
+) {
   v2Router.use((req, _res, next) => {
     const testUserId = req.headers["x-test-user-id"];
     if (testUserId && !req.user) {

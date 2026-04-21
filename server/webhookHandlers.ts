@@ -21,14 +21,16 @@ export class WebhookHandlers {
     try {
       const stripe = await getUncachableStripeClient();
       const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-      let event: any;
-      if (webhookSecret) {
-        event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
-      } else {
-        // Fall back to parsing the already-verified body — stripe-replit-sync
-        // verified it above, so we trust the envelope here.
-        event = JSON.parse(payload.toString('utf8'));
+      if (!webhookSecret) {
+        // Previously we fell back to JSON.parse(payload) when the secret was
+        // missing, trusting that stripe-replit-sync verified upstream. That
+        // trust was misplaced: a misconfigured sync (or a direct POST to this
+        // route) would let an unauthenticated attacker forge subscription
+        // events and silently upgrade any user's plan. Fail loud instead.
+        logger.error('STRIPE_WEBHOOK_SECRET is not set — refusing to process webhook. Set STRIPE_WEBHOOK_SECRET in env before accepting Stripe events.');
+        throw new Error('STRIPE_WEBHOOK_SECRET not configured');
       }
+      const event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
 
       if (event.type === 'invoice.payment_failed') {
         await handleInvoicePaymentFailed(event.data.object);

@@ -22,9 +22,13 @@ export {
 };
 
 function getOpenAI() {
+  // Timeout prevents a hung upstream (network blip, provider outage) from
+  // tying up a request worker forever. 60s matches our Railway worker budget.
   return new OpenAI({
     apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "dummy",
     baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    timeout: 60_000,
+    maxRetries: 1,
   });
 }
 const openai = getOpenAI();

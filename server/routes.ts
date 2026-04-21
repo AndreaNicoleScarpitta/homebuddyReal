@@ -364,6 +364,34 @@ export async function registerRoutes(
     },
   });
 
+  /**
+   * Best-effort magic-byte sniff. `fileFilter` only sees the client-asserted
+   * mimetype (easy to spoof: any .exe can be uploaded as application/pdf).
+   * Checking the first few bytes in the buffer lets us reject obvious
+   * mismatches — PDFs must start with "%PDF-", text types should be valid
+   * UTF-8 without null bytes. Not a full format validator, just a cheap
+   * sanity check before we feed the buffer into the PDF extractor.
+   */
+  function validateDocumentMagicBytes(buf: Buffer, mimetype: string): string | null {
+    if (!buf || buf.length === 0) return "Empty file";
+    if (mimetype === "application/pdf") {
+      // PDF spec: file must start with %PDF-<version> within first 1024 bytes.
+      // We check the first 5 bytes for strictness — real PDFs always start here.
+      const header = buf.subarray(0, 5).toString("ascii");
+      if (header !== "%PDF-") {
+        return "File claims to be a PDF but does not start with %PDF- magic bytes";
+      }
+      return null;
+    }
+    // text/* types: reject files containing NUL bytes in the first 4KB — that's
+    // a reliable signal of binary content masquerading as text.
+    const sample = buf.subarray(0, Math.min(buf.length, 4096));
+    if (sample.includes(0x00)) {
+      return "File claims to be text but contains binary NUL bytes";
+    }
+    return null;
+  }
+
   app.post("/api/home/:homeId/analyze-document", isAuthenticated, requireUnderLimit("docAnalyses"), upload.single("document"), async (req: any, res) => {
     try {
       const homeId = validateIntParam(req.params.homeId);
@@ -375,6 +403,11 @@ export async function registerRoutes(
 
       if (!req.file) {
         return res.status(400).json({ message: "No document file provided", code: "VALIDATION_ERROR" });
+      }
+
+      const magicBytesError = validateDocumentMagicBytes(req.file.buffer, req.file.mimetype);
+      if (magicBytesError) {
+        return res.status(400).json({ message: magicBytesError, code: "VALIDATION_ERROR" });
       }
 
       const text = await extractTextFromDocument(req.file.buffer, req.file.mimetype);

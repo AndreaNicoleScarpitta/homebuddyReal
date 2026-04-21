@@ -794,7 +794,9 @@ export default function SystemDetail() {
                   </thead>
                   <tbody>
                     {paintColors.map((entry, index) => (
-                      <tr key={index} className="group border-b border-border/50 hover:bg-muted/30" data-testid={`paint-color-row-${index}`}>
+                      // Composite key: deleting a row would otherwise shift index keys
+                      // onto the wrong DOM nodes — content + index is stable enough.
+                      <tr key={`${entry.room}|${entry.wall}|${entry.hex}|${index}`} className="group border-b border-border/50 hover:bg-muted/30" data-testid={`paint-color-row-${index}`}>
                         <td className="py-2 pr-3" data-testid={`text-paint-room-${index}`}>{entry.room || <span className="text-muted-foreground/50">—</span>}</td>
                         <td className="py-2 pr-3" data-testid={`text-paint-wall-${index}`}>{entry.wall || <span className="text-muted-foreground/50">—</span>}</td>
                         <td className="py-2 pr-3" data-testid={`text-paint-color-${index}`}>{entry.color || <span className="text-muted-foreground/50">—</span>}</td>

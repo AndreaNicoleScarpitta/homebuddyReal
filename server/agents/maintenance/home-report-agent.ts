@@ -7,9 +7,9 @@
  */
 
 import { registerAgent, type AgentContext } from "../runner";
-import { db } from "../../db";
+import { db, openaiBreaker } from "../../db";
 import { sql } from "drizzle-orm";
-import { logInfo } from "../../lib/logger";
+import { logInfo, logWarn } from "../../lib/logger";
 import OpenAI from "openai";
 
 registerAgent("home-report-agent", async (ctx: AgentContext) => {
@@ -18,7 +18,10 @@ registerAgent("home-report-agent", async (ctx: AgentContext) => {
 
   logInfo("agent.home-report", `Generating home report for: ${homeId}`);
 
-  const [homeResult, systemsResult, tasksResult] = await Promise.all([
+  // Use allSettled so a single slow/failing query (e.g. systems projection
+  // lock contention) doesn't tank the whole report. Home is required; the
+  // other two are best-effort and default to empty on failure.
+  const [homeSettled, systemsSettled, tasksSettled] = await Promise.allSettled([
     db.execute(sql`
       SELECT ph.attrs, ph.user_id FROM projection_home ph WHERE ph.home_id = ${homeId} LIMIT 1
     `),
@@ -32,19 +35,42 @@ registerAgent("home-report-agent", async (ctx: AgentContext) => {
     `),
   ]);
 
+  if (homeSettled.status === "rejected") {
+    throw new Error(`Home lookup failed: ${(homeSettled.reason as Error)?.message || homeSettled.reason}`);
+  }
+  const homeResult = homeSettled.value;
   if (homeResult.rows.length === 0) throw new Error(`Home not found: ${homeId}`);
 
+  if (systemsSettled.status === "rejected") {
+    logWarn("agent.home-report", `systems query failed; continuing with empty list: ${(systemsSettled.reason as Error)?.message}`);
+  }
+  if (tasksSettled.status === "rejected") {
+    logWarn("agent.home-report", `tasks query failed; continuing with empty list: ${(tasksSettled.reason as Error)?.message}`);
+  }
+
   const home = (homeResult.rows[0] as any).attrs || {};
-  const systems = (systemsResult.rows as any[]).map(r => r.attrs);
-  const tasks = tasksResult.rows as any[];
+  const systems = systemsSettled.status === "fulfilled"
+    ? (systemsSettled.value.rows as any[]).map(r => r.attrs)
+    : [];
+  const tasks = tasksSettled.status === "fulfilled"
+    ? (tasksSettled.value.rows as any[])
+    : [];
 
   const overdue = tasks.filter(t => t.state !== "completed" && t.due_at && new Date(t.due_at) < new Date());
   const completed = tasks.filter(t => t.state === "completed");
   const pending = tasks.filter(t => t.state !== "completed");
 
-  const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY });
+  // 60s timeout + circuit breaker: without these, a hung OpenAI request ties
+  // up the agent worker indefinitely, and repeated failures cascade across
+  // the whole scheduler. The breaker trips after 3 consecutive errors and
+  // fast-fails for 60s so we stop piling requests on a broken upstream.
+  const openai = new OpenAI({
+    apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+    timeout: 60_000,
+    maxRetries: 1,
+  });
 
-  const completion = await openai.chat.completions.create({
+  const completion = await openaiBreaker.execute(() => openai.chat.completions.create({
     model: "gpt-4o",
     max_tokens: 2500,
     temperature: 0.5,
@@ -84,7 +110,7 @@ Sections to include:
 6. Recommendations`,
       },
     ],
-  });
+  }));
 
   const content = completion.choices[0]?.message?.content || "";
 
