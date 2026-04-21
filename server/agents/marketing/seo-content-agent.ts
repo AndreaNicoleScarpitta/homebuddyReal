@@ -14,7 +14,7 @@
 import { registerAgent, type AgentContext } from "../runner";
 import { logInfo } from "../../lib/logger";
 import { getTopPages, comparePagesWoW, ga4Configured } from "../../lib/ga4";
-import OpenAI from "openai";
+import { getOpenAIClient } from "../../lib/openai-client";
 
 registerAgent("seo-content-agent", async (ctx: AgentContext) => {
   const { topic: topicInput, keyword, targetAudience = "homeowners", mode = "new" } = ctx.input as {
@@ -65,7 +65,7 @@ registerAgent("seo-content-agent", async (ctx: AgentContext) => {
 
   logInfo("agent.seo-content", `Generating article for topic: ${resolvedTopic}${ga4Context ? " (with GA4 context)" : ""}`);
 
-  const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY });
+  const openai = getOpenAIClient();
 
   const systemPrompt = ctx.agent.systemPrompt || `You are a friendly, expert home maintenance writer.
 Write in a calm, conversational tone — like Drew explaining something to a nervous first-time homeowner.

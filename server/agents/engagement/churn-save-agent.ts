@@ -19,9 +19,9 @@ import { db } from "../../db";
 import { sql } from "drizzle-orm";
 import { sendEmail } from "../../lib/email";
 import { logInfo, logWarn } from "../../lib/logger";
-import OpenAI from "openai";
+import { getOpenAIClient } from "../../lib/openai-client";
 
-const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY });
+const openai = getOpenAIClient();
 
 registerAgent("churn-save-agent", async (ctx: AgentContext) => {
   const { maxUsersPerRun = 25, atRiskStart = 7, atRiskEnd = 13 } = ctx.input as {

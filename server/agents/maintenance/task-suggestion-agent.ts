@@ -10,7 +10,7 @@ import { registerAgent, type AgentContext } from "../runner";
 import { db } from "../../db";
 import { sql } from "drizzle-orm";
 import { logInfo } from "../../lib/logger";
-import OpenAI from "openai";
+import { getOpenAIClient } from "../../lib/openai-client";
 
 function getCurrentSeason(): string {
   const month = new Date().getMonth() + 1;
@@ -57,7 +57,7 @@ registerAgent("task-suggestion-agent", async (ctx: AgentContext) => {
     `${s.name} (${s.category}): condition=${s.condition || "unknown"}, installed=${s.install_year || "unknown"}, last service=${s.last_service || "never"}`
   ).join("\n");
 
-  const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY });
+  const openai = getOpenAIClient();
 
   const completion = await openai.chat.completions.create({
     model: "gpt-4o",

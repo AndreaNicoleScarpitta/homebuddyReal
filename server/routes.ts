@@ -477,7 +477,10 @@ export async function registerRoutes(
           .join("\n");
         const fullDescription = [task.description, attrSummary].filter(Boolean).join("\n\n");
 
-        const result = await storage.createMaintenanceTask({
+        // storage exposes `createTask` (not `createMaintenanceTask`) — the
+        // name mismatch was a stale import that TS was reporting as an error
+        // on every build. Same underlying method, same shape.
+        const result = await storage.createTask({
           homeId,
           title: sanitizeText(task.title),
           description: fullDescription ? sanitizeText(fullDescription) : null,

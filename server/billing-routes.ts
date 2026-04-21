@@ -14,7 +14,7 @@ import type { Express, Request, Response } from "express";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { getUncachableStripeClient } from "./stripeClient";
 import { logger } from "./lib/logger";
-import { db } from "./db";
+import { db, stripeBreaker } from "./db";
 import { sql } from "drizzle-orm";
 
 const PLANS = {
@@ -94,6 +94,10 @@ export function registerBillingRoutes(app: Express): void {
       if (!config || !config.priceId) {
         return res.status(400).json({ error: "Invalid plan or pricing not configured. Set STRIPE_PRICE_PLUS / STRIPE_PRICE_PREMIUM env vars." });
       }
+      // Pull priceId into a local so TS keeps the narrowing through the
+      // stripeBreaker arrow function below (property narrows are lost
+      // across closure boundaries).
+      const priceId: string = config.priceId;
 
       const stripe = await getUncachableStripeClient();
 
@@ -105,11 +109,11 @@ export function registerBillingRoutes(app: Express): void {
       customerId = (existing.rows[0] as any)?.stripe_customer_id || null;
 
       if (!customerId && user.email) {
-        const customer = await stripe.customers.create({
+        const customer = await stripeBreaker.execute(() => stripe.customers.create({
           email: user.email,
           name: [user.firstName, user.lastName].filter(Boolean).join(" ") || undefined,
           metadata: { userId: user.id },
-        });
+        }));
         customerId = customer.id;
 
         // Persist best-effort (tolerate schema missing the column)
@@ -122,19 +126,19 @@ export function registerBillingRoutes(app: Express): void {
         }
       }
 
-      const session = await stripe.checkout.sessions.create({
+      const session = await stripeBreaker.execute(() => stripe.checkout.sessions.create({
         mode: "subscription",
         payment_method_types: ["card"],
         customer: customerId || undefined,
         customer_email: customerId ? undefined : user.email,
-        line_items: [{ price: config.priceId, quantity: 1 }],
+        line_items: [{ price: priceId, quantity: 1 }],
         success_url: `${appUrl()}/profile?checkout=success&plan=${plan}`,
         cancel_url: `${appUrl()}/pricing?checkout=canceled`,
         allow_promotion_codes: true,
         subscription_data: {
           metadata: { userId: user.id, plan },
         },
-      });
+      }));
 
       res.json({ url: session.url, sessionId: session.id });
     } catch (err: any) {
@@ -154,10 +158,10 @@ export function registerBillingRoutes(app: Express): void {
         return res.status(404).json({ error: "No Stripe customer on file" });
       }
       const stripe = await getUncachableStripeClient();
-      const portal = await stripe.billingPortal.sessions.create({
+      const portal = await stripeBreaker.execute(() => stripe.billingPortal.sessions.create({
         customer: customerId,
         return_url: `${appUrl()}/profile`,
-      });
+      }));
       res.json({ url: portal.url });
     } catch (err: any) {
       logger.error({ err: err?.message }, "Failed to open billing portal");

@@ -7,7 +7,7 @@
 
 import { registerAgent, type AgentContext } from "../runner";
 import { logInfo } from "../../lib/logger";
-import OpenAI from "openai";
+import { getOpenAIClient } from "../../lib/openai-client";
 
 registerAgent("social-content-agent", async (ctx: AgentContext) => {
   const { theme = "home maintenance", season = "spring", platform = "both" } = ctx.input as {
@@ -18,7 +18,7 @@ registerAgent("social-content-agent", async (ctx: AgentContext) => {
 
   logInfo("agent.social-content", `Generating social posts for: ${theme} / ${season}`);
 
-  const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY });
+  const openai = getOpenAIClient();
 
   const completion = await openai.chat.completions.create({
     model: ctx.agent.modelId || "gpt-4o",

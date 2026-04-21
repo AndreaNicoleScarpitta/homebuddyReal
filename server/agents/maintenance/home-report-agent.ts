@@ -7,10 +7,10 @@
  */
 
 import { registerAgent, type AgentContext } from "../runner";
-import { db, openaiBreaker } from "../../db";
+import { db } from "../../db";
 import { sql } from "drizzle-orm";
 import { logInfo, logWarn } from "../../lib/logger";
-import OpenAI from "openai";
+import { getOpenAIClient, openaiBreaker } from "../../lib/openai-client";
 
 registerAgent("home-report-agent", async (ctx: AgentContext) => {
   const { homeId } = ctx.input as { homeId?: string };
@@ -60,15 +60,12 @@ registerAgent("home-report-agent", async (ctx: AgentContext) => {
   const completed = tasks.filter(t => t.state === "completed");
   const pending = tasks.filter(t => t.state !== "completed");
 
-  // 60s timeout + circuit breaker: without these, a hung OpenAI request ties
-  // up the agent worker indefinitely, and repeated failures cascade across
-  // the whole scheduler. The breaker trips after 3 consecutive errors and
-  // fast-fails for 60s so we stop piling requests on a broken upstream.
-  const openai = new OpenAI({
-    apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-    timeout: 60_000,
-    maxRetries: 1,
-  });
+  // Factory-configured client + circuit breaker: without these, a hung OpenAI
+  // request ties up the agent worker indefinitely, and repeated failures
+  // cascade across the whole scheduler. The breaker trips after 3 consecutive
+  // errors and fast-fails for 60s so we stop piling requests on a broken
+  // upstream.
+  const openai = getOpenAIClient();
 
   const completion = await openaiBreaker.execute(() => openai.chat.completions.create({
     model: "gpt-4o",

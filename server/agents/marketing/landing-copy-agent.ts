@@ -12,7 +12,7 @@
 import { registerAgent, type AgentContext } from "../runner";
 import { logInfo } from "../../lib/logger";
 import { getTopPages, getTrafficSources, ga4Configured } from "../../lib/ga4";
-import OpenAI from "openai";
+import { getOpenAIClient } from "../../lib/openai-client";
 
 const SECTIONS = {
   hero: {
@@ -77,7 +77,7 @@ registerAgent("landing-copy-agent", async (ctx: AgentContext) => {
 
   logInfo("agent.landing-copy", `Generating ${numVariants} ${section} variants with angle: ${angle}${ga4Context ? " (GA4-informed)" : ""}`);
 
-  const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY });
+  const openai = getOpenAIClient();
 
   const completion = await openai.chat.completions.create({
     model: ctx.agent.modelId || "gpt-4o",

@@ -1,5 +1,6 @@
 import { logInfo, logError, logWarn } from "./logger";
 import { isFeatureEnabled } from "./env-validation";
+import { resendBreaker } from "../db";
 
 interface EmailOptions {
   to: string;
@@ -31,7 +32,10 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
   }
 
   try {
-    const response = await fetch("https://api.resend.com/emails", {
+    // 15s timeout on the Resend call — if their API is hanging, we'd rather
+    // surface the failure fast than pile up stalled requests behind it. The
+    // circuit breaker fast-fails subsequent calls after 5 failures in a row.
+    const response = await resendBreaker.execute(() => fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
@@ -43,7 +47,8 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
         subject: options.subject,
         html: options.html,
       }),
-    });
+      signal: AbortSignal.timeout(15_000),
+    }));
 
     if (!response.ok) {
       const error = await response.text();
