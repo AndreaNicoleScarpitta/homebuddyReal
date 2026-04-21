@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowRight, ArrowLeft, Home, Shield } from "lucide-react";
+import { ArrowRight, ArrowLeft, Home, Shield, AlertCircle } from "lucide-react";
 import { FieldTooltip } from "@/components/field-tooltip";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createHome } from "@/lib/api";
@@ -51,13 +51,35 @@ export default function Onboarding() {
       setLocation("/dashboard");
     },
     onError: (error) => {
+      // Log the full error to the browser console so devtools users can see it.
+      // Without this, transient network/CSRF issues only surface as a toast that
+      // disappears in ~5s, leaving the user stuck with no feedback.
+      // eslint-disable-next-line no-console
+      console.error("[onboarding] createHome failed:", error);
       toast({
-        title: "Error",
-        description: error.message || "Failed to create home profile",
+        title: "Couldn't create your home profile",
+        description: error.message || "Something went wrong. See the page for details.",
         variant: "destructive",
       });
     },
   });
+
+  // True if the last mutation error looks like a CSRF/session issue — in which
+  // case reloading typically fixes it (picks up the latest JS bundle + re-primes
+  // the csrf-token cookie).
+  const errorMessage = createHomeMutation.error?.message ?? "";
+  const looksLikeCsrfError = /csrf|session|403/i.test(errorMessage);
+
+  async function handleRefreshAndRetry() {
+    try {
+      // Force the server to re-issue a csrf-token cookie, then retry.
+      await fetch("/api/csrf-token", { credentials: "include", cache: "no-store" });
+    } catch {
+      // non-fatal — the retry below will either succeed or surface a fresh error
+    }
+    createHomeMutation.reset();
+    handleNext();
+  }
 
   const validateStep1 = (): string[] => {
     const errors: string[] = [];
@@ -322,8 +344,48 @@ export default function Onboarding() {
                 </div>
               </div>
 
-              <Button 
-                className="w-full h-12 font-medium" 
+              {createHomeMutation.isError && (
+                <div
+                  className="flex gap-3 items-start p-3 rounded-lg border border-destructive/30 bg-destructive/5 text-sm"
+                  data-testid="onboarding-error"
+                  role="alert"
+                >
+                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
+                  <div className="flex-1 space-y-2">
+                    <p className="font-medium text-destructive">Couldn't create your home profile</p>
+                    <p className="text-muted-foreground break-words">{errorMessage || "Unknown error"}</p>
+                    {looksLikeCsrfError && (
+                      <p className="text-xs text-muted-foreground">
+                        This usually clears after refreshing the page. If it persists, try the button below.
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRefreshAndRetry}
+                        disabled={createHomeMutation.isPending}
+                        data-testid="button-refresh-retry"
+                      >
+                        Refresh session & retry
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => window.location.reload()}
+                        data-testid="button-hard-reload"
+                      >
+                        Hard reload
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                className="w-full h-12 font-medium"
                 onClick={handleNext}
                 disabled={createHomeMutation.isPending}
                 data-testid="button-create-plan"
