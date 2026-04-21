@@ -114,10 +114,16 @@
     </div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
+      // Service worker intentionally NOT registered here. A previous version
+      // of /sw.js cached JS bundles too aggressively and served stale code
+      // after deploys. The current /sw.js is a self-destruct stub that
+      // unregisters itself; existing installs will remove themselves on
+      // their next page load. If we want offline support back later, ship
+      // a network-first worker and restore this registration.
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {});
-        });
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          regs.forEach((reg) => { reg.unregister().catch(() => {}); });
+        }).catch(() => {});
       }
     </script>
   </body>
