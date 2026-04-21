@@ -8,6 +8,7 @@ import { trackEvent, trackSlugPageView } from "@/lib/analytics";
 import { PAGE_SLUGS } from "@/lib/slug-registry";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
 const GoogleIcon = () => (
@@ -21,6 +22,7 @@ const GoogleIcon = () => (
 
 export default function Login() {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState("");
@@ -59,6 +61,10 @@ export default function Login() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Invalid email or password");
       trackEvent("login_success", "auth", "email");
+      // Prime the auth cache so App.tsx treats the user as authenticated immediately.
+      // Without this, useAuth()'s 5-min stale cache keeps the app on the public
+      // landing route until a hard reload.
+      if (data.user) queryClient.setQueryData(["/api/auth/user"], data.user);
       setLocation("/");
     } catch (err: any) {
       toast({ title: "Couldn't sign you in", description: err.message, variant: "destructive" });

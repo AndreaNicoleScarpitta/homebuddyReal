@@ -15,6 +15,7 @@ import { trackEvent, trackSlugPageView } from "@/lib/analytics";
 import { PAGE_SLUGS } from "@/lib/slug-registry";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -79,6 +80,7 @@ const socialProof = [
 
 export default function Signup() {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState("");
@@ -102,6 +104,10 @@ export default function Signup() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Signup failed");
       trackEvent("signup_success", "auth", "email");
+      // Prime the auth cache with the new user so App.tsx sees them as authenticated
+      // before navigating. Without this, the stale 401 cache from initial load keeps
+      // the app on the public landing route for up to 5 minutes.
+      if (data.user) queryClient.setQueryData(["/api/auth/user"], data.user);
       setLocation("/");
     } catch (err: any) {
       toast({ title: "Couldn't create account", description: err.message, variant: "destructive" });
