@@ -13,7 +13,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { initGA, trackSlugPageView } from "@/lib/analytics";
 import { validateUniqueSlugs, PAGE_SLUGS } from "@/lib/slug-registry";
-import { DonationModal } from "@/components/donation-modal";
+// Donation modal temporarily disabled — was firing too eagerly on first session.
+// Re-enable by restoring this import + the <DonationModal /> render below.
+// import { DonationModal } from "@/components/donation-modal";
 
 // Eagerly loaded — core app pages
 import NotFound from "@/pages/not-found";
@@ -156,7 +158,7 @@ function Router() {
 
   return (
     <>
-      <DonationModal />
+      {/* <DonationModal /> — disabled, see import above */}
       <Suspense fallback={<PageSkeleton />}>
         <Switch>
           <Route path="/" component={Dashboard} />
