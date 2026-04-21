@@ -5,7 +5,6 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "echo '[boot] step1/reset' && npx tsx script/reset-db-if-requested.ts && echo '[boot] step2/push' && npx drizzle-kit push --force && echo '[boot] step3/start' && npm run start",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
