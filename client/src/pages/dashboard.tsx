@@ -614,7 +614,21 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <OnboardingTour key={tourKey} isOpen={showTour} onComplete={() => { completeTour(); setShowAddSystem(true); }} />
+      <OnboardingTour
+        key={tourKey}
+        isOpen={showTour}
+        onComplete={() => {
+          // User finished the tour normally → mark done and open the Add System
+          // wizard so they can immediately take the next step.
+          completeTour();
+          setShowAddSystem(true);
+        }}
+        onSkip={() => {
+          // User dismissed early (X or backdrop) → just close the tour.
+          // Do NOT open the Add System wizard; they didn't ask for it.
+          completeTour();
+        }}
+      />
       
       <div className="space-y-10">
         {/* Header */}

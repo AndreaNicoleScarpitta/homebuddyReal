@@ -38,7 +38,7 @@ export const SYSTEM_CHOICES: SystemChoice[] = [
   { category: "HVAC", name: "Heating & Cooling", emoji: "🌡️", hint: "Furnace, AC, heat pump" },
   { category: "Water Heater", name: "Water Heater", emoji: "🚿", hint: "Tank or tankless" },
   { category: "Plumbing", name: "Plumbing", emoji: "🚰", hint: "Pipes, fixtures, drains" },
-  { category: "Electrical", name: "Electrical", emoji: "⚡", hint: "Panel, outlets, wiring" },
+  { category: "Electrical", name: "Electrical", emoji: "⚡", hint: "Circuit breaker, outlets, wiring" },
   { category: "Roof", name: "Roof", emoji: "🏠", hint: "Shingles, gutters, flashing" },
   { category: "Appliances", name: "Major Appliances", emoji: "🧺", hint: "Dishwasher, laundry, fridge" },
   { category: "Windows", name: "Windows", emoji: "🪟", hint: "Seals, weatherstripping" },
