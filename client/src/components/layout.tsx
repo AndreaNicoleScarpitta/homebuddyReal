@@ -9,6 +9,7 @@ import logoImage from "@assets/generated_images/orange_house_logo_with_grey_gear
 import { trackEvent, trackModalOpen } from "@/lib/analytics";
 import { MODAL_SLUGS } from "@/lib/slug-registry";
 import { PlanBadge } from "@/components/plan-badge";
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 
 // Primary surfaces — the core of what homeowners need
 const primaryNav = [
@@ -288,6 +289,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+
+      {/* PWA install banner — appears above bottom nav after 20 s */}
+      <PwaInstallPrompt />
 
       {/* Mobile Bottom Navigation — 5 items, clean */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t z-50 safe-area-bottom">

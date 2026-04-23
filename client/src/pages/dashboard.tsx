@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, ArrowRight, ListTodo, CheckCircle, CheckCircle2, Loader2, Sparkles, Wrench, AlertTriangle, ShieldCheck, ShieldAlert, Shield } from "lucide-react";
+import { Plus, ArrowRight, ListTodo, CheckCircle, CheckCircle2, Loader2, Sparkles, Wrench, AlertTriangle, ShieldCheck, ShieldAlert, Shield, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { FieldTooltip } from "@/components/field-tooltip";
 import { Link, useLocation } from "wouter";
@@ -23,6 +23,7 @@ import { getHome, getTasks, getSystems, createTask, updateTask, deleteTask, crea
 import type { TaskAnalysis } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState, useRef, useCallback } from "react";
+import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent, trackSlugPageView, trackModalOpen } from "@/lib/analytics";
 import { MODAL_SLUGS, PAGE_SLUGS } from "@/lib/slug-registry";
@@ -500,6 +501,18 @@ export default function Dashboard() {
     enabled: !!home?.id,
   });
 
+  // Pull-to-refresh — invalidates all three data sources, shows a top bar
+  const handlePullRefresh = useCallback(async () => {
+    if (!home?.id) return;
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["home"] }),
+      queryClient.invalidateQueries({ queryKey: ["tasks", home.id] }),
+      queryClient.invalidateQueries({ queryKey: ["systems", home.id] }),
+    ]);
+  }, [queryClient, home?.id]);
+
+  const { isPulling, isTriggered, isRefreshing, pullProgress } = usePullToRefresh(handlePullRefresh);
+
   const deleteMutation = useMutation({
     mutationFn: (taskId: string | number) => deleteTask(taskId),
     onMutate: async (taskId) => {
@@ -630,6 +643,28 @@ export default function Dashboard() {
         }}
       />
       
+      {/* Pull-to-refresh indicator — mobile only */}
+      {(isPulling || isRefreshing) && (
+        <div className="fixed top-0 left-0 right-0 z-[60] md:hidden pointer-events-none">
+          {/* Progress bar that fills as the user pulls */}
+          <div
+            className="h-0.5 bg-primary transition-all duration-75"
+            style={{ width: isRefreshing ? "100%" : `${pullProgress * 100}%` }}
+          />
+          {/* Spinner / pull hint centred below the mobile header */}
+          <div className="flex justify-center pt-14">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border shadow-sm text-xs font-medium transition-all duration-200 ${
+              isTriggered || isRefreshing ? "text-primary" : "text-muted-foreground"
+            }`}>
+              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+                style={!isRefreshing ? { transform: `rotate(${pullProgress * 360}deg)` } : undefined}
+              />
+              {isRefreshing ? "Refreshing…" : isTriggered ? "Release to refresh" : "Pull to refresh"}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-10">
         {/* Header */}
         <header>

@@ -203,15 +203,35 @@ export function MaintenanceCard({ task, onComplete, zipCode }: TaskProps) {
             </h3>
           </div>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground group-hover:text-primary shrink-0"
-            onClick={toggleExpanded}
-            data-testid={`button-task-${task.id}`}
-          >
-            {expanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-          </Button>
+          <div className="flex items-center gap-0.5 shrink-0">
+            {/* Mobile one-tap complete — visible on small screens without expanding.
+                On desktop the full Mark Done button inside the expanded card is used. */}
+            {onComplete && task.status !== "completed" && !expanded && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden h-9 w-9 text-muted-foreground hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  trackEvent("click", "task_card", "quick_complete_mobile");
+                  onComplete(task);
+                }}
+                aria-label="Mark as done"
+                data-testid={`button-quick-complete-${task.id}`}
+              >
+                <CheckCircle2 className="h-5 w-5" />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground group-hover:text-primary"
+              onClick={toggleExpanded}
+              data-testid={`button-task-${task.id}`}
+            >
+              {expanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+            </Button>
+          </div>
         </div>
 
         {task.safetyWarning && (
