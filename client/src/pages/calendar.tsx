@@ -340,7 +340,7 @@ export default function CalendarPage() {
 
         {/* Privacy note */}
         <p className="text-xs text-muted-foreground border-t pt-4">
-          Your calendar URL contains a secure token unique to your account. Anyone with this URL can see your task titles and due dates. You can reset it by changing your password.
+          Your calendar URL contains a secure token unique to your account. Anyone with this URL can view your task names and due dates — but cannot edit anything. The token is tied to your account and remains valid until you contact support to rotate it.
         </p>
 
       </div>
