@@ -10,6 +10,7 @@ import { trackEvent, trackModalOpen } from "@/lib/analytics";
 import { MODAL_SLUGS } from "@/lib/slug-registry";
 import { PlanBadge } from "@/components/plan-badge";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
+import { OfflineBanner } from "@/components/offline-banner";
 
 // Primary surfaces — the core of what homeowners need
 const primaryNav = [
@@ -56,6 +57,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
+      <OfflineBanner />
       {/* Mobile Header — minimal, breathable */}
       <header className="md:hidden flex items-center justify-between px-5 py-3.5 border-b bg-card/80 backdrop-blur-sm z-50 sticky top-0">
         <div className="flex items-center gap-2.5">

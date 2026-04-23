@@ -566,6 +566,23 @@ export default function Dashboard() {
     swipeCompleteMutation.mutate(task);
   };
 
+  // App badge — shows urgent task count on the home screen icon when the
+  // app is installed as a PWA. Supported on Chrome/Edge (Android + desktop).
+  // Silently no-ops on Safari and non-PWA contexts.
+  // Derived from `tasks` directly because urgentTasksCount is computed after
+  // the early-return guard and can't be referenced in a hook before that.
+  useEffect(() => {
+    if (!("setAppBadge" in navigator)) return;
+    const urgent = tasks.filter(
+      (t) => t.urgency === "now" && t.status !== "completed"
+    ).length;
+    if (urgent > 0) {
+      (navigator as any).setAppBadge(urgent).catch(() => {});
+    } else {
+      (navigator as any).clearAppBadge().catch(() => {});
+    }
+  }, [tasks]);
+
   const homeQuerySettled = !homeLoading && isAuthenticated;
   useEffect(() => {
     if (!authLoading && homeQuerySettled && !home) {
