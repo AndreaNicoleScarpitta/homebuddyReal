@@ -101,8 +101,25 @@ export function StepFirstTasks({
 
       <div className="rounded-xl border border-border/60 divide-y divide-border/60 overflow-hidden bg-card">
         {isLoading ? (
-          <div className="p-10 text-center text-sm text-muted-foreground">
-            Generating tasks…
+          <div className="divide-y divide-border/60">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="p-3.5 flex items-start gap-3">
+                <div className="h-2 w-2 rounded-full mt-2 shrink-0 bg-muted animate-pulse" />
+                <div className="flex-1 space-y-2">
+                  <div
+                    className="h-3.5 rounded bg-muted animate-pulse"
+                    style={{ width: `${60 + (i % 3) * 15}%`, animationDelay: `${i * 80}ms` }}
+                  />
+                  <div
+                    className="h-2.5 rounded bg-muted/60 animate-pulse w-1/3"
+                    style={{ animationDelay: `${i * 80 + 40}ms` }}
+                  />
+                </div>
+              </div>
+            ))}
+            <div className="px-3.5 py-2.5 text-xs text-muted-foreground text-center bg-muted/30">
+              Building your starter tasks…
+            </div>
           </div>
         ) : preview.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
@@ -180,13 +197,13 @@ export function StepFirstTasks({
           data-testid="button-upload-inspection"
         >
           <Upload className="mr-2 h-4 w-4" />
-          Upload an inspection report first (optional)
+          Upload inspection report (optional)
         </Button>
       </div>
 
       <p className="text-xs text-center text-muted-foreground">
-        Have an inspection PDF? It'll pull out dozens of specific findings and
-        add them to your plan.
+        Have a PDF from your home inspector? We'll extract every finding and
+        add it to your plan — usually takes about 30 seconds.
       </p>
     </div>
   );

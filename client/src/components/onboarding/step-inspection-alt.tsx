@@ -86,7 +86,7 @@ export function StepInspectionAlt({ onUpload, onSkip, onBack }: StepInspectionAl
         </Button>
 
         <Button
-          variant="ghost"
+          variant="outline"
           className="w-full h-11 font-medium"
           onClick={onSkip}
           data-testid="button-skip-inspection"

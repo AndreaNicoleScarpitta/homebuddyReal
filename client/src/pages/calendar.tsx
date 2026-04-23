@@ -111,7 +111,7 @@ function OutlookButton({ feedUrl }: { feedUrl: string }) {
       </svg>
       <div className="text-left">
         <p className="font-semibold text-foreground text-sm group-hover:text-primary transition-colors">Outlook</p>
-        <p className="text-xs text-muted-foreground">Outlook.com or Office 365</p>
+        <p className="text-xs text-muted-foreground">Outlook.com web — use "Copy URL" for desktop Outlook</p>
       </div>
       <ExternalLink className="h-4 w-4 text-muted-foreground ml-auto shrink-0 group-hover:text-primary transition-colors" />
     </a>
@@ -157,6 +157,12 @@ function UpcomingTasksList({ homeId }: { homeId: string | number }) {
         <CalendarCheck className="h-10 w-10 mb-3 opacity-30" />
         <p className="text-sm">No tasks with due dates yet.</p>
         <p className="text-xs mt-1">Set due dates on your tasks — they'll appear here and in your calendar.</p>
+        <a
+          href="/dashboard"
+          className="mt-3 text-xs font-medium text-primary hover:underline"
+        >
+          Go to dashboard →
+        </a>
       </div>
     );
   }
@@ -238,7 +244,7 @@ export default function CalendarPage() {
         <div className="flex flex-wrap gap-3 text-sm">
           {[
             { icon: Zap, text: "One-time setup" },
-            { icon: RefreshCw, text: "Auto-syncs every 6 hours" },
+            { icon: RefreshCw, text: "Updates within 24 hours" },
             { icon: CalendarCheck, text: "All calendar apps" },
           ].map(({ icon: Icon, text }) => (
             <div key={text} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted text-muted-foreground">
@@ -340,7 +346,7 @@ export default function CalendarPage() {
 
         {/* Privacy note */}
         <p className="text-xs text-muted-foreground border-t pt-4">
-          Your calendar URL contains a secure token unique to your account. Anyone with this URL can view your task names and due dates — but cannot edit anything. The token is tied to your account and remains valid until you contact support to rotate it.
+          Your calendar URL contains a long, cryptographically secure token unique to your account — it's not publicly discoverable. Anyone who has the URL can view your task names and due dates, but cannot edit anything. Keep it like a password; if you need it rotated, contact support.
         </p>
 
       </div>
