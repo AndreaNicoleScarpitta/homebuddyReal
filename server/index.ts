@@ -1,4 +1,6 @@
+import "./instrument"; // ← must be first: patches Node built-ins before anything else loads
 import "dotenv/config";
+import * as Sentry from "@sentry/node";
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -99,12 +101,12 @@ app.use(
         styleSrc: ["'self'", ((_req: any, res: any) => `'nonce-${res.locals.cspNonce}'`) as any, "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "blob:", "https://www.google-analytics.com"],
-        connectSrc: ["'self'", "https://www.google-analytics.com", "https://analytics.google.com", "https://checkout.stripe.com", "https://api.stripe.com"],
+        connectSrc: ["'self'", "https://www.google-analytics.com", "https://analytics.google.com", "https://checkout.stripe.com", "https://api.stripe.com", "https://maps.googleapis.com", "https://places.googleapis.com", "https://*.ingest.sentry.io"],
         frameSrc: ["'none'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         formAction: ["'self'"],
-        frameAncestors: ["'self'", "https://*.replit.dev", "https://*.replit.app"],
+        frameAncestors: ["'none'"],
       },
     },
     crossOriginEmbedderPolicy: false,
@@ -164,7 +166,10 @@ app.use((req, res, next) => {
       await runMigrations({ databaseUrl });
       logger.info("Stripe schema ready");
       const stripeSync = await getStripeSync();
-      const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      const webhookBaseUrl =
+        process.env.APP_URL?.replace(/\/$/, "") ||
+        (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : null) ||
+        "http://localhost:5000";
       const webhookResult = await stripeSync.findOrCreateManagedWebhook(
         `${webhookBaseUrl}/api/stripe/webhook`
       );
@@ -237,6 +242,12 @@ app.use((req, res, next) => {
   app.use("/v2", v2Router);
   app.use("/api/agents", agentRouter);
   await registerRoutes(httpServer, app);
+
+  // Sentry error handler — must come BEFORE our own error handler so Sentry
+  // sees the raw error object before we sanitise the response.
+  if (process.env.SENTRY_DSN) {
+    Sentry.setupExpressErrorHandler(app);
+  }
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

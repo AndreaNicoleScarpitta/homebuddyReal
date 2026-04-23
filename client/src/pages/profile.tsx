@@ -7,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { User, MapPin, Home, Shield, Trash2, Wrench, Heart, Coffee, Sparkles, CheckCircle2, Calendar, Copy, Check } from "lucide-react";
+import { User, MapPin, Home, Shield, Trash2, Heart, Coffee, Sparkles, CheckCircle2, Calendar, Copy, Check, AlertCircle } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getHome, getNotificationPreferences, updateNotificationPreferences } from "@/lib/api";
+import { getHome, getNotificationPreferences, updateNotificationPreferences, updateHome } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { trackEvent, trackSlugPageView, trackModalOpen } from "@/lib/analytics";
@@ -27,6 +28,164 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
+const US_STATES = [
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
+  "HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+  "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
+  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
+  "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY",
+  "DC",
+];
+
+/**
+ * "Complete your address" nudge.
+ *
+ * Shown when the user finished onboarding with only a ZIP (the Phase 1
+ * onboarding flip — see client/src/pages/onboarding.tsx). Completing the
+ * full address unlocks contractor matching and permit lookups, so we
+ * surface it as a value prop rather than a nag.
+ *
+ * This card self-hides once the address is complete enough (street + city
+ * + state). We reckon "complete" as having all three of those — zip alone
+ * is not enough for anything that uses a street-level identity (permits,
+ * contractor invoices, mail).
+ */
+function AddressCompletionNudge({ home }: { home: any }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [addressLine1, setAddressLine1] = useState<string>(home?.streetAddress || home?.addressLine1 || "");
+  const [city, setCity] = useState<string>(home?.city || "");
+  const [state, setState] = useState<string>(home?.state || "");
+
+  const hasStreet = Boolean(home?.streetAddress || home?.addressLine1);
+  const hasCity = Boolean(home?.city);
+  const hasState = Boolean(home?.state);
+  const complete = hasStreet && hasCity && hasState;
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!home?.id) throw new Error("No home to update");
+      return updateHome(home.id, {
+        streetAddress: addressLine1.trim() || null,
+        city: city.trim() || null,
+        state: state || null,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["home"] });
+      toast({
+        title: "Address saved",
+        description: "Thanks — this unlocks contractor matching and permit lookups.",
+      });
+      setEditing(false);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Couldn't save address",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Hide entirely once complete — this is a nudge, not a permanent fixture.
+  if (complete) return null;
+  if (!home) return null;
+
+  return (
+    <Card className="border-primary/40 bg-primary/5" data-testid="card-address-nudge">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg font-heading flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-primary" />
+          Complete your address
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          You started with just a ZIP — perfect for a quick maintenance plan.
+          Adding the full address unlocks contractor matching, permit lookups,
+          and more accurate local costs.
+        </p>
+
+        {!editing ? (
+          <Button
+            onClick={() => setEditing(true)}
+            variant="outline"
+            data-testid="button-expand-address-nudge"
+          >
+            <MapPin className="mr-2 h-4 w-4" />
+            Add my full address
+          </Button>
+        ) : (
+          <div className="space-y-3" data-testid="address-nudge-form">
+            <div className="space-y-1.5">
+              <Label htmlFor="nudge-address1" className="text-sm font-medium">
+                Street address
+              </Label>
+              <Input
+                id="nudge-address1"
+                value={addressLine1}
+                onChange={(e) => setAddressLine1(e.target.value)}
+                placeholder="123 Main Street"
+                data-testid="input-nudge-address1"
+                autoComplete="address-line1"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="nudge-city" className="text-sm font-medium">
+                  City
+                </Label>
+                <Input
+                  id="nudge-city"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="Springfield"
+                  data-testid="input-nudge-city"
+                  autoComplete="address-level2"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="nudge-state" className="text-sm font-medium">
+                  State
+                </Label>
+                <Select value={state} onValueChange={setState}>
+                  <SelectTrigger data-testid="select-nudge-state">
+                    <SelectValue placeholder="State" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {US_STATES.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button
+                onClick={() => mutation.mutate()}
+                disabled={mutation.isPending || !addressLine1.trim() || !city.trim() || !state}
+                data-testid="button-save-address-nudge"
+              >
+                {mutation.isPending ? "Saving…" : "Save"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setEditing(false)}
+                disabled={mutation.isPending}
+                data-testid="button-cancel-address-nudge"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function ProfileSkeleton() {
   return (
@@ -323,61 +482,9 @@ function CalendarSubscriptionCard() {
   );
 }
 
-function ContractorModeCard() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-
-  const { data: prefs, isLoading } = useQuery({
-    queryKey: ["notificationPreferences"],
-    queryFn: getNotificationPreferences,
-  });
-
-  const toggleMutation = useMutation({
-    mutationFn: (contractorMode: boolean) => updateNotificationPreferences({ contractorMode } as any),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notificationPreferences"] });
-      toast({ title: "Settings saved" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Could not update settings.", variant: "destructive" });
-    },
-  });
-
-  const isOn = (prefs as any)?.contractorMode ?? false;
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg font-heading flex items-center gap-2">
-          <Wrench className="h-5 w-5 text-primary" />
-          Contractor Mode
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="space-y-1">
-            <Label htmlFor="contractor-mode" className="text-sm font-medium">
-              Enable Contractor Mode
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              When enabled, you can manually override the AI-determined DIY safety level on tasks. This is intended for licensed contractors or experienced homeowners who can safely perform work that would normally require a professional.
-            </p>
-          </div>
-          <Switch
-            id="contractor-mode"
-            checked={isOn}
-            disabled={isLoading || toggleMutation.isPending}
-            onCheckedChange={(checked) => {
-              trackEvent("toggle_contractor_mode", "settings", checked ? "enable" : "disable");
-              toggleMutation.mutate(checked);
-            }}
-            data-testid="switch-contractor-mode"
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+// ContractorModeCard removed in Phase 2 onboarding refactor.
+// DIY level is now always editable inline on the task card —
+// no feature-flag toggle required.
 
 export default function Profile() {
   const { user } = useAuth();
@@ -463,6 +570,8 @@ export default function Profile() {
         </header>
 
         <section className="space-y-6">
+          <AddressCompletionNudge home={home} />
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg font-heading flex items-center gap-2">
@@ -537,8 +646,6 @@ export default function Profile() {
           <NotificationSettings />
 
           <CalendarSubscriptionCard />
-
-          <ContractorModeCard />
 
           <SupportCard />
 

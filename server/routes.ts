@@ -894,36 +894,88 @@ Only return the JSON object, no other text.`;
       if (!report) {
         return res.status(404).json({ message: "Report not found", code: "NOT_FOUND" });
       }
-      
+
       await storage.updateInspectionReport(id, { status: "analyzing" });
-      
-      setTimeout(async () => {
+      res.json({ message: "Analysis started", status: "analyzing" });
+
+      // Run analysis in background — response already sent above
+      (async () => {
         try {
-          const sampleFindings = [
-            { reportId: id, category: "Roof", title: "Shingle wear observed", description: "Minor wear on south-facing shingles", severity: "minor", location: "Roof - South side", estimatedCost: "$500-1,500", urgency: "later", diyLevel: "Pro-Only" },
-            { reportId: id, category: "HVAC", title: "Filter replacement needed", description: "HVAC filter is dirty and should be replaced", severity: "minor", location: "HVAC Unit", estimatedCost: "$20-50", urgency: "soon", diyLevel: "DIY-Safe" },
-            { reportId: id, category: "Plumbing", title: "Minor leak under kitchen sink", description: "Small drip from P-trap connection", severity: "moderate", location: "Kitchen", estimatedCost: "$50-150", urgency: "soon", diyLevel: "Caution" },
-          ];
-          
-          for (const finding of sampleFindings) {
-            await storage.createFinding(finding as any);
+          // 1. Fetch the uploaded file from object storage
+          let buffer: Buffer | null = null;
+          let mimeType = report.fileType || "application/pdf";
+
+          if (report.objectPath) {
+            try {
+              const { objectStorageClient, ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+              const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+              const svc = new ObjectStorageService();
+              const entityId = report.objectPath.replace(/^\/objects\//, "");
+              const key = `${svc.getPrivateObjectDir()}/${entityId}`;
+              const resp = await objectStorageClient.send(
+                new GetObjectCommand({ Bucket: svc.getBucket(), Key: key })
+              );
+              if (resp.Body) {
+                buffer = Buffer.from(await (resp.Body as any).transformToByteArray());
+              }
+            } catch (fetchErr) {
+              logWarn("reports.analyze", `Could not fetch report file, proceeding without content: ${(fetchErr as Error).message}`);
+            }
           }
-          
-          await storage.updateInspectionReport(id, { 
+
+          // 2. Extract text — fall back to empty string so LLM still runs
+          let documentText = "";
+          if (buffer) {
+            try {
+              documentText = await extractTextFromDocument(buffer, mimeType);
+            } catch (parseErr) {
+              logWarn("reports.analyze", `Could not parse report file: ${(parseErr as Error).message}`);
+            }
+          }
+
+          // 3. Analyze with LLM (uses home context for better results)
+          const analysis = await analyzeDocumentWithLLM(
+            documentText || "[No readable text could be extracted from the uploaded file.]",
+            report.homeId
+          );
+
+          // 4. Map urgency → severity for the findings table
+          const urgencyToSeverity: Record<string, string> = {
+            now: "critical",
+            soon: "major",
+            later: "moderate",
+            monitor: "minor",
+          };
+
+          // 5. Persist findings
+          for (const issue of analysis.issues) {
+            await storage.createFinding({
+              reportId: id,
+              category: issue.category || null,
+              title: issue.title,
+              description: issue.description || null,
+              severity: urgencyToSeverity[issue.urgency || "later"] || "moderate",
+              location: null,
+              estimatedCost: issue.estimatedCost || null,
+              urgency: issue.urgency || "later",
+              diyLevel: issue.diyLevel || "Caution",
+            } as any);
+          }
+
+          // 6. Mark report done
+          await storage.updateInspectionReport(id, {
             status: "analyzed",
-            summary: "Inspection analysis complete. 3 issues identified - 1 moderate, 2 minor. Estimated total repair cost: $570-1,700.",
-            issuesFound: sampleFindings.length,
+            summary: `Inspection analysis complete. ${analysis.issues.length} issue${analysis.issues.length === 1 ? "" : "s"} identified.`,
+            issuesFound: analysis.issues.length,
             analyzedAt: new Date(),
           } as any);
-          
-          logInfo("reports.analyze", "Report analyzed successfully", { reportId: id, findingsCount: sampleFindings.length });
+
+          logInfo("reports.analyze", "Report analyzed successfully", { reportId: id, findingsCount: analysis.issues.length });
         } catch (err) {
           logError("reports.analyze.background", err);
           await storage.updateInspectionReport(id, { status: "error" });
         }
-      }, 2000);
-      
-      res.json({ message: "Analysis started", status: "analyzing" });
+      })();
     } catch (error) {
       return handleApiError(res, "reports.analyze", error);
     }

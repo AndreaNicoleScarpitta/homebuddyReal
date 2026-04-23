@@ -56,6 +56,7 @@ export interface V2Home {
 export interface V2System {
   id: string;
   homeId: string;
+  legacyId?: number | null;
   category: string;
   name: string;
   entityType?: string;
@@ -82,6 +83,18 @@ export interface V2System {
   riskScore?: number | null;
 }
 
+/**
+ * Pro-workflow status for tasks that need a contractor.
+ *
+ * These values live in the task's `estimates` JSONB alongside the standard
+ * task attributes. They're separate from `status` (the legacy state machine
+ * value) so that a task can be both "scheduled" and "needs_pro" — i.e. the
+ * plumber is booked but the task isn't done yet.
+ *
+ * Progression: needs_pro → quoted → scheduled_pro → (task completes)
+ */
+export type TaskProStatus = "needs_pro" | "quoted" | "scheduled_pro";
+
 export interface V2Task {
   id: string;
   homeId: string;
@@ -104,6 +117,14 @@ export interface V2Task {
   completedAt?: string | null;
   namespacePrefix?: string | null;
   namespacedAttributes?: Record<string, string> | null;
+
+  // Contractor / pro-workflow fields (stored in estimates JSONB, optional)
+  proStatus?: TaskProStatus | null;
+  contractorName?: string | null;
+  contractorPhone?: string | null;
+  contractorNotes?: string | null;
+  scheduledProDate?: string | null;
+  quotedCost?: string | null;
 }
 
 export interface V2Report {
@@ -148,12 +169,20 @@ export async function getHome(): Promise<V2Home | null> {
   }
 }
 
+/**
+ * Create a home with a partial profile.
+ *
+ * ZIP is the only truly required field — everything else (street, city,
+ * state, year built, square footage) can be filled in later. This mirrors
+ * the server-side validation in routes_v2.ts and is the core of the
+ * "first useful output in under 2 minutes" onboarding flip.
+ */
 export async function createHome(data: {
-  addressLine1: string;
-  addressLine2?: string;
-  city: string;
-  state: string;
   zipCode: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
   builtYear?: number;
   sqFt?: number;
   type?: string;
@@ -1468,4 +1497,74 @@ export async function getLearningSummary(homeId: number | string): Promise<Learn
     headers: v2Headers(),
   });
   return handleResponse<LearningSummary>(response);
+}
+
+// ---------------------------------------------------------------------------
+// Calendar feed
+// ---------------------------------------------------------------------------
+
+export interface CalendarFeed {
+  url: string;
+  webcalUrl: string;
+  token: string;
+}
+
+export async function getCalendarFeed(): Promise<CalendarFeed> {
+  const response = await fetch("/api/me/calendar-feed", {
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+  return handleResponse<CalendarFeed>(response);
+}
+
+// ---------------------------------------------------------------------------
+// Chat sessions
+// ---------------------------------------------------------------------------
+
+export interface ChatSession {
+  id: string;
+  homeId: string;
+  title: string;
+  messageCount: number;
+  createdAt: string;
+}
+
+export interface V2ChatMessage {
+  id: string;
+  homeId: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+}
+
+export async function getChatSessions(homeId: number | string): Promise<ChatSession[]> {
+  const response = await fetch(`/v2/homes/${homeId}/chat/sessions`, {
+    headers: v2Headers(),
+  });
+  return handleResponse<ChatSession[]>(response);
+}
+
+export async function createChatSession(homeId: number | string): Promise<{ sessionId: string }> {
+  const response = await fetch(`/v2/chat/sessions`, {
+    method: "POST",
+    headers: v2Headers(),
+    body: JSON.stringify({ homeId }),
+  });
+  return handleResponse<{ sessionId: string }>(response);
+}
+
+export async function getChatSession(sessionId: string): Promise<{ session: ChatSession; messages: V2ChatMessage[] }> {
+  const response = await fetch(`/v2/chat/sessions/${sessionId}`, {
+    headers: v2Headers(),
+  });
+  return handleResponse<{ session: ChatSession; messages: V2ChatMessage[] }>(response);
+}
+
+export async function updateChatSessionTitle(sessionId: string, title: string): Promise<{ sessionId: string; title: string }> {
+  const response = await fetch(`/v2/chat/sessions/${sessionId}`, {
+    method: "PATCH",
+    headers: v2Headers(),
+    body: JSON.stringify({ title }),
+  });
+  return handleResponse<{ sessionId: string; title: string }>(response);
 }

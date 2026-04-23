@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, Clock, FileText, Settings, Menu, LogOut, HelpCircle, Layers, ChevronDown, FileSearch, ClipboardList, Brain } from "lucide-react";
+import { Home, Clock, FileText, Settings, Menu, LogOut, HelpCircle, Layers, ChevronDown, FileSearch, ClipboardList, Brain, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState, useEffect } from "react";
@@ -20,6 +20,7 @@ const primaryNav = [
 ];
 
 const secondaryNav = [
+  { href: "/calendar", icon: Calendar, label: "Calendar Sync" },
   { href: "/documents", icon: FileText, label: "Documents" },
   { href: "/document-analysis", icon: FileSearch, label: "Analyze Files" },
 ];

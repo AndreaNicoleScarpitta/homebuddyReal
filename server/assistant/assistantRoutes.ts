@@ -24,7 +24,7 @@ import type { Actor } from "../eventing/types";
 export const assistantRouter = Router();
 
 function getActor(req: Request): Actor {
-  const user = req.user as { id?: number } | undefined;
+  const user = (req as any).user as { id?: number } | undefined;
   if (user?.id) {
     return { actorType: "user", actorId: String(user.id) };
   }

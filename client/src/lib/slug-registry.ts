@@ -17,6 +17,7 @@ export const PAGE_SLUGS = {
   chat: "chat",
   inspections: "inspections",
   notFound: "not-found",
+  calendar: "calendar",
   guideMonthlyChecklist: "guide-monthly-checklist",
   guideAnnualSchedule: "guide-annual-schedule",
   guideNewHomeowner: "guide-new-homeowner",

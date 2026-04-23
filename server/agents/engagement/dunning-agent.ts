@@ -89,7 +89,7 @@ Either is fine. I just don't want you to find out by surprise.
 }
 
 registerAgent("dunning-agent", async (ctx: AgentContext) => {
-  const input = ctx.input as DunningInput;
+  const input = ctx.input as unknown as DunningInput;
 
   if (!input.email) {
     logWarn("agent.dunning", "No email provided — skipping");

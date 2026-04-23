@@ -1,140 +1,242 @@
-import { useState, useEffect } from "react";
+/**
+ * Onboarding — the "first useful output in under 2 minutes" flow.
+ *
+ * Phase 1 flip: we no longer block a new user behind a long address +
+ * demographics form. The only required field is ZIP. Everything else is
+ * deferred to "when you want a feature that needs it" (the profile page
+ * gets a nudge for full address).
+ *
+ * Step choreography:
+ *
+ *   1. house-basics       ZIP + optional year/sqft. Creates the home row.
+ *   2. systems-quickpick  Tap-to-add system chips. Each selection POSTs a
+ *                         system, which causes the server to generate
+ *                         starter maintenance tasks via templates.
+ *   3. first-tasks        The magic moment — we read back the generated
+ *                         tasks so the user sees immediate value.
+ *   4. inspection-alt     Optional fork for "power users" who want to
+ *                         upload an inspection PDF. Otherwise skip to
+ *                         the dashboard.
+ *
+ * The orchestration is intentionally state-only (no server draft). If the
+ * user bails mid-flow, nothing is persisted until step 2 submits.
+ *
+ * Error recovery: step 2 is where things can fail (CSRF, network, 500).
+ * We keep the user on the step with a retry button rather than failing
+ * silently. If the systems POST fails but the home POST succeeded, we
+ * still let the user continue — the home exists, they can add systems
+ * later from the dashboard.
+ */
+
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowRight, ArrowLeft, Home, Shield, AlertCircle } from "lucide-react";
-import { FieldTooltip } from "@/components/field-tooltip";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createHome } from "@/lib/api";
+import { Home } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createHome, createSystem, getTasks } from "@/lib/api";
+import type { V2Home } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent, trackSlugPageView } from "@/lib/analytics";
 import { PAGE_SLUGS } from "@/lib/slug-registry";
+import { StepHouseBasics, type HouseBasics } from "@/components/onboarding/step-house-basics";
+import {
+  StepSystemsQuickpick,
+  SYSTEM_CHOICES,
+  DEFAULT_SELECTED,
+} from "@/components/onboarding/step-systems-quickpick";
+import { StepFirstTasks } from "@/components/onboarding/step-first-tasks";
+import { StepInspectionAlt } from "@/components/onboarding/step-inspection-alt";
 
-const US_STATES = [
-  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
-  "HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
-  "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
-  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
-  "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY",
-  "DC",
-];
+type Step = "house-basics" | "systems-quickpick" | "first-tasks" | "inspection-alt";
 
 export default function Onboarding() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [step, setStep] = useState(1);
 
-  useEffect(() => { trackSlugPageView(PAGE_SLUGS.onboarding); }, []);
+  const [step, setStep] = useState<Step>("house-basics");
+  const [basics, setBasics] = useState<HouseBasics>({ zipCode: "", builtYear: "", sqFt: "" });
+  const [selectedSystems, setSelectedSystems] = useState<Set<string>>(new Set(DEFAULT_SELECTED));
+  const [createdHome, setCreatedHome] = useState<V2Home | null>(null);
 
-  const [addressLine1, setAddressLine1] = useState("");
-  const [addressLine2, setAddressLine2] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [zipCode, setZipCode] = useState("");
+  useEffect(() => {
+    trackSlugPageView(PAGE_SLUGS.onboarding);
+  }, []);
 
-  const [builtYear, setBuiltYear] = useState("");
-  const [sqFt, setSqFt] = useState("");
+  // ---------------------------------------------------------------------
+  // Mutations — createHome, then createSystem per selected category.
+  // Kept as two separate mutations rather than one big batch because the
+  // server has them as distinct endpoints, and if systems fail we still
+  // want the home to exist so the user isn't "stuck at zero."
+  // ---------------------------------------------------------------------
 
   const createHomeMutation = useMutation({
     mutationFn: createHome,
     onSuccess: (newHome) => {
       queryClient.setQueryData(["home"], newHome);
       queryClient.invalidateQueries({ queryKey: ["home"] });
-      toast({
-        title: "Home profile created!",
-        description: "Your home maintenance plan is ready.",
-      });
-      setLocation("/dashboard");
+      setCreatedHome(newHome);
     },
     onError: (error) => {
-      // Log the full error to the browser console so devtools users can see it.
-      // Without this, transient network/CSRF issues only surface as a toast that
-      // disappears in ~5s, leaving the user stuck with no feedback.
       // eslint-disable-next-line no-console
       console.error("[onboarding] createHome failed:", error);
       toast({
         title: "Couldn't create your home profile",
-        description: error.message || "Something went wrong. See the page for details.",
+        description: error.message || "Something went wrong.",
         variant: "destructive",
       });
     },
   });
 
-  // True if the last mutation error looks like a CSRF/session issue — in which
-  // case reloading typically fixes it (picks up the latest JS bundle + re-primes
-  // the csrf-token cookie).
+  const createSystemsMutation = useMutation({
+    mutationFn: async ({ homeId, categories }: { homeId: string; categories: string[] }) => {
+      // Create systems sequentially — the server uses an idempotency key
+      // per request, and running them in parallel would make it hard to
+      // tell which failed if one does. The category list is ~4-6 items,
+      // so the wall time is dominated by network latency, not CPU.
+      const results = [];
+      for (const category of categories) {
+        const choice = SYSTEM_CHOICES.find((c) => c.category === category);
+        if (!choice) continue;
+        try {
+          const created = await createSystem(homeId, {
+            name: choice.name,
+            category: choice.category,
+            source: "onboarding-quickpick",
+          });
+          results.push(created);
+        } catch (err: any) {
+          // eslint-disable-next-line no-console
+          console.error(`[onboarding] createSystem(${category}) failed:`, err);
+          // Keep going — partial success is better than total failure.
+        }
+      }
+      return results;
+    },
+    onSuccess: () => {
+      // Tasks are generated server-side as systems are written, so the
+      // next `getTasks` call will pick them up.
+      if (createdHome) {
+        queryClient.invalidateQueries({ queryKey: ["systems", createdHome.id] });
+        queryClient.invalidateQueries({ queryKey: ["tasks", createdHome.id] });
+      }
+    },
+  });
+
   const errorMessage = createHomeMutation.error?.message ?? "";
   const looksLikeCsrfError = /csrf|session|403/i.test(errorMessage);
 
-  async function handleRefreshAndRetry() {
+  const handleRefreshAndRetry = useCallback(async () => {
     try {
-      // Force the server to re-issue a csrf-token cookie, then retry.
       await fetch("/api/csrf-token", { credentials: "include", cache: "no-store" });
     } catch {
-      // non-fatal — the retry below will either succeed or surface a fresh error
+      // non-fatal
     }
     createHomeMutation.reset();
-    handleNext();
-  }
+  }, [createHomeMutation]);
 
-  const validateStep1 = (): string[] => {
-    const errors: string[] = [];
-    if (!addressLine1.trim()) errors.push("Address line 1 is required.");
-    if (!city.trim()) errors.push("City is required.");
-    if (!state) errors.push("State is required.");
-    if (!zipCode.trim()) {
-      errors.push("ZIP code is required.");
-    } else if (!/^\d{5}(-\d{4})?$/.test(zipCode.trim())) {
-      errors.push("ZIP code must be 5 digits (e.g., 90210) or ZIP+4 (e.g., 90210-1234).");
+  // ---------------------------------------------------------------------
+  // Fetch the generated tasks after systems creation for step 3.
+  // Using useQuery rather than cramming it into the mutation because the
+  // dashboard will also read this and we want the cache populated here.
+  // ---------------------------------------------------------------------
+  const tasksQuery = useQuery({
+    queryKey: ["tasks", createdHome?.id],
+    queryFn: () => getTasks(createdHome!.id),
+    enabled: Boolean(createdHome?.id) && step === "first-tasks",
+    // Task generation is fire-and-write on the server — give it a moment
+    // to finish before we poll a second time, but don't spam the DB.
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 800;
+      if (data.length === 0) return 1500;
+      return false;
+    },
+    staleTime: 0,
+  });
+
+  // ---------------------------------------------------------------------
+  // Step transitions
+  // ---------------------------------------------------------------------
+
+  const handleHouseBasicsNext = useCallback(() => {
+    trackEvent("onboarding_step", "onboarding", "zip_completed");
+    setStep("systems-quickpick");
+  }, []);
+
+  const handleSystemsToggle = useCallback((category: string) => {
+    setSelectedSystems((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  }, []);
+
+  const handleSystemsNext = useCallback(async () => {
+    trackEvent("onboarding_step", "onboarding", "systems_selected", selectedSystems.size);
+
+    // We create the home lazily here rather than on house-basics → systems
+    // so that if the user backs out, nothing is persisted. The tradeoff is
+    // one slightly longer wait when they hit "Show me my plan."
+    let home = createdHome;
+    if (!home) {
+      try {
+        home = await createHomeMutation.mutateAsync({
+          zipCode: basics.zipCode.trim(),
+          builtYear: basics.builtYear ? parseInt(basics.builtYear) : undefined,
+          sqFt: basics.sqFt ? parseInt(basics.sqFt) : undefined,
+          type: "Single Family Home",
+        });
+      } catch {
+        // onError toast already fired; stay on this step for retry
+        return;
+      }
     }
-    return errors;
-  };
 
-  const handleNext = () => {
-    if (step === 1) {
-      const errors = validateStep1();
-      if (errors.length > 0) {
-        toast({ title: "Please fix the following", description: errors.join(" "), variant: "destructive" });
-        return;
-      }
-      trackEvent('onboarding_step', 'onboarding', 'address_completed');
-      setStep(2);
-    } else if (step === 2) {
-      const errors: string[] = [];
-      const currentYear = new Date().getFullYear();
-      if (builtYear) {
-        const year = parseInt(builtYear);
-        if (isNaN(year) || year < 1600 || year > currentYear) {
-          errors.push(`Year built must be between 1600 and ${currentYear}.`);
-        }
-      }
-      if (sqFt) {
-        const sq = parseInt(sqFt);
-        if (isNaN(sq) || sq < 100 || sq > 100000) {
-          errors.push("Square feet must be between 100 and 100,000.");
-        }
-      }
-      if (errors.length > 0) {
-        toast({ title: "Validation Error", description: errors.join(" "), variant: "destructive" });
-        return;
-      }
-      trackEvent('onboarding_step', 'onboarding', 'create_home');
-      createHomeMutation.mutate({
-        addressLine1: addressLine1.trim(),
-        addressLine2: addressLine2.trim() || undefined,
-        city: city.trim(),
-        state,
-        zipCode: zipCode.trim(),
-        builtYear: builtYear ? parseInt(builtYear) : undefined,
-        sqFt: sqFt ? parseInt(sqFt) : undefined,
-        type: "Single Family Home",
+    if (!home?.id) {
+      toast({
+        title: "Couldn't create your home",
+        description: "Please try again.",
+        variant: "destructive",
       });
+      return;
     }
-  };
+
+    // Fire systems creation (non-blocking for the UI transition).
+    // The first-tasks step polls for tasks, so it will show generated
+    // results as they land.
+    createSystemsMutation.mutate({
+      homeId: home.id,
+      categories: Array.from(selectedSystems),
+    });
+
+    setStep("first-tasks");
+  }, [createdHome, basics, selectedSystems, createHomeMutation, createSystemsMutation, toast]);
+
+  const handleUploadInspectionFork = useCallback(() => {
+    trackEvent("onboarding_step", "onboarding", "inspection_fork_chosen");
+    setStep("inspection-alt");
+  }, []);
+
+  const handleGoToDashboard = useCallback(() => {
+    trackEvent("onboarding_step", "onboarding", "done_to_dashboard");
+    toast({
+      title: "You're all set!",
+      description: "Your maintenance plan is ready.",
+    });
+    setLocation("/dashboard");
+  }, [setLocation, toast]);
+
+  const handleGoToInspectionsUpload = useCallback(() => {
+    trackEvent("onboarding_step", "onboarding", "inspection_upload_redirect");
+    setLocation("/inspections");
+  }, [setLocation]);
+
+  // Progress dots — one per step in the happy path. The inspection-alt
+  // fork is intentionally not counted — it's a branch, not a gate.
+  const progressIndex =
+    step === "house-basics" ? 0 : step === "systems-quickpick" ? 1 : 2;
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -144,20 +246,27 @@ export default function Onboarding() {
             <Home className="h-8 w-8 text-white" />
           </div>
           <h2 className="text-4xl font-heading font-bold text-foreground">
-            Let's set up your home.
+            Let's get your first plan in 90 seconds.
           </h2>
           <p className="text-lg text-muted-foreground leading-relaxed">
-            We'll create a personalized maintenance plan based on your home's location, age, and systems.
+            ZIP, a few taps for what's in your home, and we'll have a starter
+            maintenance plan waiting for you — no long forms.
           </p>
           <div className="flex gap-2 pt-4">
-            <div className={`h-2 w-12 rounded-full ${step >= 1 ? 'bg-primary' : 'bg-border'}`} />
-            <div className={`h-2 w-12 rounded-full ${step >= 2 ? 'bg-primary' : 'bg-border'}`} />
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className={`h-2 w-12 rounded-full ${
+                  progressIndex >= i ? "bg-primary" : "bg-border"
+                }`}
+              />
+            ))}
           </div>
         </div>
       </div>
 
       <div className="flex-1 flex items-start md:items-center justify-center p-6 overflow-y-auto">
-        <motion.div 
+        <motion.div
           key={step}
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -171,233 +280,96 @@ export default function Onboarding() {
           </div>
 
           <div className="lg:hidden flex gap-2 mb-6">
-            <div className={`h-1 flex-1 rounded-full ${step >= 1 ? 'bg-primary' : 'bg-border'}`} />
-            <div className={`h-1 flex-1 rounded-full ${step >= 2 ? 'bg-primary' : 'bg-border'}`} />
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className={`h-1 flex-1 rounded-full ${
+                  progressIndex >= i ? "bg-primary" : "bg-border"
+                }`}
+              />
+            ))}
           </div>
 
-          {step === 1 ? (
-            <div className="space-y-8">
-              <div>
-                <h1 className="text-2xl font-heading font-bold text-foreground" data-testid="text-welcome">
-                  Where is your home?
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                  We'll use this for local codes and costs
-                </p>
-              </div>
+          {step === "house-basics" && (
+            <StepHouseBasics
+              value={basics}
+              onChange={setBasics}
+              onNext={handleHouseBasicsNext}
+            />
+          )}
 
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="address1" className="text-sm font-medium">
-                    Address Line 1 <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="address1"
-                    value={addressLine1}
-                    onChange={(e) => setAddressLine1(e.target.value)}
-                    placeholder="123 Main Street"
-                    className="h-12 bg-secondary/30 border-border/50 focus:bg-background"
-                    data-testid="input-address-line1"
-                    autoComplete="address-line1"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="address2" className="text-sm font-medium">
-                    Address Line 2 <span className="text-muted-foreground text-xs">(optional)</span>
-                  </Label>
-                  <Input
-                    id="address2"
-                    value={addressLine2}
-                    onChange={(e) => setAddressLine2(e.target.value)}
-                    placeholder="Apt, Suite, Unit, etc."
-                    className="h-12 bg-secondary/30 border-border/50 focus:bg-background"
-                    data-testid="input-address-line2"
-                    autoComplete="address-line2"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="city" className="text-sm font-medium">
-                      City <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="city"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      placeholder="Springfield"
-                      className="h-12 bg-secondary/30 border-border/50 focus:bg-background"
-                      data-testid="input-city"
-                      autoComplete="address-level2"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="state" className="text-sm font-medium">
-                      State <span className="text-destructive">*</span>
-                    </Label>
-                    <Select value={state} onValueChange={setState}>
-                      <SelectTrigger className="h-12 bg-secondary/30 border-border/50 focus:bg-background" data-testid="select-state">
-                        <SelectValue placeholder="State" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {US_STATES.map((s) => (
-                          <SelectItem key={s} value={s}>{s}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2 max-w-[200px]">
-                  <Label htmlFor="zip" className="text-sm font-medium flex items-center gap-1">
-                    ZIP Code <span className="text-destructive">*</span>
-                    <FieldTooltip termSlug="zip-code" screenName="onboarding" />
-                  </Label>
-                  <Input
-                    id="zip"
-                    value={zipCode}
-                    onChange={(e) => setZipCode(e.target.value)}
-                    placeholder="90210"
-                    className="h-12 bg-secondary/30 border-border/50 focus:bg-background"
-                    maxLength={10}
-                    data-testid="input-zip"
-                    autoComplete="postal-code"
-                  />
-                </div>
-                
-                <div className="flex items-start gap-3 text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
-                  <Shield className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-                  <span>
-                    Your full address is private. Home Buddy uses it only to personalize your home profile (like local climate and permit guidance). The Home Buddy team can't view your full address. We only use generalized location (e.g., city/region) for analytics. Data is encrypted in transit and at rest.
-                  </span>
-                </div>
-              </div>
-
-              <Button 
-                className="w-full h-12 font-medium" 
-                onClick={handleNext}
-                disabled={!addressLine1.trim() || !city.trim() || !state || !zipCode.trim()}
-                data-testid="button-continue"
-              >
-                Continue
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-8">
-              <button 
-                type="button"
-                onClick={() => setStep(1)}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                data-testid="button-back"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </button>
-
-              <div>
-                <h1 className="text-2xl font-heading font-bold text-foreground">
-                  Tell us more
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                  Optional details for a better maintenance plan
-                </p>
-              </div>
-
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="year" className="text-sm font-medium flex items-center gap-1">
-                    Year Built <span className="text-muted-foreground text-xs">(optional)</span>
-                    <FieldTooltip termSlug="year-built" screenName="onboarding" />
-                  </Label>
-                  <Input 
-                    id="year"
-                    type="number"
-                    min={1600}
-                    max={new Date().getFullYear()}
-                    placeholder="e.g., 1985"
-                    className="h-12 bg-secondary/30 border-border/50 focus:bg-background"
-                    value={builtYear}
-                    onChange={(e) => setBuiltYear(e.target.value)}
-                    data-testid="input-year"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="sqft" className="text-sm font-medium flex items-center gap-1">
-                    Square Footage <span className="text-muted-foreground text-xs">(optional)</span>
-                    <FieldTooltip termSlug="square-footage" screenName="onboarding" />
-                  </Label>
-                  <Input 
-                    id="sqft"
-                    type="number"
-                    min={100}
-                    max={100000}
-                    placeholder="e.g., 2400"
-                    className="h-12 bg-secondary/30 border-border/50 focus:bg-background"
-                    value={sqFt}
-                    onChange={(e) => setSqFt(e.target.value)}
-                    data-testid="input-sqft"
-                  />
-                </div>
-              </div>
-
+          {step === "systems-quickpick" && (
+            <>
+              <StepSystemsQuickpick
+                selected={selectedSystems}
+                onToggle={handleSystemsToggle}
+                onNext={handleSystemsNext}
+                onBack={() => setStep("house-basics")}
+                isSubmitting={createHomeMutation.isPending}
+              />
               {createHomeMutation.isError && (
                 <div
-                  className="flex gap-3 items-start p-3 rounded-lg border border-destructive/30 bg-destructive/5 text-sm"
+                  className="mt-4 flex gap-3 items-start p-3 rounded-lg border border-destructive/30 bg-destructive/5 text-sm"
                   data-testid="onboarding-error"
                   role="alert"
                 >
-                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
                   <div className="flex-1 space-y-2">
-                    <p className="font-medium text-destructive">Couldn't create your home profile</p>
-                    <p className="text-muted-foreground break-words">{errorMessage || "Unknown error"}</p>
+                    <p className="font-medium text-destructive">
+                      Couldn't create your home profile
+                    </p>
+                    <p className="text-muted-foreground break-words">
+                      {errorMessage || "Unknown error"}
+                    </p>
                     {looksLikeCsrfError && (
                       <p className="text-xs text-muted-foreground">
-                        This usually clears after refreshing the page. If it persists, try the button below.
+                        This usually clears after refreshing your session.
                       </p>
                     )}
                     <div className="flex flex-wrap gap-2 pt-1">
-                      <Button
+                      <button
                         type="button"
-                        variant="outline"
-                        size="sm"
                         onClick={handleRefreshAndRetry}
-                        disabled={createHomeMutation.isPending}
+                        className="text-sm underline text-primary"
                         data-testid="button-refresh-retry"
                       >
-                        Refresh session & retry
-                      </Button>
-                      <Button
+                        Refresh session
+                      </button>
+                      <button
                         type="button"
-                        variant="ghost"
-                        size="sm"
                         onClick={() => window.location.reload()}
+                        className="text-sm underline text-muted-foreground"
                         data-testid="button-hard-reload"
                       >
                         Hard reload
-                      </Button>
+                      </button>
                     </div>
                   </div>
                 </div>
               )}
+            </>
+          )}
 
-              <Button
-                className="w-full h-12 font-medium"
-                onClick={handleNext}
-                disabled={createHomeMutation.isPending}
-                data-testid="button-create-plan"
-              >
-                {createHomeMutation.isPending ? "Creating..." : "Create My Plan"}
-                {!createHomeMutation.isPending && <ArrowRight className="ml-2 h-4 w-4" />}
-              </Button>
+          {step === "first-tasks" && (
+            <StepFirstTasks
+              tasks={tasksQuery.data ?? []}
+              systemsCount={selectedSystems.size}
+              isLoading={
+                createSystemsMutation.isPending ||
+                tasksQuery.isLoading ||
+                (tasksQuery.data?.length === 0 && createSystemsMutation.isPending)
+              }
+              onNext={handleGoToDashboard}
+              onBack={() => setStep("systems-quickpick")}
+              onUploadInspection={handleUploadInspectionFork}
+            />
+          )}
 
-              <p className="text-center text-xs text-muted-foreground">
-                You can skip these fields and add them later
-              </p>
-            </div>
+          {step === "inspection-alt" && (
+            <StepInspectionAlt
+              onUpload={handleGoToInspectionsUpload}
+              onSkip={handleGoToDashboard}
+              onBack={() => setStep("first-tasks")}
+            />
           )}
         </motion.div>
       </div>

@@ -106,13 +106,18 @@ export function verifyCalendarToken(token: string): string | null {
 // ---------------------------------------------------------------------------
 
 export interface CalendarTaskInput {
-  id: number;
+  id: number | string;
   title: string;
   description: string | null;
   dueDate: Date | string | null;
+  /** ISO datetime string — when set, emits a timed event instead of all-day */
+  scheduledProDate?: string | null;
+  /** Contractor name shown in the event title when scheduled */
+  contractorName?: string | null;
   urgency?: string | null;
   category?: string | null;
   estimatedCost?: string | null;
+  quotedCost?: string | null;
   status?: string | null;
   homeNickname?: string | null;
 }
@@ -197,51 +202,91 @@ export function buildICalendar(opts: BuildCalendarOptions): string {
   lines.push("X-PUBLISHED-TTL:PT6H");
 
   for (const t of opts.tasks) {
-    if (!t.dueDate) continue;
-    const due = t.dueDate instanceof Date ? t.dueDate : new Date(t.dueDate);
-    if (isNaN(due.getTime())) continue;
-
-    const dueDay = toICSDate(due);
-
-    // The "next day" value for DTEND (all-day events use exclusive end).
-    const endDate = new Date(Date.UTC(
-      due.getUTCFullYear(),
-      due.getUTCMonth(),
-      due.getUTCDate() + 1,
-    ));
-    const endDay = toICSDate(endDate);
-
-    const summaryParts: string[] = [];
-    if (t.urgency === "now") summaryParts.push("🔴");
-    else if (t.urgency === "soon") summaryParts.push("🟠");
-    summaryParts.push(t.title);
-    if (t.homeNickname) summaryParts.push(`— ${t.homeNickname}`);
-    const summary = summaryParts.join(" ");
+    // Need at least one date to anchor the event.
+    if (!t.dueDate && !t.scheduledProDate) continue;
 
     const descParts: string[] = [];
     if (t.description) descParts.push(t.description);
     if (t.category) descParts.push(`Category: ${t.category}`);
-    if (t.estimatedCost) descParts.push(`Estimated: ${t.estimatedCost}`);
+    const cost = t.quotedCost || t.estimatedCost;
+    if (cost) descParts.push(`${t.quotedCost ? "Quoted" : "Estimated"}: ${cost}`);
+    if (t.contractorName) descParts.push(`Contractor: ${t.contractorName}`);
     descParts.push(`Open in Home Buddy: ${appBase}/tasks/${t.id}`);
     const description = descParts.join("\\n");
 
-    lines.push("BEGIN:VEVENT");
-    lines.push(fold(`UID:task-${t.id}@homebuddy.space`));
-    lines.push(`DTSTAMP:${dtstamp}`);
-    lines.push(`DTSTART;VALUE=DATE:${dueDay}`);
-    lines.push(`DTEND;VALUE=DATE:${endDay}`);
-    lines.push(fold(`SUMMARY:${escICS(summary)}`));
-    lines.push(fold(`DESCRIPTION:${escICS(description).replace(/\\\\n/g, "\\n")}`));
-    lines.push(fold(`URL:${appBase}/tasks/${t.id}`));
-    // Mark completed tasks as CANCELLED so clients fade them out.
-    if (t.status === "completed") lines.push("STATUS:CANCELLED");
-    else if (t.status === "skipped") lines.push("STATUS:CANCELLED");
-    else lines.push("STATUS:CONFIRMED");
-    if (t.urgency === "now") lines.push("PRIORITY:1");
-    else if (t.urgency === "soon") lines.push("PRIORITY:5");
-    else lines.push("PRIORITY:9");
-    lines.push("TRANSP:TRANSPARENT");
-    lines.push("END:VEVENT");
+    const statusLine =
+      t.status === "completed" || t.status === "skipped"
+        ? "STATUS:CANCELLED"
+        : "STATUS:CONFIRMED";
+    const priorityLine =
+      t.urgency === "now" ? "PRIORITY:1"
+      : t.urgency === "soon" ? "PRIORITY:5"
+      : "PRIORITY:9";
+
+    // ── Timed contractor-appointment event ──────────────────────────────────
+    // When a contractor is booked (scheduledProDate is set), we emit a 1-hour
+    // TIMED event so it shows as a proper block in the user's day view instead
+    // of a grey all-day banner. The UID is suffixed with "-appt" so it
+    // coexists with (rather than replaces) the due-date event.
+    if (t.scheduledProDate) {
+      const apptStart = new Date(t.scheduledProDate);
+      if (!isNaN(apptStart.getTime())) {
+        const apptEnd = new Date(apptStart.getTime() + 60 * 60 * 1000); // 1 hr
+
+        const summaryParts: string[] = ["📅"];
+        summaryParts.push(t.title);
+        if (t.contractorName) summaryParts.push(`— ${t.contractorName}`);
+        else if (t.homeNickname) summaryParts.push(`— ${t.homeNickname}`);
+        const apptSummary = summaryParts.join(" ");
+
+        lines.push("BEGIN:VEVENT");
+        lines.push(fold(`UID:task-${t.id}-appt@homebuddy.space`));
+        lines.push(`DTSTAMP:${dtstamp}`);
+        lines.push(`DTSTART:${toICSDateTime(apptStart)}`);
+        lines.push(`DTEND:${toICSDateTime(apptEnd)}`);
+        lines.push(fold(`SUMMARY:${escICS(apptSummary)}`));
+        lines.push(fold(`DESCRIPTION:${escICS(description).replace(/\\\\n/g, "\\n")}`));
+        lines.push(fold(`URL:${appBase}/tasks/${t.id}`));
+        lines.push(statusLine);
+        lines.push(priorityLine);
+        lines.push("TRANSP:OPAQUE"); // timed appts block time — show as busy
+        lines.push("END:VEVENT");
+      }
+    }
+
+    // ── All-day due-date event ───────────────────────────────────────────────
+    // Always emit the due-date banner even when a contractor is scheduled —
+    // it gives users the "this is due by X" context at the top of the day.
+    // Skip if there is no dueDate.
+    if (t.dueDate) {
+      const due = t.dueDate instanceof Date ? t.dueDate : new Date(t.dueDate);
+      if (!isNaN(due.getTime())) {
+        const dueDay = toICSDate(due);
+        const endDay = toICSDate(new Date(Date.UTC(
+          due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate() + 1,
+        )));
+
+        const summaryParts: string[] = [];
+        if (t.urgency === "now") summaryParts.push("🔴");
+        else if (t.urgency === "soon") summaryParts.push("🟠");
+        summaryParts.push(t.title);
+        if (t.homeNickname) summaryParts.push(`— ${t.homeNickname}`);
+        const summary = summaryParts.join(" ");
+
+        lines.push("BEGIN:VEVENT");
+        lines.push(fold(`UID:task-${t.id}@homebuddy.space`));
+        lines.push(`DTSTAMP:${dtstamp}`);
+        lines.push(`DTSTART;VALUE=DATE:${dueDay}`);
+        lines.push(`DTEND;VALUE=DATE:${endDay}`);
+        lines.push(fold(`SUMMARY:${escICS(summary)}`));
+        lines.push(fold(`DESCRIPTION:${escICS(description).replace(/\\\\n/g, "\\n")}`));
+        lines.push(fold(`URL:${appBase}/tasks/${t.id}`));
+        lines.push(statusLine);
+        lines.push(priorityLine);
+        lines.push("TRANSP:TRANSPARENT"); // all-day banners don't block time
+        lines.push("END:VEVENT");
+      }
+    }
   }
 
   lines.push("END:VCALENDAR");

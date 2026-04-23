@@ -32,6 +32,7 @@ import {
 } from "./lib/calendar";
 
 function appBaseUrl(req: Request): string {
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
   if (process.env.REPLIT_DEPLOYMENT_URL) return process.env.REPLIT_DEPLOYMENT_URL;
   if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}`;
   // Fall back to the request's own host — correct behind Railway, local
@@ -99,13 +100,16 @@ export function registerCalendarRoutes(app: Express): void {
         return;
       }
 
-      // Pull all maintenance tasks for this user that have a due date
-      // and aren't already closed out. We deliberately include `completed`
-      // tasks from the last 60 days so users can see "done this week"
-      // crossed out in their calendar — useful social proof to themselves.
-      const result = await db.execute(sql`
+      // Pull maintenance tasks for this user that have a due date from
+      // BOTH the legacy maintenance_tasks table and the v2 projection_task
+      // table. We deliberately include completed tasks from the last 60
+      // days so users can see "done this week" crossed out in their
+      // calendar — useful social proof to themselves.
+
+      // Legacy tasks
+      const legacyResult = await db.execute(sql`
         SELECT
-          t.id,
+          t.id::text        AS id,
           t.title,
           t.description,
           t.due_date,
@@ -113,9 +117,10 @@ export function registerCalendarRoutes(app: Express): void {
           t.category,
           t.estimated_cost,
           t.status,
-          h.address_line_1,
-          h.street_address,
-          h.city
+          COALESCE(h.address_line_1, h.street_address, h.city) AS home_label,
+          NULL::text        AS scheduled_pro_date,
+          NULL::text        AS contractor_name,
+          NULL::text        AS quoted_cost
         FROM maintenance_tasks t
         JOIN homes h ON h.id = t.home_id
         WHERE h.user_id = ${userId}
@@ -128,22 +133,64 @@ export function registerCalendarRoutes(app: Express): void {
         LIMIT 500
       `);
 
-      const tasks: CalendarTaskInput[] = result.rows.map((row: any) => {
-        // Prefer an address line as the home nickname — more informative
-        // than "Home #3" if a user has multiple properties.
-        const homeLabel =
-          row.street_address || row.address_line_1 || row.city || null;
-        return {
-          id: Number(row.id),
-          title: String(row.title || "Maintenance task"),
-          description: row.description || null,
-          dueDate: row.due_date,
-          urgency: row.urgency || null,
-          category: row.category || null,
-          estimatedCost: row.estimated_cost || null,
-          status: row.status || null,
-          homeNickname: homeLabel,
-        };
+      // V2 event-sourced tasks — includes contractor appointment data stored
+      // in the estimates JSONB so timed events can be generated for bookings.
+      const v2Result = await db.execute(sql`
+        SELECT
+          pt.task_id                                          AS id,
+          pt.title,
+          pt.estimates->>'description'                        AS description,
+          pt.due_at                                           AS due_date,
+          COALESCE(pt.estimates->>'urgency', 'later')         AS urgency,
+          pt.estimates->>'category'                           AS category,
+          pt.estimates->>'estimatedCost'                      AS estimated_cost,
+          pt.estimates->>'quotedCost'                         AS quoted_cost,
+          pt.estimates->>'scheduledProDate'                   AS scheduled_pro_date,
+          pt.estimates->>'contractorName'                     AS contractor_name,
+          CASE
+            WHEN pt.state IN ('completed', 'done') THEN 'completed'
+            WHEN pt.state = 'skipped'              THEN 'skipped'
+            ELSE                                        'pending'
+          END                                                 AS status,
+          COALESCE(ph.attrs->>'city', '')                     AS home_label
+        FROM projection_task pt
+        JOIN projection_home ph ON ph.home_id = pt.home_id
+        WHERE ph.user_id = ${userId}
+          AND (
+            pt.due_at IS NOT NULL
+            OR pt.estimates->>'scheduledProDate' IS NOT NULL
+          )
+          AND (
+            pt.state NOT IN ('completed', 'done', 'skipped')
+            OR COALESCE(pt.due_at, (pt.estimates->>'scheduledProDate')::timestamptz)
+                 >= NOW() - INTERVAL '60 days'
+          )
+        ORDER BY COALESCE(pt.due_at, (pt.estimates->>'scheduledProDate')::timestamptz)
+        LIMIT 500
+      `);
+
+      const toTask = (row: any): CalendarTaskInput => ({
+        id: String(row.id),
+        title: String(row.title || "Maintenance task"),
+        description: row.description || null,
+        dueDate: row.due_date || null,
+        scheduledProDate: row.scheduled_pro_date || null,
+        contractorName: row.contractor_name || null,
+        urgency: row.urgency || null,
+        category: row.category || null,
+        estimatedCost: row.estimated_cost || null,
+        quotedCost: row.quoted_cost || null,
+        status: row.status || null,
+        homeNickname: row.home_label || null,
+      });
+
+      const tasks: CalendarTaskInput[] = [
+        ...legacyResult.rows.map(toTask),
+        ...v2Result.rows.map(toTask),
+      ].sort((a, b) => {
+        const da = a.dueDate ? new Date(a.dueDate as string).getTime() : 0;
+        const db2 = b.dueDate ? new Date(b.dueDate as string).getTime() : 0;
+        return da - db2;
       });
 
       const ics = buildICalendar({

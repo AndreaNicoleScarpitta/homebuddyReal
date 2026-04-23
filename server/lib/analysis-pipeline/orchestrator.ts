@@ -21,7 +21,7 @@ function extractSystemCategory(task: ProposedTask, pp: PreProcessorOutput): stri
   for (const r of pp.maintenanceRecommendations) allCategories.add(r.systemCategory);
   for (const s of pp.safetyFindings) allCategories.add(s.systemCategory);
 
-  for (const cat of allCategories) {
+  for (const cat of Array.from(allCategories)) {
     if (combined.includes(cat.toLowerCase())) return cat;
   }
 

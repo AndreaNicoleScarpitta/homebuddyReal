@@ -13,6 +13,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { initGA, trackSlugPageView } from "@/lib/analytics";
 import { validateUniqueSlugs, PAGE_SLUGS } from "@/lib/slug-registry";
+import { initSentry } from "@/lib/sentry";
+
+// Init Sentry before any render so it can capture errors from the first paint.
+initSentry();
 // Donation modal temporarily disabled — was firing too eagerly on first session.
 // Re-enable by restoring this import + the <DonationModal /> render below.
 // import { DonationModal } from "@/components/donation-modal";
@@ -35,6 +39,7 @@ import SystemDetail from "@/pages/system-detail";
 import Disclaimer from "@/pages/disclaimer";
 import Timeline from "@/pages/timeline";
 import Intelligence from "@/pages/intelligence";
+import CalendarPage from "@/pages/calendar";
 
 // Lazy-loaded — hidden admin-only pages (not in nav)
 const AdminApprovals = lazy(() => import("@/pages/admin/approvals"));
@@ -182,6 +187,7 @@ function Router() {
             <Route path="/terms" component={Terms} />
             <Route path="/timeline" component={Timeline} />
             <Route path="/intelligence" component={Intelligence} />
+            <Route path="/calendar" component={CalendarPage} />
             <Route path="/pricing" component={Pricing} />
 
             {/* Hidden admin-only routes — not linked in nav, gated by ADMIN_EMAILS env */}

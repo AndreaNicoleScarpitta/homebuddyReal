@@ -7,7 +7,6 @@ import { AddSystemWizard } from "@/components/add-system-wizard";
 import { SystemsSummary } from "@/components/systems-summary";
 import { OnboardingTour, useTourState } from "@/components/onboarding-tour";
 import { ContractorSection } from "@/components/contractor-section";
-import { ContractorSchedule } from "@/components/contractor-schedule";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { FieldTooltip } from "@/components/field-tooltip";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getHome, getTasks, getSystems, createTask, updateTask, deleteTask, createLogEntry, analyzeTask, getNotificationPreferences } from "@/lib/api";
+import { getHome, getTasks, getSystems, createTask, updateTask, deleteTask, createLogEntry, analyzeTask } from "@/lib/api";
 import type { TaskAnalysis } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -66,12 +65,6 @@ function QuickAddTaskDialog({ isOpen, onClose, homeId }: { isOpen: boolean; onCl
   const requestIdRef = useRef(0);
 
   useEffect(() => { if (isOpen) trackModalOpen(MODAL_SLUGS.addTask); }, [isOpen]);
-
-  const { data: prefs } = useQuery({
-    queryKey: ["notificationPreferences"],
-    queryFn: getNotificationPreferences,
-  });
-  const contractorMode = (prefs as any)?.contractorMode ?? false;
 
   useEffect(() => {
     return () => {
@@ -290,7 +283,7 @@ function QuickAddTaskDialog({ isOpen, onClose, homeId }: { isOpen: boolean; onCl
                 </div>
               )}
 
-              {contractorMode && !showDiyOverride && (
+              {!showDiyOverride && (
                 <button
                   type="button"
                   onClick={() => setShowDiyOverride(true)}
@@ -298,11 +291,11 @@ function QuickAddTaskDialog({ isOpen, onClose, homeId }: { isOpen: boolean; onCl
                   data-testid="button-override-diy"
                 >
                   <Wrench className="h-3 w-3" />
-                  Override DIY level (Contractor Mode)
+                  Override DIY level
                 </button>
               )}
 
-              {contractorMode && showDiyOverride && (
+              {showDiyOverride && (
                 <div className="space-y-1.5">
                   <Label className="text-xs flex items-center gap-1">
                     <Wrench className="h-3 w-3" />
@@ -373,7 +366,7 @@ function QuickAddTaskDialog({ isOpen, onClose, homeId }: { isOpen: boolean; onCl
 
           {!analysisFailed && (
             <p className="text-xs text-muted-foreground">
-              Priority, safety level, and cost estimate are determined automatically. {contractorMode ? "You can override DIY level in Contractor Mode." : "Enable Contractor Mode in Settings to override DIY level."}
+              Priority, safety level, and cost estimate are determined automatically. You can override the DIY level if needed.
             </p>
           )}
 
@@ -568,13 +561,20 @@ export default function Dashboard() {
   }, [authLoading, homeQuerySettled, home, navigate]);
 
   useEffect(() => {
-    if (home && hasSeenTour === false && !showTour) {
+    // Gate the tour on having actual content to tour. Under the Phase 1
+    // onboarding flip users can land on the dashboard while systems are
+    // still being written server-side, and firing the tour against an
+    // empty screen is actively confusing — the coach-marks point at
+    // components that have nothing in them yet. Wait until the user has
+    // at least one system or task before narrating the UI.
+    const hasContent = systems.length > 0 || tasks.length > 0;
+    if (home && hasSeenTour === false && !showTour && hasContent) {
       const timer = setTimeout(() => {
         startTour();
       }, 800);
       return () => clearTimeout(timer);
     }
-  }, [home, hasSeenTour, showTour, startTour]);
+  }, [home, hasSeenTour, showTour, startTour, systems.length, tasks.length]);
 
   if (authLoading || homeLoading) {
     return (
@@ -780,9 +780,10 @@ export default function Dashboard() {
                           onSwipeRight={() => handleDeleteTask(task)}
                           disabled={task.status === "completed"}
                         >
-                          <MaintenanceCard 
-                            task={task} 
+                          <MaintenanceCard
+                            task={task}
                             onComplete={(t) => setCompletingTask(t)}
+                            zipCode={home.zipCode}
                           />
                         </SwipeableTask>
                       ))}
@@ -814,17 +815,12 @@ export default function Dashboard() {
           )}
         </section>
 
-        {/* Contractor Section */}
+        {/* Pro tasks summary — shown when there are Pro-Only tasks not yet completed */}
         {tasks.filter(t => t.diyLevel === "Pro-Only" && t.status !== "completed").length > 0 && (
           <section className="space-y-4" data-tour="find-pro">
             <ContractorSection homeId={home.id} pendingTasks={tasks} zipCode={home.zipCode || undefined} />
           </section>
         )}
-        
-        {/* Contractor Schedule */}
-        <section className="space-y-4">
-          <ContractorSchedule homeId={home.legacyId!} />
-        </section>
 
         {/* Help link */}
         {hasSeenTour && (
