@@ -1,6 +1,6 @@
 import { Layout } from "@/components/layout";
-import { useState, useRef, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation, Link } from "wouter";
 import {
   Upload,
   FileText,
@@ -15,6 +15,10 @@ import {
   ShieldAlert,
   CheckCircle2,
   XCircle,
+  FilePlus,
+  ArrowRight,
+  FileImage,
+  FileType,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +40,21 @@ import { trackEvent, trackSlugPageView } from "@/lib/analytics";
 import { PAGE_SLUGS } from "@/lib/slug-registry";
 import { useDisclaimer } from "@/hooks/use-disclaimer";
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const SUPPORTED_EXTENSIONS = ".pdf,.txt,.csv,.md,.png,.jpg,.jpeg,.heic,.docx";
+const MAX_FILE_MB = 10;
+
+const ANALYSIS_STAGES = [
+  { label: "Reading your document…", detail: "Extracting text and images", progress: 15 },
+  { label: "Matching to your home…", detail: "Identifying systems and components", progress: 50 },
+  { label: "Generating recommendations…", detail: "Evaluating issues and priorities", progress: 80 },
+  { label: "Finalising…", detail: "Assembling your maintenance tasks", progress: 95 },
+];
+
+// Stage advance times in ms (approximate — real latency determines actual end)
+const STAGE_DELAYS = [0, 7000, 22000, 42000];
+
 const urgencyColors: Record<string, string> = {
   now: "bg-red-100 text-red-800 border-red-200",
   soon: "bg-orange-100 text-orange-800 border-orange-200",
@@ -56,6 +75,22 @@ const categoryColors: Record<string, string> = {
   Replacement: "bg-orange-50 text-orange-700 border-orange-200",
   Improvement: "bg-green-50 text-green-700 border-green-200",
 };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileIcon(file: File) {
+  if (file.type === "application/pdf") return <FileText className="w-4 h-4 text-red-500 shrink-0" />;
+  if (file.type.startsWith("image/")) return <FileImage className="w-4 h-4 text-blue-500 shrink-0" />;
+  return <FileType className="w-4 h-4 text-muted-foreground shrink-0" />;
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function TaskRow({
   task,
@@ -152,13 +187,11 @@ function TaskRow({
 
 function SuggestedSystemCard({
   suggestion,
-  homeId,
   onApprove,
   onDecline,
   isProcessing,
 }: {
   suggestion: SuggestedSystemV2;
-  homeId: string;
   onApprove: (s: SuggestedSystemV2) => void;
   onDecline: (s: SuggestedSystemV2) => void;
   isProcessing: boolean;
@@ -179,7 +212,7 @@ function SuggestedSystemCard({
           </div>
         </div>
         <Badge variant="outline" className="text-[10px] py-0 bg-amber-100 text-amber-800 border-amber-300 shrink-0">
-          Needs Approval
+          New system
         </Badge>
       </div>
 
@@ -218,7 +251,7 @@ function SuggestedSystemCard({
 
       {Object.keys(suggestion.pendingAttributes).length > 0 && (
         <div className="mt-2 text-[10px] text-muted-foreground">
-          <span className="font-medium">Detected attributes: </span>
+          <span className="font-medium">Detected: </span>
           {Object.entries(suggestion.pendingAttributes).map(([k, v]) => (
             <span key={k} className="inline-block mr-2">
               {k.split("_").slice(1).join(" ")}: <strong>{v}</strong>
@@ -240,7 +273,7 @@ function SuggestedSystemCard({
           ) : (
             <>
               <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-              Approve & Create
+              Add to home
             </>
           )}
         </Button>
@@ -249,62 +282,124 @@ function SuggestedSystemCard({
           variant="outline"
           onClick={() => onDecline(suggestion)}
           disabled={isProcessing}
-          className="flex-1 h-8 text-red-600 border-red-200 hover:bg-red-50"
+          className="flex-1 h-8 text-muted-foreground"
           data-testid={`decline-${suggestion.id}`}
         >
           <XCircle className="w-3.5 h-3.5 mr-1" />
-          Decline
+          Skip
         </Button>
       </div>
     </div>
   );
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function DocumentAnalysis() {
   const { data: home } = useQuery({ queryKey: ["/api/home"], queryFn: getHome });
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const addMoreInputRef = useRef<HTMLInputElement>(null);
   const { disclaimerAccepted, isLoading: disclaimerLoading } = useDisclaimer();
   const [, navigate] = useLocation();
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => { trackSlugPageView(PAGE_SLUGS.documentAnalysis); }, []);
 
+  // ── File staging ──────────────────────────────────────────────────────────
+  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+
+  // ── Analysis state ────────────────────────────────────────────────────────
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisStage, setAnalysisStage] = useState(0);
+  const [analysisResult, setAnalysisResult] = useState<FileAnalysisResultV2 | null>(null);
+
+  // ── Review/confirm state ──────────────────────────────────────────────────
   const [isConfirming, setIsConfirming] = useState(false);
   const [isAcceptingAll, setIsAcceptingAll] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<FileAnalysisResultV2 | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
-  const [dragOver, setDragOver] = useState(false);
   const [decidedSuggestions, setDecidedSuggestions] = useState<Map<string, "approved" | "declined">>(new Map());
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
-  const supportedExtensions = ".pdf,.txt,.csv,.md,.png,.jpg,.jpeg,.heic,.docx";
+  // ── Done state ────────────────────────────────────────────────────────────
+  const [doneState, setDoneState] = useState<{
+    systemsAdded: number;
+    tasksAdded: number;
+    analyzedFileNames: string[];
+  } | null>(null);
 
-  const handleFilesSelect = async (files: File[]) => {
-    if (!home) {
-      toast({
-        title: "No home profile found",
-        description: "Please set up your home profile first.",
-        variant: "destructive",
+  // ── File staging ──────────────────────────────────────────────────────────
+
+  const stageFiles = useCallback((incoming: File[]) => {
+    const valid = incoming.filter((f) => {
+      if (f.size > MAX_FILE_MB * 1024 * 1024) {
+        toast({
+          title: `${f.name} is too large`,
+          description: `Max file size is ${MAX_FILE_MB} MB.`,
+          variant: "destructive",
+        });
+        return false;
+      }
+      return true;
+    });
+    if (valid.length > 0) {
+      setStagedFiles((prev) => {
+        // Dedupe by name+size
+        const existing = new Set(prev.map((f) => `${f.name}-${f.size}`));
+        return [...prev, ...valid.filter((f) => !existing.has(`${f.name}-${f.size}`))];
       });
+    }
+  }, [toast]);
+
+  const removeStagedFile = (index: number) => {
+    setStagedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    stageFiles(Array.from(e.dataTransfer.files));
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    stageFiles(Array.from(e.target.files || []));
+    e.target.value = "";
+  };
+
+  // ── Analysis progress ──────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!isAnalyzing) {
+      setAnalysisStage(0);
       return;
     }
+    // Advance through stages on timers; actual request end resets everything
+    const timers = STAGE_DELAYS.map((delay, i) =>
+      setTimeout(() => setAnalysisStage(i), delay)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [isAnalyzing]);
+
+  // ── Run analysis ───────────────────────────────────────────────────────────
+
+  const handleAnalyze = async () => {
+    if (!home || stagedFiles.length === 0) return;
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     setIsAnalyzing(true);
     setAnalysisResult(null);
     setSelectedTaskIds(new Set());
     setDecidedSuggestions(new Map());
-    setSelectedFiles(files);
+    setDoneState(null);
 
     try {
-      const result = await runFileAnalysis(home.id, files);
+      const result = await runFileAnalysis(home.id, stagedFiles, controller.signal);
       setAnalysisResult(result);
-
-      const allTaskIds = new Set(result.matchedSystemTasks.map((t) => t.id));
-      setSelectedTaskIds(allTaskIds);
-
+      setSelectedTaskIds(new Set(result.matchedSystemTasks.map((t) => t.id)));
       trackEvent("file_analysis_complete", "file_upload", "success", result.matchedSystemTasks.length);
 
       const totalItems =
@@ -318,27 +413,23 @@ export default function DocumentAnalysis() {
           description: "The uploaded files did not contain identifiable home maintenance issues.",
         });
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Upload Failed. Please try again.";
-      toast({ title: "Upload Failed", description: message, variant: "destructive" });
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return; // user cancelled — no toast
+      const message = err instanceof Error ? err.message : "Upload failed. Please try again.";
+      toast({ title: "Analysis failed", description: message, variant: "destructive" });
       trackEvent("file_analysis_error", "file_upload", "error");
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) handleFilesSelect(files);
+  const handleCancelAnalysis = () => {
+    abortControllerRef.current?.abort();
+    setIsAnalyzing(false);
+    setAnalysisStage(0);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length > 0) handleFilesSelect(files);
-    e.target.value = "";
-  };
+  // ── Approve / decline suggestions ─────────────────────────────────────────
 
   const handleApprove = async (suggestion: SuggestedSystemV2) => {
     if (!home) return;
@@ -354,7 +445,6 @@ export default function DocumentAnalysis() {
       setDecidedSuggestions((prev) => new Map(prev).set(suggestion.id, "approved"));
       queryClient.invalidateQueries({ queryKey: ["systems"] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      toast({ title: `${suggestion.name} approved`, description: "System and tasks have been created." });
       trackEvent("suggestion_approved", "file_upload", suggestion.category);
     } catch (err) {
       toast({
@@ -378,7 +468,6 @@ export default function DocumentAnalysis() {
         pendingAttributeKeys: Object.keys(suggestion.pendingAttributes),
       });
       setDecidedSuggestions((prev) => new Map(prev).set(suggestion.id, "declined"));
-      toast({ title: `${suggestion.name} declined`, description: "Suggested system and pending tasks removed." });
       trackEvent("suggestion_declined", "file_upload", suggestion.category);
     } catch (err) {
       toast({
@@ -391,28 +480,30 @@ export default function DocumentAnalysis() {
     }
   };
 
+  // ── Confirm matched tasks ──────────────────────────────────────────────────
+
   const handleConfirmMatched = async () => {
     if (!home || !analysisResult) return;
-
     const selectedTasks = analysisResult.matchedSystemTasks.filter((t) => selectedTaskIds.has(t.id));
     if (selectedTasks.length === 0) {
-      toast({ title: "No tasks selected", description: "Please select at least one task to add." });
+      toast({ title: "No tasks selected", description: "Select at least one task to add." });
       return;
     }
-
     setIsConfirming(true);
     try {
       await confirmMatchedTasks(home.id, selectedTasks, analysisResult.matchedSystemUpdates);
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["systems"] });
-      toast({
-        title: "Tasks added",
-        description: `${selectedTasks.length} task${selectedTasks.length !== 1 ? "s" : ""} added to your maintenance list.`,
-      });
       trackEvent("matched_tasks_confirmed", "file_upload", "confirm", selectedTasks.length);
+      // Transition to done state
+      setDoneState({
+        systemsAdded: Array.from(decidedSuggestions.values()).filter((v) => v === "approved").length,
+        tasksAdded: selectedTasks.length,
+        analyzedFileNames: stagedFiles.map((f) => f.name),
+      });
       setAnalysisResult(null);
       setSelectedTaskIds(new Set());
-      setSelectedFiles([]);
+      setDecidedSuggestions(new Map());
     } catch (err) {
       toast({
         title: "Error",
@@ -424,29 +515,12 @@ export default function DocumentAnalysis() {
     }
   };
 
-  /**
-   * One-click "accept everything the AI found." This is the product
-   * shortcut for the common case — user uploads a document, skims the
-   * findings, and wants them all added to their home. Without this they
-   * have to approve each suggested system individually AND then tap the
-   * matched-tasks confirm button, which added friction between "upload"
-   * and "value" that was killing engagement.
-   *
-   * We still drive the existing single-item endpoints rather than add a
-   * bulk server route — the fan-out is small (usually 0–3 suggestions
-   * plus one matched-tasks call) and reusing the existing endpoints
-   * means the server-side audit trail, event log, and approval events
-   * look identical whether the user clicked once or N times.
-   *
-   * If any step fails we surface it and keep the rest of the UI usable
-   * so the user can finish manually rather than starting over.
-   */
+  // ── Accept all ─────────────────────────────────────────────────────────────
+
   const handleAcceptAll = async () => {
     if (!home || !analysisResult) return;
 
-    const toApprove = analysisResult.suggestedSystems.filter(
-      (s) => !decidedSuggestions.has(s.id)
-    );
+    const toApprove = analysisResult.suggestedSystems.filter((s) => !decidedSuggestions.has(s.id));
     const allMatchedTasks = analysisResult.matchedSystemTasks;
     const updates = analysisResult.matchedSystemUpdates;
 
@@ -461,8 +535,6 @@ export default function DocumentAnalysis() {
     const newlyDecided = new Map(decidedSuggestions);
 
     try {
-      // Approve suggestions sequentially. Small N, and serial is friendlier
-      // to the server-side event log than parallel fan-out.
       for (const suggestion of toApprove) {
         try {
           await approveSuggestion(suggestion.id, {
@@ -474,16 +546,12 @@ export default function DocumentAnalysis() {
           });
           newlyDecided.set(suggestion.id, "approved");
           approvedCount += 1;
-        } catch (err) {
+        } catch {
           failedApprovals += 1;
-          // Don't throw — keep going so other items still land.
         }
       }
       setDecidedSuggestions(newlyDecided);
 
-      // Then confirm all matched tasks (ignore the user's selection state —
-      // "accept all" means all). If there are no matched tasks but suggestion
-      // approvals happened, we still want to invalidate caches.
       let matchedCount = 0;
       if (allMatchedTasks.length > 0 || updates.length > 0) {
         await confirmMatchedTasks(home.id, allMatchedTasks, updates);
@@ -493,28 +561,27 @@ export default function DocumentAnalysis() {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["systems"] });
 
-      const totalAdded = approvedCount + matchedCount;
+      trackEvent("accept_all_clicked", "file_upload", "bulk", approvedCount + matchedCount);
+
       if (failedApprovals > 0) {
         toast({
           title: "Partially accepted",
-          description: `Added ${totalAdded} item${totalAdded !== 1 ? "s" : ""}. ${failedApprovals} suggestion${failedApprovals !== 1 ? "s" : ""} failed — you can retry them individually.`,
+          description: `${approvedCount + matchedCount} items added. ${failedApprovals} suggestion${failedApprovals !== 1 ? "s" : ""} failed — retry individually.`,
           variant: "destructive",
         });
-      } else {
-        toast({
-          title: "Everything added",
-          description: `${approvedCount} system${approvedCount !== 1 ? "s" : ""} approved, ${matchedCount} task${matchedCount !== 1 ? "s" : ""} added.`,
-        });
+        // Don't fully clear — let user retry the failures
+        return;
       }
-      trackEvent("accept_all_clicked", "file_upload", "bulk", totalAdded);
 
-      // Only reset the full view if everything succeeded.
-      if (failedApprovals === 0) {
-        setAnalysisResult(null);
-        setSelectedTaskIds(new Set());
-        setSelectedFiles([]);
-        setDecidedSuggestions(new Map());
-      }
+      // Full success → done state
+      setDoneState({
+        systemsAdded: approvedCount,
+        tasksAdded: matchedCount,
+        analyzedFileNames: stagedFiles.map((f) => f.name),
+      });
+      setAnalysisResult(null);
+      setSelectedTaskIds(new Set());
+      setDecidedSuggestions(new Map());
     } catch (err) {
       toast({
         title: "Accept all failed",
@@ -526,30 +593,30 @@ export default function DocumentAnalysis() {
     }
   };
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
   const toggleTask = (taskId: string) => {
     setSelectedTaskIds((prev) => {
       const next = new Set(prev);
-      if (next.has(taskId)) {
-        next.delete(taskId);
-      } else {
-        next.add(taskId);
-      }
+      next.has(taskId) ? next.delete(taskId) : next.add(taskId);
       return next;
     });
   };
 
   const selectAll = () => {
-    if (analysisResult) {
-      setSelectedTaskIds(new Set(analysisResult.matchedSystemTasks.map((t) => t.id)));
-    }
+    if (analysisResult) setSelectedTaskIds(new Set(analysisResult.matchedSystemTasks.map((t) => t.id)));
   };
-
   const deselectAll = () => setSelectedTaskIds(new Set());
 
-  const pendingSuggestions = analysisResult?.suggestedSystems.filter(
-    (s) => !decidedSuggestions.has(s.id)
-  ) || [];
+  const resetToUpload = () => {
+    setStagedFiles([]);
+    setAnalysisResult(null);
+    setSelectedTaskIds(new Set());
+    setDecidedSuggestions(new Map());
+    setDoneState(null);
+  };
 
+  const pendingSuggestions = analysisResult?.suggestedSystems.filter((s) => !decidedSuggestions.has(s.id)) ?? [];
   const approvedCount = Array.from(decidedSuggestions.values()).filter((v) => v === "approved").length;
   const declinedCount = Array.from(decidedSuggestions.values()).filter((v) => v === "declined").length;
 
@@ -558,162 +625,317 @@ export default function DocumentAnalysis() {
     analysisResult.suggestedSystems.length > 0 ||
     analysisResult.matchedSystemUpdates.length > 0
   );
-
   const noResults = analysisResult && !hasResults;
+
+  const remainingSuggestions = pendingSuggestions.length;
+  const availableToAccept = remainingSuggestions + (analysisResult?.matchedSystemTasks.length ?? 0);
+
+  // ── Gate: disclaimer ───────────────────────────────────────────────────────
 
   if (disclaimerLoading) {
     return (
       <Layout>
         <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </Layout>
     );
   }
 
   if (!disclaimerAccepted) {
-    navigate("/disclaimer");
+    navigate("/disclaimer?from=document-analysis");
     return null;
   }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <Layout>
       <div className="space-y-6">
+
+        {/* Page header */}
         <div>
           <h1 className="text-2xl font-heading font-bold" data-testid="text-page-title">
             Document Analysis
-            <span className="ml-2 inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary align-middle">Beta</span>
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Upload home inspection reports, maintenance documents, or photos to automatically detect systems, issues, and maintenance tasks.
-            <span className="block mt-1 text-xs italic">This feature is in beta — results may vary. Always verify AI-generated findings.</span>
+            Upload home inspection reports, maintenance documents, or photos to detect systems, issues, and tasks.
           </p>
         </div>
 
-        {!analysisResult && (
-          <div
-            className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-              dragOver
-                ? "border-primary bg-primary/5"
-                : "border-border hover:border-muted-foreground/40"
-            } ${isAnalyzing ? "pointer-events-none opacity-60" : "cursor-pointer"}`}
-            onClick={() => !isAnalyzing && fileInputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            data-testid="upload-dropzone"
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              accept={supportedExtensions}
-              multiple
-              onChange={handleInputChange}
-              data-testid="input-file-upload"
-            />
-            {isAnalyzing ? (
-              <div className="space-y-3">
-                <Loader2 className="w-10 h-10 mx-auto text-primary animate-spin" />
-                <p className="text-sm font-medium">Analyzing files...</p>
-                <p className="text-xs text-muted-foreground">
-                  Extracting content, identifying systems, and generating recommendations
+        {/* ── Done state ──────────────────────────────────────────────────── */}
+        {doneState && (
+          <div className="rounded-xl border border-green-200 bg-green-50/40 p-5 space-y-4" data-testid="done-panel">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-6 h-6 text-green-600 shrink-0 mt-0.5" />
+              <div>
+                <h2 className="font-semibold text-base">All done!</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {[
+                    doneState.systemsAdded > 0 && `${doneState.systemsAdded} system${doneState.systemsAdded !== 1 ? "s" : ""} added`,
+                    doneState.tasksAdded > 0 && `${doneState.tasksAdded} task${doneState.tasksAdded !== 1 ? "s" : ""} added to your maintenance plan`,
+                  ].filter(Boolean).join(" · ") || "Analysis complete."}
                 </p>
               </div>
-            ) : (
+            </div>
+            <div className="flex gap-3 flex-wrap">
+              <Link href="/maintenance-log">
+                <Button className="gap-2" data-testid="button-go-to-plan">
+                  View maintenance plan
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+              <Button variant="outline" onClick={resetToUpload} className="gap-2" data-testid="button-analyze-another">
+                <FilePlus className="w-4 h-4" />
+                Analyze another document
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ── File staging / dropzone ─────────────────────────────────────── */}
+        {!doneState && !analysisResult && !isAnalyzing && (
+          <div className="space-y-3">
+            {/* Dropzone */}
+            <div
+              className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
+                dragOver
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-muted-foreground/40"
+              }`}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              data-testid="upload-dropzone"
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept={SUPPORTED_EXTENSIONS}
+                multiple
+                onChange={handleInputChange}
+                data-testid="input-file-upload"
+              />
               <div className="space-y-3">
                 <Upload className="w-10 h-10 mx-auto text-muted-foreground" />
                 <div>
                   <p className="text-sm font-medium">Drop files here or tap to browse</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Supports PDF, PNG, JPG, HEIC, DOCX, and TXT (max 10 MB each)
+                    PDF, PNG, JPG, HEIC, DOCX, TXT · max {MAX_FILE_MB} MB each
                   </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Staged file list */}
+            {stagedFiles.length > 0 && (
+              <div className="space-y-2" data-testid="staged-files">
+                {stagedFiles.map((file, i) => (
+                  <div key={`${file.name}-${file.size}`} className="flex items-center gap-3 border rounded-lg px-3 py-2.5 bg-muted/20">
+                    {fileIcon(file)}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{file.name}</p>
+                      <p className="text-xs text-muted-foreground">{formatBytes(file.size)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeStagedFile(i)}
+                      className="text-muted-foreground/50 hover:text-foreground transition-colors p-1"
+                      data-testid={`remove-file-${i}`}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    onClick={handleAnalyze}
+                    className="flex-1"
+                    data-testid="button-start-analysis"
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Analyze {stagedFiles.length} file{stagedFiles.length !== 1 ? "s" : ""}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => addMoreInputRef.current?.click()}
+                    data-testid="button-add-more-files"
+                  >
+                    <FilePlus className="w-4 h-4" />
+                  </Button>
+                  <input
+                    ref={addMoreInputRef}
+                    type="file"
+                    className="hidden"
+                    accept={SUPPORTED_EXTENSIONS}
+                    multiple
+                    onChange={handleInputChange}
+                  />
                 </div>
               </div>
             )}
           </div>
         )}
 
+        {/* ── Analysis in progress ────────────────────────────────────────── */}
+        {isAnalyzing && (
+          <div className="border rounded-xl p-6 space-y-4" data-testid="analysis-progress">
+            {/* Stage label */}
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">{ANALYSIS_STAGES[analysisStage]?.label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{ANALYSIS_STAGES[analysisStage]?.detail}</p>
+              </div>
+              <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                {analysisStage + 1}/{ANALYSIS_STAGES.length}
+              </span>
+            </div>
+
+            {/* Progress bar */}
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-[2000ms] ease-out"
+                style={{ width: `${ANALYSIS_STAGES[analysisStage]?.progress ?? 10}%` }}
+              />
+            </div>
+
+            {/* File names */}
+            <p className="text-xs text-muted-foreground">
+              {stagedFiles.map((f) => f.name).join(", ")}
+            </p>
+
+            {/* Cancel */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCancelAnalysis}
+              className="w-full"
+              data-testid="button-cancel-analysis"
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+
+        {/* ── Analysis warnings ───────────────────────────────────────────── */}
         {analysisResult && analysisResult.analysisWarnings.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
             <div className="flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+              <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
               <div className="text-xs text-amber-800 space-y-0.5">
-                {analysisResult.analysisWarnings.map((w, i) => (
-                  <p key={i}>{w}</p>
-                ))}
+                {analysisResult.analysisWarnings.map((w, i) => <p key={i}>{w}</p>)}
               </div>
             </div>
           </div>
         )}
 
-        {hasResults && (() => {
-          // Show the "Accept everything" shortcut only when there's something
-          // new to accept — don't show a no-op button once the user has
-          // approved/declined everything.
-          const remainingSuggestions = analysisResult!.suggestedSystems.filter(
-            (s) => !decidedSuggestions.has(s.id)
-          ).length;
-          const matchedCount = analysisResult!.matchedSystemTasks.length;
-          const totalAvailable = remainingSuggestions + matchedCount;
-          if (totalAvailable === 0) return null;
-          return (
-            <div
-              className="rounded-xl border border-primary/30 bg-primary/5 p-4"
-              data-testid="accept-all-panel"
-            >
-              <div className="flex items-start gap-3 flex-wrap">
-                <Sparkles className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-[200px]">
-                  <h3 className="font-semibold text-sm">Add everything AI found?</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {matchedCount > 0 && (
-                      <span>{matchedCount} task{matchedCount !== 1 ? "s" : ""}</span>
-                    )}
-                    {matchedCount > 0 && remainingSuggestions > 0 && <span> + </span>}
-                    {remainingSuggestions > 0 && (
-                      <span>{remainingSuggestions} new system{remainingSuggestions !== 1 ? "s" : ""}</span>
-                    )}
-                    <span> will be added to your home. You can edit or delete anything later.</span>
+        {/* ── Accept all shortcut ─────────────────────────────────────────── */}
+        {hasResults && availableToAccept > 0 && (
+          <div className="rounded-xl border border-primary/30 bg-primary/5 p-4" data-testid="accept-all-panel">
+            <div className="flex items-start gap-3 flex-wrap">
+              <Sparkles className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-[200px]">
+                <h3 className="font-semibold text-sm">Add everything AI found?</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {analysisResult!.matchedSystemTasks.length > 0 && (
+                    <span>{analysisResult!.matchedSystemTasks.length} task{analysisResult!.matchedSystemTasks.length !== 1 ? "s" : ""}</span>
+                  )}
+                  {analysisResult!.matchedSystemTasks.length > 0 && remainingSuggestions > 0 && <span> + </span>}
+                  {remainingSuggestions > 0 && (
+                    <span>{remainingSuggestions} new system{remainingSuggestions !== 1 ? "s" : ""}</span>
+                  )}
+                  <span> will be added. You can edit or delete anything later.</span>
+                </p>
+              </div>
+              <Button
+                onClick={handleAcceptAll}
+                disabled={isAcceptingAll || isConfirming || processingId !== null}
+                data-testid="button-accept-all"
+                className="shrink-0"
+              >
+                {isAcceptingAll ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Adding…</>
+                ) : (
+                  <><CheckCircle2 className="w-4 h-4 mr-2" />Accept all</>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Matched tasks (existing systems) — shown first, lower friction ─ */}
+        {analysisResult && analysisResult.matchedSystemTasks.length > 0 && (
+          <div className="space-y-3" data-testid="matched-tasks-section">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-primary" />
+                <div>
+                  <h2 className="font-semibold text-sm">Tasks for your existing systems</h2>
+                  <p className="text-xs text-muted-foreground">
+                    {analysisResult.matchedSystemTasks.length} task{analysisResult.matchedSystemTasks.length !== 1 ? "s" : ""} detected · select which to add
                   </p>
                 </div>
-                <Button
-                  onClick={handleAcceptAll}
-                  disabled={isAcceptingAll || isConfirming || processingId !== null}
-                  data-testid="button-accept-all"
-                  className="shrink-0"
-                >
-                  {isAcceptingAll ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Adding...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Accept all
-                    </>
-                  )}
+              </div>
+              <div className="flex gap-1.5">
+                <Button variant="ghost" size="sm" onClick={selectAll} className="h-7 text-xs" data-testid="button-select-all">
+                  All
+                </Button>
+                <Button variant="ghost" size="sm" onClick={deselectAll} className="h-7 text-xs" data-testid="button-deselect-all">
+                  None
                 </Button>
               </div>
             </div>
-          );
-        })()}
 
+            <div className="space-y-2" data-testid="task-list">
+              {analysisResult.matchedSystemTasks.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  selected={selectedTaskIds.has(task.id)}
+                  onToggle={() => toggleTask(task.id)}
+                />
+              ))}
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <Button
+                onClick={handleConfirmMatched}
+                disabled={selectedTaskIds.size === 0 || isConfirming || isAcceptingAll}
+                className="flex-1"
+                data-testid="button-confirm-tasks"
+              >
+                {isConfirming ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Adding…</>
+                ) : (
+                  `Add ${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? "s" : ""}`
+                )}
+              </Button>
+            </div>
+
+            <p className="text-[10px] text-muted-foreground text-center">
+              AI-generated — urgency, costs, and safety levels are approximate. You're always in control of what gets added.
+            </p>
+          </div>
+        )}
+
+        {/* ── New systems (need approval) — shown after matched tasks ──────── */}
         {pendingSuggestions.length > 0 && (
           <div className="space-y-3" data-testid="suggested-systems-section">
             <div className="flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-amber-600" />
-              <h2 className="font-semibold text-sm">New Systems Detected — Approval Required</h2>
+              <h2 className="font-semibold text-sm">New systems found in your documents</h2>
             </div>
             <p className="text-xs text-muted-foreground -mt-1">
-              These systems were found in your files but don't exist in your home profile yet. Approve to create them, or decline to discard.
+              These weren't in your home profile yet. Approve each one to add it (along with its tasks), or skip to ignore.
             </p>
             {pendingSuggestions.map((s) => (
               <SuggestedSystemCard
                 key={s.id}
                 suggestion={s}
-                homeId={home?.id || ""}
                 onApprove={handleApprove}
                 onDecline={handleDecline}
                 isProcessing={processingId === s.id}
@@ -722,6 +944,7 @@ export default function DocumentAnalysis() {
           </div>
         )}
 
+        {/* ── Decided suggestions summary ─────────────────────────────────── */}
         {(approvedCount > 0 || declinedCount > 0) && pendingSuggestions.length === 0 && (
           <div className="flex items-center gap-3 text-xs text-muted-foreground bg-muted/30 rounded-lg p-3">
             {approvedCount > 0 && (
@@ -731,19 +954,20 @@ export default function DocumentAnalysis() {
               </span>
             )}
             {declinedCount > 0 && (
-              <span className="flex items-center gap-1 text-red-600">
+              <span className="flex items-center gap-1 text-muted-foreground">
                 <XCircle className="w-3.5 h-3.5" />
-                {declinedCount} declined
+                {declinedCount} skipped
               </span>
             )}
           </div>
         )}
 
+        {/* ── System attribute updates ─────────────────────────────────────── */}
         {analysisResult && analysisResult.matchedSystemUpdates.length > 0 && (
           <div className="space-y-2" data-testid="matched-updates-section">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-green-600" />
-              <h2 className="font-semibold text-sm">System Updates Detected</h2>
+              <h2 className="font-semibold text-sm">System info updated</h2>
             </div>
             <div className="space-y-1.5">
               {analysisResult.matchedSystemUpdates.map((update) => (
@@ -762,90 +986,33 @@ export default function DocumentAnalysis() {
           </div>
         )}
 
-        {analysisResult && analysisResult.matchedSystemTasks.length > 0 && (
-          <div className="space-y-3" data-testid="matched-tasks-section">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-primary" />
-                <div>
-                  <h2 className="font-semibold text-sm">Tasks for Existing Systems</h2>
-                  <p className="text-xs text-muted-foreground">
-                    {analysisResult.matchedSystemTasks.length} task{analysisResult.matchedSystemTasks.length !== 1 ? "s" : ""} detected
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-1.5">
-                <Button variant="ghost" size="sm" onClick={selectAll} className="h-7 text-xs" data-testid="button-select-all">
-                  Select all
-                </Button>
-                <Button variant="ghost" size="sm" onClick={deselectAll} className="h-7 text-xs" data-testid="button-deselect-all">
-                  Deselect all
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-2" data-testid="task-list">
-              {analysisResult.matchedSystemTasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  selected={selectedTaskIds.has(task.id)}
-                  onToggle={() => toggleTask(task.id)}
-                />
-              ))}
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <Button
-                onClick={handleConfirmMatched}
-                disabled={selectedTaskIds.size === 0 || isConfirming}
-                className="flex-1"
-                data-testid="button-confirm-tasks"
-              >
-                {isConfirming ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Adding tasks...
-                  </>
-                ) : (
-                  `Add ${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? "s" : ""} to maintenance list`
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setAnalysisResult(null);
-                  setSelectedTaskIds(new Set());
-                  setSelectedFiles([]);
-                  setDecidedSuggestions(new Map());
-                }}
-                data-testid="button-cancel-analysis"
-              >
-                Cancel
-              </Button>
-            </div>
-
-            <p className="text-[10px] text-muted-foreground text-center">
-              These suggestions are AI-generated estimates. Urgency, costs, and safety levels are approximate ranges. You are always in control of which tasks to add.
-            </p>
+        {/* ── "Analyze another" when results are showing ──────────────────── */}
+        {hasResults && (
+          <div className="pt-2 border-t">
+            <button
+              type="button"
+              onClick={resetToUpload}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="button-reset-upload"
+            >
+              <FilePlus className="w-3.5 h-3.5" />
+              Analyze a different document
+            </button>
           </div>
         )}
 
+        {/* ── No results ───────────────────────────────────────────────────── */}
         {noResults && (
           <div className="border rounded-xl p-6 text-center" data-testid="no-issues-found">
             <FileText className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
             <p className="font-medium text-sm">No maintenance issues detected</p>
             <p className="text-xs text-muted-foreground mt-1">
-              The uploaded file{selectedFiles.length !== 1 ? "s" : ""} did not contain identifiable home maintenance issues.
+              The uploaded file{stagedFiles.length !== 1 ? "s" : ""} didn't contain identifiable home maintenance issues.
             </p>
             <Button
               variant="outline"
               className="mt-4"
-              onClick={() => {
-                setAnalysisResult(null);
-                setSelectedTaskIds(new Set());
-                setSelectedFiles([]);
-              }}
+              onClick={resetToUpload}
               data-testid="button-try-another"
             >
               Try another file
@@ -853,17 +1020,16 @@ export default function DocumentAnalysis() {
           </div>
         )}
 
+        {/* ── Source files footer ─────────────────────────────────────────── */}
         {analysisResult && analysisResult.sourceFiles.length > 0 && (
           <div className="text-[10px] text-muted-foreground pt-2 border-t">
-            <span className="font-medium">Analyzed files: </span>
+            <span className="font-medium">Analysed: </span>
             {analysisResult.sourceFiles.map((f, i) => (
-              <span key={i}>
-                {f.fileName}
-                {i < analysisResult.sourceFiles.length - 1 ? ", " : ""}
-              </span>
+              <span key={i}>{f.fileName}{i < analysisResult.sourceFiles.length - 1 ? ", " : ""}</span>
             ))}
           </div>
         )}
+
       </div>
     </Layout>
   );

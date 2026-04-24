@@ -56,7 +56,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const userInitial = user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "?";
 
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row">
+    <div className="h-screen bg-background flex flex-col md:flex-row overflow-hidden">
       <OfflineBanner />
       {/* Mobile Header — minimal, breathable */}
       <header className="md:hidden flex items-center justify-between px-5 py-3.5 border-b bg-card/80 backdrop-blur-sm z-50 sticky top-0">

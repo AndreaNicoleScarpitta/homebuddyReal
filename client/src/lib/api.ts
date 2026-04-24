@@ -304,6 +304,31 @@ export async function deleteTask(id: string | number): Promise<void> {
   return handleResponse<void>(response);
 }
 
+/**
+ * Complete a task atomically — writes the task status update AND the
+ * maintenance log entry in a single server-side transaction.
+ *
+ * Pass `legacyHomeId` when the home has a V1 integer row so the log entry
+ * is created. Omit (or pass null/undefined) for V2-only accounts — the task
+ * is still marked complete; the log write is simply skipped server-side.
+ */
+export async function completeTask(
+  taskId: string | number,
+  opts: {
+    legacyHomeId?: number | null;
+    title?: string;
+    cost?: number;
+    notes?: string;
+  } = {}
+): Promise<V2Task> {
+  const response = await fetch(`/v2/tasks/${taskId}/complete`, {
+    method: "POST",
+    headers: v2Headers(),
+    body: JSON.stringify(opts),
+  });
+  return handleResponse<V2Task>(response);
+}
+
 export interface SuggestedTask {
   title: string;
   description: string;
@@ -524,7 +549,8 @@ export interface FileAnalysisResultV2 {
 
 export async function runFileAnalysis(
   homeId: string,
-  files: File[]
+  files: File[],
+  signal?: AbortSignal
 ): Promise<FileAnalysisResultV2> {
   const formData = new FormData();
   for (const file of files) {
@@ -534,6 +560,7 @@ export async function runFileAnalysis(
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey() },
     body: formData,
+    signal,
   });
   return handleResponse<FileAnalysisResultV2>(response);
 }
