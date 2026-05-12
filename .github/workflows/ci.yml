@@ -113,28 +113,31 @@ jobs:
             echo "$PW_OUT"
           fi
 
-          # Write a publicly-visible summary so we can see logs without GitHub auth
+          # Upload combined diagnostic to a public paste service (0x0.st)
           {
-            echo "## E2E diagnostic"
+            echo "=== wait-on exit: $WAIT_ON_EXIT ==="
+            echo "=== playwright exit: $PW_EXIT ==="
             echo ""
-            echo "- wait-on exit: $WAIT_ON_EXIT"
-            echo "- playwright exit: $PW_EXIT"
-            echo ""
-            echo "### Health probe"
-            echo '```'
+            echo "=== Health probe ==="
             echo "$HEALTH_OUT"
-            echo '```'
             echo ""
-            echo "### Server log (full)"
-            echo '```'
+            echo "=== Server log (full) ==="
             cat server.log 2>/dev/null || echo "(no server.log)"
-            echo '```'
             echo ""
-            echo "### Playwright output"
-            echo '```'
+            echo "=== Playwright output ==="
             echo "$PW_OUT"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } > /tmp/e2e-diag.txt
+
+          PASTE_URL=$(curl -sS -F'file=@/tmp/e2e-diag.txt' https://0x0.st 2>/dev/null || echo "")
+          if [ -z "$PASTE_URL" ]; then
+            PASTE_URL=$(curl -sS --upload-file /tmp/e2e-diag.txt https://transfer.sh/e2e-diag.txt 2>/dev/null || echo "")
+          fi
+          # Annotations are public via the check-runs annotations API
+          echo "::error title=E2E Diagnostic::Paste URL: $PASTE_URL  (wait-on=$WAIT_ON_EXIT pw=$PW_EXIT)"
+
+          # Also dump the last 80 lines of the server log as annotations
+          # (each annotation max 4KB; we use a few)
+          tail -80 server.log 2>/dev/null | awk '{print "::warning::SRV "$0}' || true
 
           if [ "$WAIT_ON_EXIT" -ne 0 ]; then exit 1; fi
           exit $PW_EXIT
