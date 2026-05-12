@@ -36,6 +36,7 @@ import {
   RefreshCw,
   Landmark,
   Paintbrush,
+  ChevronDown,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createSystem, identifySystemFromImage, createTasksBatch, suggestMaintenanceTasks } from "@/lib/api";
@@ -215,6 +216,7 @@ const urgencyColors: Record<string, string> = {
 export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [], initialCategory }: AddSystemWizardProps) {
   const [step, setStep] = useState<number>(1);
   const [showHints, setShowHints] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [, navigate] = useLocation();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -284,6 +286,7 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [],
         setFormData(initialFormData);
       }
       setShowHints(false);
+      setShowDetails(false);
       setIsAnalyzing(false);
       setSavedSystemName("");
       setSuggestedTasks([]);
@@ -689,6 +692,18 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [],
               />
             </div>
             
+            {formData.category !== "Paint" && (
+              <button
+                type="button"
+                onClick={() => setShowDetails(!showDetails)}
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+              >
+                <ChevronDown className={`h-4 w-4 transition-transform duration-200${showDetails ? " rotate-180" : ""}`} />
+                {showDetails ? "Hide details" : "Add details (make, model, install year…)"}
+              </button>
+            )}
+
+            {(showDetails || formData.category === "Paint") && <>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="installYear" className="flex items-center gap-1">Install Year <span className="text-muted-foreground text-xs">(opt.)</span> <FieldTooltip termSlug="install-year" screenName="add-system" /></Label>
@@ -717,7 +732,7 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [],
                 </div>
               )}
             </div>
-            
+
             {showsMakeModel(formData.category) && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -742,7 +757,7 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [],
                 </div>
               </div>
             )}
-            
+
             {showsMaterial(formData.category) && (
               <div className="space-y-2">
                 <Label htmlFor="material" className="flex items-center gap-1">Material <FieldTooltip termSlug="system-material" screenName="add-system" /></Label>
@@ -755,7 +770,7 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [],
                 />
               </div>
             )}
-            
+
             {showsEnergyRating(formData.category) && (
               <div className="space-y-2">
                 <Label htmlFor="energyRating" className="flex items-center gap-1">Energy Rating <span className="text-muted-foreground text-xs">(opt.)</span> <FieldTooltip termSlug="energy-rating" screenName="add-system" /></Label>
@@ -768,7 +783,7 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [],
                 />
               </div>
             )}
-            
+
             {showsPestFields(formData.category) && (
               <>
                 <div className="space-y-2">
@@ -810,7 +825,7 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [],
                 </div>
               </>
             )}
-            
+
             {formData.category === "Paint" ? (
               <div className="space-y-3">
                 <Label>Add Paint Colors</Label>
@@ -933,6 +948,7 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [],
                 )}
               </div>
             )}
+            </>}
             
             <div className="flex justify-between pt-4">
               <Button variant="outline" onClick={() => setStep(1)}>

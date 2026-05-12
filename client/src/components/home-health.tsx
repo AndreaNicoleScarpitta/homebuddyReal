@@ -129,42 +129,39 @@ export function HomeHealth({
   const TierIcon = styles.icon;
 
   return (
-    <Card className={`h-full border shadow-sm ${styles.bgColor} ${styles.borderColor}`}>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg font-heading flex items-center gap-2">
-          Home Status
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs">
-              <p className="font-medium mb-1">How is this calculated?</p>
-              <p className="text-sm">Your status is based on the age and condition of your home systems, pending maintenance tasks, and completed repairs. It improves as we learn more about your home.</p>
-            </TooltipContent>
-          </Tooltip>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center gap-4">
-          <div className={`h-16 w-16 rounded-full ${styles.bgColor} border-2 ${styles.borderColor} flex items-center justify-center`}>
-            <TierIcon className={`h-8 w-8 ${styles.iconColor}`} />
+    <Card className={`h-full border shadow-none ${styles.bgColor} ${styles.borderColor}`}>
+      <CardContent className="p-5 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className={`h-12 w-12 rounded-full ${styles.bgColor} border-2 ${styles.borderColor} flex items-center justify-center shrink-0`}>
+            <TierIcon className={`h-6 w-6 ${styles.iconColor}`} />
           </div>
-          <div className="flex-1">
-            <Badge variant="outline" className={`text-sm font-medium px-3 py-1 ${styles.badgeClass}`}>
-              {label}
-            </Badge>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className={`text-sm font-medium px-2.5 py-0.5 ${styles.badgeClass}`}>
+                {label}
+              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="font-medium mb-1">How is this calculated?</p>
+                  <p className="text-sm">Based on your system conditions, pending tasks, and completed repairs.</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
             {description && (
-              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+              <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
                 {description}
               </p>
             )}
             {actionParts.length > 0 && (
-              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-                {actionParts.map((part, i) => 
+              <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                {actionParts.map((part, i) =>
                   part.link ? (
-                    <Link 
-                      key={i} 
-                      href={part.link} 
+                    <Link
+                      key={i}
+                      href={part.link}
                       className="font-medium text-foreground underline underline-offset-2 decoration-primary/40 hover:decoration-primary transition-colors"
                       data-testid={`link-health-action-${i}`}
                     >
@@ -180,33 +177,25 @@ export function HomeHealth({
         </div>
 
         {tier === "unknown" && (
-          <div className="p-3 rounded-lg bg-background/60 border border-muted">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">Tip:</span> Add your HVAC, roof, plumbing, and other systems to get a personalized home health assessment.
-            </p>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Add your HVAC, roof, plumbing, and other systems to get a health assessment.
+          </p>
         )}
 
-        {tier !== "unknown" && (
-          <div className="p-3 rounded-lg bg-background/60 border border-muted">
-            <p className="text-xs text-muted-foreground">
-              {systemsCount > 0 && `Tracking ${systemsCount} system${systemsCount > 1 ? 's' : ''}`}
-              {systemsCount > 0 && tasksCount > 0 && ' • '}
-              {tasksCount > 0 && (
-                <Link 
-                  href="/maintenance-log" 
-                  className="hover:text-foreground transition-colors underline underline-offset-2"
-                  data-testid="link-health-tasks"
-                >
-                  {tasksCount} active task{tasksCount > 1 ? 's' : ''}
-                </Link>
-              )}
-              {systemsCount === 0 && tasksCount === 0 && 'Add systems to improve accuracy'}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1 italic">
-              Most homes your age have similar maintenance needs—you're not behind.
-            </p>
-          </div>
+        {tier !== "unknown" && (systemsCount > 0 || tasksCount > 0) && (
+          <p className="text-xs text-muted-foreground">
+            {systemsCount > 0 && `${systemsCount} system${systemsCount > 1 ? 's' : ''} tracked`}
+            {systemsCount > 0 && tasksCount > 0 && ' · '}
+            {tasksCount > 0 && (
+              <Link
+                href="/maintenance-log"
+                className="hover:text-foreground transition-colors underline underline-offset-2"
+                data-testid="link-health-tasks"
+              >
+                {tasksCount} active task{tasksCount > 1 ? 's' : ''}
+              </Link>
+            )}
+          </p>
         )}
       </CardContent>
     </Card>

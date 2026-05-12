@@ -241,6 +241,17 @@ export function TaskContractorPanel({ task, zipCode }: TaskContractorPanelProps)
                 type="tel"
                 data-testid={`input-con-phone-${task.id}`}
               />
+              {task.contractorPhone && (
+                <a
+                  href={`tel:${task.contractorPhone}`}
+                  className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                  data-testid={`link-call-${task.id}`}
+                  onClick={() => trackEvent("click", "task_card", "tap_to_call")}
+                >
+                  <Phone className="h-3 w-3" />
+                  Tap to call
+                </a>
+              )}
             </div>
           </div>
 

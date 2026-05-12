@@ -17,6 +17,12 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /** Middleware: ensure a CSRF token cookie exists, enforce on mutations. */
 export function csrfProtection(req: Request, res: Response, next: NextFunction): void {
+  // Bypass CSRF in CI test mode — double-gated: NODE_ENV=test AND opt-in env flag.
+  // ALLOW_TEST_USER_HEADER must never be set on production or staging deployments.
+  if (process.env.NODE_ENV === "test" && process.env.ALLOW_TEST_USER_HEADER === "1") {
+    return next();
+  }
+
   // Ensure token cookie exists
   let token = req.cookies?.[CSRF_COOKIE];
   if (!token) {

@@ -14,12 +14,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, ArrowRight, ListTodo, CheckCircle, CheckCircle2, Loader2, Sparkles, Wrench, AlertTriangle, ShieldCheck, ShieldAlert, Shield, RefreshCw } from "lucide-react";
+import { Plus, ArrowRight, ListTodo, CheckCircle, CheckCircle2, Loader2, Sparkles, Wrench, AlertTriangle, ShieldCheck, ShieldAlert, Shield, RefreshCw, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { FieldTooltip } from "@/components/field-tooltip";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getHome, getTasks, getSystems, createTask, updateTask, deleteTask, createLogEntry, analyzeTask } from "@/lib/api";
+import { getHome, getTasks, getSystems, createTask, updateTask, deleteTask, completeTask, analyzeTask } from "@/lib/api";
 import type { TaskAnalysis } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -383,7 +383,7 @@ function QuickAddTaskDialog({ isOpen, onClose, homeId }: { isOpen: boolean; onCl
   );
 }
 
-function CompleteTaskDialog({ isOpen, onClose, task, homeId }: { isOpen: boolean; onClose: () => void; task: V2Task | null; homeId: number }) {
+function CompleteTaskDialog({ isOpen, onClose, task, homeId }: { isOpen: boolean; onClose: () => void; task: V2Task | null; homeId?: number | null }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [cost, setCost] = useState("");
@@ -401,13 +401,13 @@ function CompleteTaskDialog({ isOpen, onClose, task, homeId }: { isOpen: boolean
   const completeMutation = useMutation({
     mutationFn: async () => {
       if (!task) return;
-      await createLogEntry(homeId, {
+      // Single atomic request: task status + log entry in one transaction.
+      await completeTask(task.id, {
+        legacyHomeId: homeId ?? null,
         title: task.title,
-        date: new Date().toISOString(),
-        cost: cost ? Math.round(parseFloat(cost) * 100) : undefined,
+        cost: cost ? parseFloat(cost) : undefined,
         notes: notes || undefined,
       });
-      await updateTask(task.id, { status: "completed" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -476,7 +476,13 @@ export default function Dashboard() {
   const { hasSeenTour, showTour, tourKey, startTour, completeTour } = useTourState();
   const [showAddSystem, setShowAddSystem] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
-  const [completingTask, setCompletingTask] = useState<V2Task | null>(null);
+  const [showSwipeHint, setShowSwipeHint] = useState(() => {
+    try { return !localStorage.getItem("swipe_hint_dismissed"); } catch { return false; }
+  });
+  const dismissSwipeHint = () => {
+    try { localStorage.setItem("swipe_hint_dismissed", "1"); } catch {}
+    setShowSwipeHint(false);
+  };
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -536,11 +542,13 @@ export default function Dashboard() {
 
   const swipeCompleteMutation = useMutation({
     mutationFn: async (task: V2Task) => {
-      await createLogEntry(home!.legacyId!, {
+      // Single atomic endpoint: marks the task done AND writes the log entry
+      // in one server-side transaction. legacyHomeId is optional — new-path
+      // users without a V1 home row still get the task completed.
+      await completeTask(task.id, {
+        legacyHomeId: home?.legacyId ?? null,
         title: task.title,
-        date: new Date().toISOString(),
       });
-      await updateTask(task.id, { status: "completed" });
     },
     onMutate: async (task) => {
       await queryClient.cancelQueries({ queryKey: ["tasks", home?.id] });
@@ -619,7 +627,6 @@ export default function Dashboard() {
   }
 
   const activeTasks = tasks.filter(t => t.status === "pending" || t.status === "scheduled");
-  const highPriorityTasks = tasks.filter(t => t.urgency === "now" || t.urgency === "soon");
   
   const urgentTasksCount = tasks.filter(t => t.urgency === "now" && t.status !== "completed").length;
   const overdueTasksCount = tasks.filter(t => {
@@ -682,7 +689,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="space-y-10">
+      <div className="space-y-8">
         {/* Header */}
         <header>
           <h1 className="text-3xl font-heading font-bold text-foreground" data-testid="text-heading">
@@ -710,45 +717,6 @@ export default function Dashboard() {
             <HomeInfoCard home={home} systems={systems} />
           </div>
           
-          {/* Quick Stats Row */}
-          <div className="flex flex-wrap gap-4 text-sm" data-tour="quick-stats">
-            <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-full">
-              <span className="text-muted-foreground">Next up:</span>
-              <span className="font-medium" data-testid="text-next-service">
-                {(() => {
-                  const nextTask = tasks
-                    .filter(t => t.status === "pending" || t.status === "scheduled")
-                    .sort((a, b) => {
-                      const order: Record<string, number> = { now: 0, soon: 1, later: 2, monitor: 3 };
-                      return (order[a.urgency ?? ""] ?? 4) - (order[b.urgency ?? ""] ?? 4);
-                    })[0];
-                  return nextTask ? nextTask.title : "Nothing scheduled";
-                })()}
-              </span>
-            </div>
-            {highPriorityTasks.length > 0 && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 rounded-full">
-                <span className="w-2 h-2 rounded-full bg-orange-500" />
-                <span className="font-medium">{highPriorityTasks.length} high priority</span>
-              </div>
-            )}
-            <button 
-              onClick={() => { trackEvent('click', 'dashboard', 'add_system'); setShowAddSystem(true); }}
-              className="flex items-center gap-1.5 px-4 py-2 text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-full transition-colors"
-              data-testid="button-add-system"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Add system</span>
-            </button>
-            <button 
-              onClick={() => { trackEvent('click', 'dashboard', 'add_task'); setShowAddTask(true); }}
-              className="flex items-center gap-1.5 px-4 py-2 text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-full transition-colors"
-              data-testid="button-add-task"
-            >
-              <ListTodo className="h-4 w-4" />
-              <span>Add task</span>
-            </button>
-          </div>
         </section>
         
         {/* Systems Summary */}
@@ -771,13 +739,6 @@ export default function Dashboard() {
           homeId={home.id}
         />
 
-        {/* Complete Task Dialog */}
-        <CompleteTaskDialog
-          isOpen={!!completingTask}
-          onClose={() => setCompletingTask(null)}
-          task={completingTask}
-          homeId={home.legacyId!}
-        />
 
         {/* Tasks Section */}
         <section className="space-y-6" data-tour="maintenance-plan">
@@ -817,6 +778,21 @@ export default function Dashboard() {
             </Card>
           ) : (
             <div className="space-y-6">
+              {/* Swipe discovery hint — one-time, mobile only */}
+              {showSwipeHint && (
+                <div className="md:hidden flex items-center justify-between gap-3 px-3 py-2.5 bg-muted/50 rounded-lg border border-border/50 text-xs text-muted-foreground animate-in fade-in duration-300">
+                  <span>← swipe to complete&ensp;·&ensp;swipe → to delete</span>
+                  <button
+                    type="button"
+                    onClick={dismissSwipeHint}
+                    aria-label="Dismiss swipe hint"
+                    className="shrink-0 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                    data-testid="button-dismiss-swipe-hint"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
               {["now", "soon", "later", "monitor"].map((urgency) => {
                 const urgencyTasks = tasks.filter(t => t.urgency === urgency && t.status !== "completed");
                 if (urgencyTasks.length === 0) return null;
@@ -848,7 +824,7 @@ export default function Dashboard() {
                         >
                           <MaintenanceCard
                             task={task}
-                            onComplete={(t) => setCompletingTask(t)}
+                            onComplete={(t) => swipeCompleteMutation.mutate(t)}
                             zipCode={home.zipCode}
                           />
                         </SwipeableTask>

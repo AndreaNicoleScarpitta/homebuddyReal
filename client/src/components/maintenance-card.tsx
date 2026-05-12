@@ -19,7 +19,7 @@
  */
 
 import { useState } from "react";
-import { Calendar, CheckCircle2, ChevronDown, ChevronUp, ShieldAlert, DollarSign } from "lucide-react";
+import { Calendar, CheckCircle2, ChevronDown, ChevronUp, ShieldAlert, DollarSign, Phone, Share2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -106,10 +106,12 @@ export function MaintenanceCard({ task, onComplete, zipCode }: TaskProps) {
     task.urgency === "soon" ? "Soon" :
     task.urgency === "monitor" ? "Monitor" : "Later";
 
-  const urgencyA11yClass =
-    task.urgency === "now" ? "border-l-destructive" :
-    task.urgency === "soon" ? "border-l-orange-500" :
-    task.urgency === "monitor" ? "border-l-blue-400" : "border-l-green-500";
+  const urgencyA11yClass = task.status === "completed"
+    ? "border-l-border"
+    : task.urgency === "now" ? "border-l-destructive"
+    : task.urgency === "soon" ? "border-l-orange-500"
+    : task.urgency === "monitor" ? "border-l-blue-400"
+    : "border-l-green-500";
 
   // Show the contractor panel when expanded and the task is Pro-Only OR
   // already has a pro workflow status set. This lets non-Pro tasks enter the
@@ -124,83 +126,54 @@ export function MaintenanceCard({ task, onComplete, zipCode }: TaskProps) {
 
   return (
     <Card
-      className={`group overflow-hidden border-l-4 transition-all duration-300 hover:shadow-md ${urgencyA11yClass}`}
+      className={`group overflow-hidden border-l-4 transition-all duration-200 ${urgencyA11yClass}`}
       role="article"
       aria-label={`${task.title} — urgency: ${urgencyLabel}`}
     >
-      <CardContent className="p-5">
-        <div className="flex justify-between items-start mb-3">
-          <div className="space-y-1 flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Urgency badge */}
-              <Badge
-                variant="outline"
-                className={`text-xs font-semibold uppercase tracking-wider ${
-                  task.urgency === "now" ? "text-red-700 dark:text-red-400 border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30" :
-                  task.urgency === "soon" ? "text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30" :
-                  task.urgency === "monitor" ? "text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30" :
-                  "text-green-700 dark:text-green-400 border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30"
-                }`}
-                aria-label={`Urgency: ${urgencyLabel}`}
-              >
-                {task.urgency === "now" ? "⚠ Urgent" :
-                 task.urgency === "soon" ? "● Soon" :
-                 task.urgency === "monitor" ? "◉ Monitor" : "○ Later"}
-              </Badge>
-
-              {task.category && (
-                <Badge variant="outline" className="text-xs font-normal uppercase tracking-wider text-muted-foreground">
-                  {task.category}
-                </Badge>
-              )}
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge className={`text-xs border ${getDiyBadgeColor(task.diyLevel)} shadow-none cursor-help`}>
-                    {task.diyLevel || "Unknown"}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  {task.diyLevel === "DIY-Safe" && <p>Safe for most homeowners to complete with basic tools.</p>}
-                  {task.diyLevel === "Caution" && <p>Can be done yourself but requires care. Research first or consider hiring a pro.</p>}
-                  {task.diyLevel === "Pro-Only" && <p>Requires licensed professionals. Expand to track a contractor.</p>}
-                  {!task.diyLevel && <p>Difficulty level not yet determined.</p>}
-                </TooltipContent>
-              </Tooltip>
-
-              {/* Pro-status badge — visible without expanding */}
-              {proStatusMeta && (
-                <Badge
-                  variant="outline"
-                  className={`text-xs border ${proStatusMeta.cls}`}
-                  data-testid={`badge-pro-status-${task.id}`}
-                >
-                  {proStatusMeta.label}
-                </Badge>
-              )}
-
-              {task.namespacePrefix && task.namespacePrefix !== "unknown_system" && (
+      <CardContent className="p-4">
+        <div className="flex justify-between items-start mb-2">
+          <div className="space-y-0.5 flex-1 min-w-0">
+            {/* Badge row — hidden on completed tasks; urgency shown by section header */}
+            {task.status !== "completed" ? (
+              <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Badge
-                      variant="outline"
-                      className="text-xs font-mono bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
-                      data-testid={`badge-namespace-${task.id}`}
-                    >
-                      {task.namespacePrefix.replace(/_/g, " ")}
+                    <Badge className={`text-xs border ${getDiyBadgeColor(task.diyLevel)} shadow-none cursor-help`}>
+                      {task.diyLevel || "Unknown"}
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">
-                    <p>System namespace: <code className="text-xs">{task.namespacePrefix}</code></p>
-                    <p className="text-muted-foreground mt-1">Attributes for this task are scoped to this system instance.</p>
+                    {task.diyLevel === "DIY-Safe" && <p>Safe for most homeowners to complete with basic tools.</p>}
+                    {task.diyLevel === "Caution" && <p>Can be done yourself but requires care. Research first or consider hiring a pro.</p>}
+                    {task.diyLevel === "Pro-Only" && <p>Requires licensed professionals. Expand to track a contractor.</p>}
+                    {!task.diyLevel && <p>Difficulty level not yet determined.</p>}
                   </TooltipContent>
                 </Tooltip>
-              )}
-            </div>
+                {proStatusMeta && (
+                  <Badge
+                    variant="outline"
+                    className={`text-xs border ${proStatusMeta.cls}`}
+                    data-testid={`badge-pro-status-${task.id}`}
+                  >
+                    {proStatusMeta.label}
+                  </Badge>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 mb-1.5 text-xs text-muted-foreground/70">
+                <CheckCircle2 className="h-3 w-3 text-green-500" />
+                Done
+              </div>
+            )}
 
-            <h3 className="font-heading font-semibold text-lg text-foreground group-hover:text-primary transition-colors">
+            <h3 className="font-heading font-semibold text-base text-foreground group-hover:text-primary transition-colors leading-snug">
               {task.title}
             </h3>
+            {task.category && (
+              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground/50 mt-0.5">
+                {task.category}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-0.5 shrink-0">
@@ -241,20 +214,23 @@ export function MaintenanceCard({ task, onComplete, zipCode }: TaskProps) {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm mt-4 pt-4 border-t border-dashed">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Calendar className="h-3.5 w-3.5" />
-            <span className={isNow ? "text-destructive font-medium" : ""}>
-              {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "Not scheduled"}
-            </span>
+        {/* Date / cost row — only render when at least one value is real */}
+        {(task.dueDate || task.estimatedCost || task.quotedCost) && (
+          <div className="flex items-center gap-4 text-xs text-muted-foreground mt-3 pt-3 border-t border-dashed">
+            {task.dueDate && (
+              <span className={`flex items-center gap-1.5 ${isNow ? "text-destructive font-medium" : ""}`}>
+                <Calendar className="h-3 w-3" />
+                {new Date(task.dueDate).toLocaleDateString()}
+              </span>
+            )}
+            {(task.quotedCost || task.estimatedCost) && (
+              <span className="flex items-center gap-1.5 ml-auto font-medium text-foreground">
+                <DollarSign className="h-3 w-3 text-muted-foreground" />
+                {task.quotedCost || task.estimatedCost}
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-2 text-muted-foreground justify-end">
-            <DollarSign className="h-3.5 w-3.5" />
-            <span className="font-semibold text-foreground">
-              {task.quotedCost || task.estimatedCost || "TBD"}
-            </span>
-          </div>
-        </div>
+        )}
 
         {expanded && (
           <div className="mt-4 pt-4 border-t space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
@@ -262,37 +238,72 @@ export function MaintenanceCard({ task, onComplete, zipCode }: TaskProps) {
               <p className="text-sm text-muted-foreground leading-relaxed">{task.description}</p>
             )}
 
-            {onComplete && task.status !== "completed" && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  trackEvent("click", "task_card", "mark_done");
-                  onComplete(task);
-                }}
-                className="text-green-700 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-950/30 hover:text-green-800 dark:hover:text-green-300"
-                data-testid={`button-complete-task-${task.id}`}
-              >
-                <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                Mark Done
-              </Button>
-            )}
+            {/* Action row — all task actions on one line */}
+            <div className="flex flex-wrap items-center gap-2">
+              {onComplete && task.status !== "completed" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    trackEvent("click", "task_card", "mark_done");
+                    onComplete(task);
+                  }}
+                  className="h-8 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-950/30 hover:text-green-800 dark:hover:text-green-300"
+                  data-testid={`button-complete-task-${task.id}`}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                  Mark Done
+                </Button>
+              )}
 
-            {/* Add to Google Calendar — shown when the task has any date */}
-            {gcalHref && (
-              <a
-                href={gcalHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => trackEvent("click", "task_card", "add_to_gcal")}
-                className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-all no-underline"
-                data-testid={`btn-gcal-${task.id}`}
-              >
-                <Calendar className="h-3.5 w-3.5" />
-                Add to Google Calendar
-              </a>
-            )}
+              {gcalHref && (
+                <a
+                  href={gcalHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => trackEvent("click", "task_card", "add_to_gcal")}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-all no-underline"
+                  data-testid={`btn-gcal-${task.id}`}
+                >
+                  <Calendar className="h-3.5 w-3.5" />
+                  Add to Calendar
+                </a>
+              )}
+
+              {"share" in navigator && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.share({
+                        title: task.title,
+                        text: [
+                          task.description,
+                          task.quotedCost
+                            ? `Quoted: ${task.quotedCost}`
+                            : task.estimatedCost
+                            ? `Estimated: ${task.estimatedCost}`
+                            : null,
+                          task.contractorName ? `Contractor: ${task.contractorName}` : null,
+                          task.contractorPhone ? `Phone: ${task.contractorPhone}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join("\n"),
+                      });
+                      trackEvent("click", "task_card", "share");
+                    } catch {
+                      // user cancelled or API unavailable — silent
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-all"
+                  data-testid={`btn-share-${task.id}`}
+                >
+                  <Share2 className="h-3.5 w-3.5" />
+                  Share
+                </button>
+              )}
+            </div>
 
             {/* Contractor workflow panel — Pro-Only or already has pro status */}
             {showContractorPanel && (
@@ -323,6 +334,20 @@ export function MaintenanceCard({ task, onComplete, zipCode }: TaskProps) {
               <span className="text-muted-foreground">
                 · {new Date(task.scheduledProDate).toLocaleDateString()}
               </span>
+            )}
+            {task.contractorPhone && (
+              <a
+                href={`tel:${task.contractorPhone}`}
+                className="ml-auto flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  trackEvent("click", "task_card", "tap_to_call_collapsed");
+                }}
+                data-testid={`link-call-collapsed-${task.id}`}
+              >
+                <Phone className="h-3 w-3" />
+                Call
+              </a>
             )}
           </div>
         )}

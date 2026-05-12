@@ -183,7 +183,7 @@ function AffordabilityIndicator({ task, totalAvailable }: { task: V2Task; totalA
   );
 }
 
-function AddFundDialog({ homeId, onSuccess }: { homeId: number; onSuccess: () => void }) {
+function AddFundDialog({ homeId, onSuccess }: { homeId: number | null | undefined; onSuccess: () => void }) {
   const [open, setOpen] = useState(false);
   const [purpose, setPurpose] = useState("");
   const [name, setName] = useState("");
@@ -194,7 +194,7 @@ function AddFundDialog({ homeId, onSuccess }: { homeId: number; onSuccess: () =>
   const { toast } = useToast();
 
   const createFundMutation = useMutation({
-    mutationFn: (data: Parameters<typeof createFund>[1]) => createFund(homeId, data),
+    mutationFn: (data: Parameters<typeof createFund>[1]) => createFund(homeId as number, data),
     onSuccess: () => {
       toast({
         title: "Fund created",
@@ -230,6 +230,9 @@ function AddFundDialog({ homeId, onSuccess }: { homeId: number; onSuccess: () =>
       label: label || undefined,
     });
   };
+
+  // Budget funds require a V1 integer home ID — hide the button if absent.
+  if (!homeId) return null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -589,8 +592,11 @@ export default function Budget() {
 
   const { data: expenses = [] } = useQuery({
     queryKey: ["expenses", home?.id],
+    // Must guard on legacyId, not id — getExpenses uses the V1 integer home
+    // ID. Previously guarded on !!home?.id (always true for any home) which
+    // caused getExpenses(null) crashes for accounts without a V1 row.
     queryFn: () => getExpenses(home!.legacyId!),
-    enabled: !!home?.id,
+    enabled: !!home?.legacyId,
   });
 
   // Calculate totals
@@ -648,7 +654,7 @@ export default function Budget() {
             <h1 className="text-3xl font-heading font-bold text-foreground" data-testid="text-heading">Budget</h1>
             <p className="text-muted-foreground mt-1">See what you can afford and plan with confidence.</p>
           </div>
-          <AddFundDialog homeId={home.legacyId!} onSuccess={handleRefresh} />
+          <AddFundDialog homeId={home.legacyId} onSuccess={handleRefresh} />
         </header>
 
         {/* Repair Readiness Section */}
@@ -804,7 +810,7 @@ export default function Budget() {
                 <p className="text-muted-foreground mb-6">
                   Add your first fund to start tracking what you can afford. This is your personal planning tool—no bank connection required.
                 </p>
-                <AddFundDialog homeId={home.legacyId!} onSuccess={handleRefresh} />
+                <AddFundDialog homeId={home.legacyId} onSuccess={handleRefresh} />
               </div>
             </Card>
           ) : (

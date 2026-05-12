@@ -274,6 +274,17 @@ app.use((req, res, next) => {
   // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
+  } else if (process.env.NODE_ENV === "test") {
+    // In test mode: skip both Vite (slow) and serveStatic (needs a built dist/).
+    // Integration tests only hit /api/* and /v2/* — no frontend serving needed.
+    app.use("*", (req, res) => {
+      const p = req.originalUrl;
+      if (p.startsWith("/api/") || p.startsWith("/v2/")) {
+        res.status(404).json({ message: "Not found" });
+      } else {
+        res.status(404).send("Not found");
+      }
+    });
   } else {
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);

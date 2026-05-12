@@ -18,6 +18,7 @@ import { EventTypes, type Actor } from "./eventing/types";
 import { validateTransition, TransitionError } from "./domain/stateMachine";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { logError as logErrorV2 } from "./lib/logger";
+import { withOpenAI } from "./lib/openai-client";
 import {
   resolveNamespacePrefix,
   namespaceTaskAttributes,
@@ -893,12 +894,6 @@ v2Router.post("/tasks/analyze", async (req: Request, res: Response) => {
       nsPrefix = systemNameToPrefix(category);
     }
 
-    const OpenAI = (await import("openai")).default;
-    const openai = new OpenAI({
-      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-    });
-
     const prompt = `You are a home maintenance expert. A homeowner wants to add this task: "${title.trim()}"${category ? ` (category: ${category})` : ""}.
 
 Analyze this task and return a JSON object with SYSTEM-SCOPED attribute keys.
@@ -922,14 +917,20 @@ Be practical and realistic. Most routine cleaning/filter tasks are DIY-Safe with
 
 Return ONLY a valid JSON object, no markdown or explanation.`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.2,
-      max_tokens: 600,
-    });
-
-    const content = completion.choices[0]?.message?.content || "{}";
+    // Use singleton + circuit breaker; falls back to "{}" so the task is still
+    // created with safe defaults (urgency=later, diy=Caution) rather than erroring.
+    const content = await withOpenAI(
+      async (ai) => {
+        const completion = await ai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.2,
+          max_tokens: 600,
+        });
+        return completion.choices[0]?.message?.content ?? "{}";
+      },
+      "{}"
+    );
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
 
@@ -976,12 +977,6 @@ v2Router.post("/systems/suggest-tasks", async (req: Request, res: Response) => {
       systemId
     );
 
-    const OpenAI = (await import("openai")).default;
-    const openai = new OpenAI({
-      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-    });
-
     const prompt = `You are a home maintenance expert. A homeowner has added a "${systemCategory || 'Other'}" system called "${systemName}"${notes ? ` with notes: "${notes}"` : ''}.
 
 Generate a JSON array of 3-6 best-practice maintenance tasks for this system. Each task should have:
@@ -998,15 +993,20 @@ Focus on practical, actionable tasks that a homeowner would actually need. Be sp
 
 Return ONLY a valid JSON array, no markdown or explanation.`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.3,
-      max_tokens: 1500,
-    });
-
-    const content = completion.choices[0]?.message?.content || "[]";
-    const cleaned = content.replace(/```json\n?|\n?```/g, "").trim();
+    // Falls back to "[]" so the caller receives an empty task list rather than a 500.
+    const rawContent = await withOpenAI(
+      async (ai) => {
+        const completion = await ai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.3,
+          max_tokens: 1500,
+        });
+        return completion.choices[0]?.message?.content ?? "[]";
+      },
+      "[]"
+    );
+    const cleaned = rawContent.replace(/```json\n?|\n?```/g, "").trim();
     const tasks = JSON.parse(cleaned);
 
     const namespacedTasks = tasks.map((t: Record<string, unknown>) => ({
@@ -1106,6 +1106,74 @@ v2Router.delete("/tasks/:taskId", async (req: Request, res: Response) => {
         idempotencyKey: req.idempotencyKey!,
       });
     });
+    res.json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /tasks/:taskId/complete
+//
+// Atomic task completion: marks the task done AND writes the maintenance log
+// entry in a single database transaction. Replaces the previous dual-write
+// pattern (two sequential fetches from the client) which could leave task
+// status and log entries inconsistent on partial failure.
+//
+// Body: { legacyHomeId?: number, title?: string, cost?: number, notes?: string }
+//   legacyHomeId — the integer home ID for the V1 log table. Optional: if
+//                  absent (new-path users without a legacyId) the task is
+//                  still completed; the log entry is simply skipped.
+// ---------------------------------------------------------------------------
+v2Router.post("/tasks/:taskId/complete", requireIdempotencyKey, async (req: Request, res: Response) => {
+  try {
+    const actor = getActor(req);
+    const userId = getUserId(req);
+    const { taskId } = req.params;
+    const { legacyHomeId, title, cost, notes } = req.body as {
+      legacyHomeId?: number | null;
+      title?: string;
+      cost?: number;
+      notes?: string;
+    };
+
+    if (!(await verifyTaskOwnership(taskId, userId))) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    const result = await db.transaction(async (tx) => {
+      // 1. Emit TaskCompleted event and update the projection atomically.
+      const ver = await getCurrentVersion(tx, "task", taskId);
+      const task = await guardedAppendAndApply(tx, {
+        aggregateType: "task",
+        aggregateId: taskId,
+        expectedVersion: ver,
+        eventType: EventTypes.TaskCompleted,
+        data: { completedAt: new Date().toISOString() },
+        meta: {},
+        actor,
+        idempotencyKey: req.idempotencyKey!,
+      });
+
+      // 2. Write the maintenance log entry in the same transaction so both
+      //    succeed or both roll back. Skip if there is no legacy home ID
+      //    (V2-only accounts that never had a legacy integer row).
+      if (legacyHomeId) {
+        await tx.insert(maintenanceLogEntries).values({
+          homeId: legacyHomeId,
+          title: title ?? "Task completed",
+          date: new Date(),
+          cost: typeof cost === "number" && !isNaN(cost)
+            ? Math.round(cost * 100)
+            : null,
+          notes: notes ?? null,
+        } as any);
+      }
+
+      return task;
+    });
+
     res.json(result);
   } catch (err) {
     handleError(res, err);
@@ -1982,42 +2050,41 @@ import type { AnalysisResult, SuggestedSystem } from "./lib/analysis-pipeline";
 import { extractTextFromDocument } from "./lib/document-analysis";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage/objectStorage";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { homeDocuments } from "@shared/schema";
+import { homeDocuments, maintenanceLogEntries } from "@shared/schema";
 
 async function extractTextFromImage(
   buffer: Buffer,
   fileName: string,
   mimeType: string
 ): Promise<string> {
-  const OpenAI = (await import("openai")).default;
-  const openai = new OpenAI({
-    apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-    baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  });
-
   const base64 = buffer.toString("base64");
   const dataUrl = `data:${mimeType};base64,${base64}`;
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      {
-        role: "system",
-        content: "You are a document text extractor. Extract ALL readable text from this image. Include labels, numbers, dates, descriptions, and any other visible text. If the image contains a home inspection report, receipt, invoice, or maintenance document, extract every detail. Return ONLY the extracted text, no commentary.",
-      },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: `Extract all text from this image (${fileName}):` },
-          { type: "image_url", image_url: { url: dataUrl, detail: "high" } },
+  // Falls back to "" so the pipeline can still attempt PDF text extraction.
+  return await withOpenAI(
+    async (ai) => {
+      const response = await ai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are a document text extractor. Extract ALL readable text from this image. Include labels, numbers, dates, descriptions, and any other visible text. If the image contains a home inspection report, receipt, invoice, or maintenance document, extract every detail. Return ONLY the extracted text, no commentary.",
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: `Extract all text from this image (${fileName}):` },
+              { type: "image_url", image_url: { url: dataUrl, detail: "high" } },
+            ],
+          },
         ],
-      },
-    ],
-    max_tokens: 4000,
-    temperature: 0,
-  });
-
-  return response.choices[0]?.message?.content || "";
+        max_tokens: 4000,
+        temperature: 0,
+      });
+      return response.choices[0]?.message?.content ?? "";
+    },
+    ""
+  );
 }
 
 const fileUpload = multer({
