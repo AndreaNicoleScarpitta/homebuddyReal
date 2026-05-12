@@ -31,6 +31,49 @@ export function getSession() {
     ttl: sessionTtl,
     tableName: "sessions",
   });
+
+  // Prevent the event emitter's default "throw on unhandled error" behaviour.
+  // connect-pg-simple emits 'error' on pool errors; without a listener Node crashes.
+  sessionStore.on("error", (err: Error) => {
+    console.error("[session-store] PostgreSQL error:", err.message);
+  });
+
+  // Graceful degradation: when the DB is unreachable, convert store errors into
+  // "session not found" so express-session creates a fresh empty session and the
+  // app stays usable. An authenticated user will appear logged-out (their session
+  // can't be looked up), which is far better than returning 500 for every request.
+  // In production the DB should always be reachable; this is primarily a local-dev
+  // safety net for the "Docker not running" case.
+  const originalGet = sessionStore.get.bind(sessionStore);
+  (sessionStore as any).get = function (sid: string, callback: (err: any, session?: any) => void) {
+    originalGet(sid, (err: any, session: any) => {
+      if (err) {
+        console.warn("[session-store] get() failed — treating as no session:", err.message);
+        return callback(null, null); // null, null = no error + no session found
+      }
+      callback(null, session);
+    });
+  };
+
+  const originalSet = sessionStore.set.bind(sessionStore);
+  (sessionStore as any).set = function (sid: string, sess: any, callback?: (err?: any) => void) {
+    originalSet(sid, sess, (err: any) => {
+      if (err) {
+        console.warn("[session-store] set() failed — session won't persist:", err.message);
+        return callback?.(); // swallow error; app continues without persistence
+      }
+      callback?.();
+    });
+  };
+
+  const originalDestroy = sessionStore.destroy.bind(sessionStore);
+  (sessionStore as any).destroy = function (sid: string, callback?: (err?: any) => void) {
+    originalDestroy(sid, (err: any) => {
+      if (err) console.warn("[session-store] destroy() failed:", err.message);
+      callback?.(); // always succeed from the caller's perspective
+    });
+  };
+
   return session({
     secret: resolvedSecret,
     store: sessionStore,
@@ -39,7 +82,7 @@ export function getSession() {
     cookie: {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: "lax",
       maxAge: sessionTtl,
     },
   });

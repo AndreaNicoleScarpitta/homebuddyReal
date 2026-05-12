@@ -56,6 +56,7 @@ export interface V2Home {
 export interface V2System {
   id: string;
   homeId: string;
+  legacyId?: number | null;
   category: string;
   name: string;
   entityType?: string;
@@ -82,6 +83,18 @@ export interface V2System {
   riskScore?: number | null;
 }
 
+/**
+ * Pro-workflow status for tasks that need a contractor.
+ *
+ * These values live in the task's `estimates` JSONB alongside the standard
+ * task attributes. They're separate from `status` (the legacy state machine
+ * value) so that a task can be both "scheduled" and "needs_pro" — i.e. the
+ * plumber is booked but the task isn't done yet.
+ *
+ * Progression: needs_pro → quoted → scheduled_pro → (task completes)
+ */
+export type TaskProStatus = "needs_pro" | "quoted" | "scheduled_pro";
+
 export interface V2Task {
   id: string;
   homeId: string;
@@ -104,6 +117,14 @@ export interface V2Task {
   completedAt?: string | null;
   namespacePrefix?: string | null;
   namespacedAttributes?: Record<string, string> | null;
+
+  // Contractor / pro-workflow fields (stored in estimates JSONB, optional)
+  proStatus?: TaskProStatus | null;
+  contractorName?: string | null;
+  contractorPhone?: string | null;
+  contractorNotes?: string | null;
+  scheduledProDate?: string | null;
+  quotedCost?: string | null;
 }
 
 export interface V2Report {
@@ -148,12 +169,20 @@ export async function getHome(): Promise<V2Home | null> {
   }
 }
 
+/**
+ * Create a home with a partial profile.
+ *
+ * ZIP is the only truly required field — everything else (street, city,
+ * state, year built, square footage) can be filled in later. This mirrors
+ * the server-side validation in routes_v2.ts and is the core of the
+ * "first useful output in under 2 minutes" onboarding flip.
+ */
 export async function createHome(data: {
-  addressLine1: string;
-  addressLine2?: string;
-  city: string;
-  state: string;
   zipCode: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
   builtYear?: number;
   sqFt?: number;
   type?: string;
@@ -273,6 +302,31 @@ export async function deleteTask(id: string | number): Promise<void> {
     headers: v2Headers(),
   });
   return handleResponse<void>(response);
+}
+
+/**
+ * Complete a task atomically — writes the task status update AND the
+ * maintenance log entry in a single server-side transaction.
+ *
+ * Pass `legacyHomeId` when the home has a V1 integer row so the log entry
+ * is created. Omit (or pass null/undefined) for V2-only accounts — the task
+ * is still marked complete; the log write is simply skipped server-side.
+ */
+export async function completeTask(
+  taskId: string | number,
+  opts: {
+    legacyHomeId?: number | null;
+    title?: string;
+    cost?: number;
+    notes?: string;
+  } = {}
+): Promise<V2Task> {
+  const response = await fetch(`/v2/tasks/${taskId}/complete`, {
+    method: "POST",
+    headers: v2Headers(),
+    body: JSON.stringify(opts),
+  });
+  return handleResponse<V2Task>(response);
 }
 
 export interface SuggestedTask {
@@ -495,7 +549,8 @@ export interface FileAnalysisResultV2 {
 
 export async function runFileAnalysis(
   homeId: string,
-  files: File[]
+  files: File[],
+  signal?: AbortSignal
 ): Promise<FileAnalysisResultV2> {
   const formData = new FormData();
   for (const file of files) {
@@ -505,6 +560,7 @@ export async function runFileAnalysis(
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey() },
     body: formData,
+    signal,
   });
   return handleResponse<FileAnalysisResultV2>(response);
 }
@@ -929,4 +985,613 @@ export async function analyzeCircuitPanel(imageBase64: string): Promise<CircuitP
     body: JSON.stringify({ imageBase64 }),
   });
   return handleResponse<CircuitPanelAnalysis>(response);
+}
+
+// ---------------------------------------------------------------------------
+// Snake-to-camel helper for raw SQL API responses
+// ---------------------------------------------------------------------------
+function snakeToCamel(obj: any): any {
+  if (Array.isArray(obj)) return obj.map(snakeToCamel);
+  if (obj && typeof obj === "object") {
+    const result: any = {};
+    for (const [key, val] of Object.entries(obj)) {
+      const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+      result[camelKey] = val;
+    }
+    return result;
+  }
+  return obj;
+}
+
+// ---------------------------------------------------------------------------
+// Home Graph API Types
+// ---------------------------------------------------------------------------
+export interface V2Component {
+  id: number;
+  homeId: number;
+  systemId: number;
+  name: string;
+  componentType?: string | null;
+  material?: string | null;
+  installYear?: number | null;
+  condition?: string | null;
+  notes?: string | null;
+  photos?: string | null;
+  provenanceSource?: string | null;
+  provenanceConfidence?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface V2Warranty {
+  id: number;
+  homeId: number;
+  systemId?: number | null;
+  componentId?: number | null;
+  warrantyProvider?: string | null;
+  warrantyType?: string | null;
+  coverageSummary?: string | null;
+  startDate?: string | null;
+  expiryDate?: string | null;
+  isTransferable?: boolean;
+  documentId?: number | null;
+  notes?: string | null;
+  provenanceSource?: string | null;
+  provenanceConfidence?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface V2Permit {
+  id: number;
+  homeId: number;
+  systemId?: number | null;
+  permitNumber?: string | null;
+  permitType?: string | null;
+  issuedDate?: string | null;
+  status?: string | null;
+  issuingAuthority?: string | null;
+  description?: string | null;
+  provenanceSource?: string | null;
+  createdAt?: string;
+}
+
+export interface V2Repair {
+  id: number;
+  homeId: number;
+  systemId?: number | null;
+  componentId?: number | null;
+  taskId?: number | null;
+  contractorId?: number | null;
+  title: string;
+  description?: string | null;
+  repairDate?: string | null;
+  cost?: number | null;
+  partsUsed?: string | null;
+  outcome?: string | null;
+  provenanceSource?: string | null;
+  createdAt?: string;
+}
+
+export interface V2Replacement {
+  id: number;
+  homeId: number;
+  systemId?: number | null;
+  replacedSystemName?: string | null;
+  replacementDate?: string | null;
+  cost?: number | null;
+  reason?: string | null;
+  provenanceSource?: string | null;
+  createdAt?: string;
+}
+
+export interface V2Recommendation {
+  id: number;
+  homeId: number;
+  systemId?: number | null;
+  source: string;
+  title: string;
+  description?: string | null;
+  urgency?: string | null;
+  confidence?: number | null;
+  rationale?: string | null;
+  estimatedCost?: string | null;
+  status: string;
+  taskId?: number | null;
+  createdAt?: string;
+}
+
+export interface V2TimelineEvent {
+  id: number;
+  homeId: number;
+  eventDate: string;
+  category: string;
+  title: string;
+  description?: string | null;
+  icon?: string | null;
+  entityType?: string | null;
+  entityId?: number | null;
+  cost?: number | null;
+  provenanceSource?: string | null;
+  metadata?: string | null;
+  createdAt?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Components API (v2)
+// ---------------------------------------------------------------------------
+export async function getComponents(systemId: number | string): Promise<V2Component[]> {
+  const response = await fetch(`/v2/systems/${systemId}/components`);
+  const data = await handleResponse<any[]>(response);
+  return snakeToCamel(data);
+}
+
+export async function createComponent(systemId: number | string, data: Partial<V2Component>): Promise<V2Component> {
+  const response = await fetch(`/v2/systems/${systemId}/components`, {
+    method: "POST",
+    headers: v2Headers(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse<V2Component>(response);
+}
+
+export async function updateComponent(id: number | string, data: Partial<V2Component>): Promise<V2Component> {
+  const response = await fetch(`/v2/components/${id}`, {
+    method: "PUT",
+    headers: v2Headers(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse<V2Component>(response);
+}
+
+export async function deleteComponent(id: number | string): Promise<void> {
+  const response = await fetch(`/v2/components/${id}`, {
+    method: "DELETE",
+    headers: v2Headers(),
+  });
+  return handleResponse<void>(response);
+}
+
+// ---------------------------------------------------------------------------
+// Warranties API (v2)
+// ---------------------------------------------------------------------------
+export async function getWarranties(homeId: number | string): Promise<V2Warranty[]> {
+  const response = await fetch(`/v2/homes/${homeId}/warranties`);
+  const data = await handleResponse<any[]>(response);
+  return snakeToCamel(data);
+}
+
+export async function createWarranty(homeId: number | string, data: Partial<V2Warranty>): Promise<V2Warranty> {
+  const response = await fetch(`/v2/homes/${homeId}/warranties`, {
+    method: "POST",
+    headers: v2Headers(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse<V2Warranty>(response);
+}
+
+export async function updateWarranty(id: number | string, data: Partial<V2Warranty>): Promise<V2Warranty> {
+  const response = await fetch(`/v2/warranties/${id}`, {
+    method: "PUT",
+    headers: v2Headers(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse<V2Warranty>(response);
+}
+
+export async function deleteWarranty(id: number | string): Promise<void> {
+  const response = await fetch(`/v2/warranties/${id}`, {
+    method: "DELETE",
+    headers: v2Headers(),
+  });
+  return handleResponse<void>(response);
+}
+
+// ---------------------------------------------------------------------------
+// Permits API (v2)
+// ---------------------------------------------------------------------------
+export async function getPermits(homeId: number | string): Promise<V2Permit[]> {
+  const response = await fetch(`/v2/homes/${homeId}/permits`);
+  const data = await handleResponse<any[]>(response);
+  return snakeToCamel(data);
+}
+
+export async function createPermit(homeId: number | string, data: Partial<V2Permit>): Promise<V2Permit> {
+  const response = await fetch(`/v2/homes/${homeId}/permits`, {
+    method: "POST",
+    headers: v2Headers(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse<V2Permit>(response);
+}
+
+// ---------------------------------------------------------------------------
+// Repairs API (v2)
+// ---------------------------------------------------------------------------
+export async function getRepairs(homeId: number | string): Promise<V2Repair[]> {
+  const response = await fetch(`/v2/homes/${homeId}/repairs`);
+  const data = await handleResponse<any[]>(response);
+  return snakeToCamel(data);
+}
+
+export async function createRepair(homeId: number | string, data: Partial<V2Repair>): Promise<V2Repair> {
+  const response = await fetch(`/v2/homes/${homeId}/repairs`, {
+    method: "POST",
+    headers: v2Headers(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse<V2Repair>(response);
+}
+
+// ---------------------------------------------------------------------------
+// Replacements API (v2)
+// ---------------------------------------------------------------------------
+export async function getReplacements(homeId: number | string): Promise<V2Replacement[]> {
+  const response = await fetch(`/v2/homes/${homeId}/replacements`);
+  const data = await handleResponse<any[]>(response);
+  return snakeToCamel(data);
+}
+
+export async function createReplacement(homeId: number | string, data: Partial<V2Replacement>): Promise<V2Replacement> {
+  const response = await fetch(`/v2/homes/${homeId}/replacements`, {
+    method: "POST",
+    headers: v2Headers(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse<V2Replacement>(response);
+}
+
+// ---------------------------------------------------------------------------
+// Recommendations API (v2)
+// ---------------------------------------------------------------------------
+export async function getRecommendations(homeId: number | string): Promise<V2Recommendation[]> {
+  const response = await fetch(`/v2/homes/${homeId}/recommendations`);
+  const data = await handleResponse<any[]>(response);
+  return snakeToCamel(data);
+}
+
+export async function acceptRecommendation(id: number | string, data?: { createTask?: boolean }): Promise<V2Recommendation> {
+  const response = await fetch(`/v2/recommendations/${id}/accept`, {
+    method: "POST",
+    headers: v2Headers(),
+    body: JSON.stringify(data || {}),
+  });
+  return handleResponse<V2Recommendation>(response);
+}
+
+export async function dismissRecommendation(id: number | string): Promise<V2Recommendation> {
+  const response = await fetch(`/v2/recommendations/${id}/dismiss`, {
+    method: "POST",
+    headers: v2Headers(),
+    body: JSON.stringify({}),
+  });
+  return handleResponse<V2Recommendation>(response);
+}
+
+// ---------------------------------------------------------------------------
+// Timeline API (v2)
+// ---------------------------------------------------------------------------
+export async function getTimeline(homeId: number | string, params?: {
+  category?: string;
+  page?: number;
+  limit?: number;
+}): Promise<V2TimelineEvent[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.category) searchParams.set("category", params.category);
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  const qs = searchParams.toString();
+  const response = await fetch(`/v2/homes/${homeId}/timeline${qs ? `?${qs}` : ""}`);
+  const result = await handleResponse<{ events: any[]; pagination: any }>(response);
+  // Map snake_case API response to camelCase interface
+  return (result.events || []).map((e: any) => ({
+    id: e.id,
+    homeId: e.home_id,
+    eventDate: e.event_date,
+    category: e.category,
+    title: e.title,
+    description: e.description,
+    icon: e.icon,
+    entityType: e.entity_type,
+    entityId: e.entity_id,
+    cost: e.cost,
+    provenanceSource: e.provenance_source,
+    metadata: e.metadata,
+    createdAt: e.created_at,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Intelligence API Types
+// ---------------------------------------------------------------------------
+
+export interface SystemInsight {
+  systemId: number;
+  systemType: string;
+  systemName: string;
+  conditionStatus: "good" | "watch" | "at-risk";
+  riskLevel: number;
+  remainingLifeEstimateMonths: number | null;
+  estimatedAge: number | null;
+  expectedLifespanYears: number | null;
+  keyFindings: string[];
+  recommendedActions: string[];
+  missingDataSignals: string[];
+  confidenceScore: number;
+}
+
+export interface HomeInsight {
+  overallHealthScore: number;
+  highRiskSystems: Array<{ systemId: number; name: string; riskLevel: number; status: string }>;
+  upcomingMaintenance: Array<{ systemId: number; systemName: string; action: string; urgency: string }>;
+  missingCriticalData: Array<{ systemId: number; systemName: string; signal: string }>;
+  summaryNarrative: string;
+}
+
+export interface SystemPrediction {
+  failureProbability12Months: number;
+  failureProbability24Months: number;
+  estimatedTimeToFailureMonths: number | null;
+  severityIfFailure: "critical" | "major" | "moderate";
+  confidenceScore: number;
+}
+
+export interface SystemCostProjection {
+  repairCostRange: [number, number];
+  replacementCostRange: [number, number];
+}
+
+export interface InactionInsight {
+  riskSummary: string;
+  probabilityOfCostEvent: number;
+  estimatedFinancialImpact: [number, number];
+  recommendedActionWindow: string;
+}
+
+export interface HomeForecast {
+  systemPredictions: Array<{
+    systemId: number;
+    systemName: string;
+    systemCategory: string;
+    prediction: SystemPrediction;
+    costProjection: SystemCostProjection;
+    inactionInsight: InactionInsight | null;
+  }>;
+  totalEstimatedCostRange12Months: [number, number];
+  totalEstimatedCostRange24Months: [number, number];
+  highestPriorityInterventions: Array<{
+    systemId: number;
+    systemName: string;
+    action: string;
+    urgency: string;
+    estimatedCost: string;
+  }>;
+}
+
+export interface HomeIntelligenceResponse {
+  insight: HomeInsight;
+  forecast: HomeForecast;
+  systems: SystemInsight[];
+}
+
+export interface SystemInsightResponse {
+  insight: SystemInsight;
+  prediction: SystemPrediction;
+  costProjection: SystemCostProjection;
+  inactionInsight: InactionInsight | null;
+}
+
+// ---------------------------------------------------------------------------
+// Intelligence API Functions
+// ---------------------------------------------------------------------------
+
+export async function getHomeIntelligence(homeId: number | string): Promise<HomeIntelligenceResponse> {
+  const response = await fetch(`/v2/homes/${homeId}/intelligence`, {
+    headers: v2Headers(),
+  });
+  return handleResponse<HomeIntelligenceResponse>(response);
+}
+
+export async function getSystemInsight(systemId: number | string): Promise<SystemInsightResponse> {
+  const response = await fetch(`/v2/systems/${systemId}/insight`, {
+    headers: v2Headers(),
+  });
+  return handleResponse<SystemInsightResponse>(response);
+}
+
+// ---------------------------------------------------------------------------
+// Outcome Learning API Types
+// ---------------------------------------------------------------------------
+
+export interface UserAction {
+  id: number;
+  home_id: number;
+  system_id: number | null;
+  related_recommendation_id: number | null;
+  related_task_id: number | null;
+  action_type: string;
+  action_date: string;
+  cost_actual: number | null;
+  contractor_id: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface OutcomeEvent {
+  id: number;
+  home_id: number;
+  system_id: number | null;
+  related_action_id: number | null;
+  outcome_type: string;
+  severity: string;
+  cost_impact: number | null;
+  description: string | null;
+  occurred_at: string;
+  created_at: string;
+}
+
+export interface HomeLearningProfile {
+  homeId: number;
+  behaviorPattern: "proactive" | "reactive" | "neglectful" | "unknown";
+  maintenanceComplianceRate: number;
+  averageResponseTimeDays: number | null;
+  riskAdjustmentFactor: number;
+  totalActions: number;
+  totalOutcomes: number;
+}
+
+export interface SystemReliabilityProfile {
+  systemType: string;
+  sampleSize: number;
+  averageFailureAge: number | null;
+  maintenanceImpactScore: number;
+  variance: number;
+  confidence: number;
+}
+
+export interface LearningSummary {
+  homeProfile: HomeLearningProfile;
+  systemReliability: SystemReliabilityProfile[];
+  adjustments: Array<{
+    parameterKey: string;
+    parameterValue: number;
+    reason: string;
+    dataPoints: number;
+    confidence: number;
+  }>;
+  predictionAccuracy: {
+    totalPredictions: number;
+    accurateCount: number;
+    accuracyRate: number;
+    falsePositiveRate: number;
+  };
+  narrative: string;
+}
+
+// ---------------------------------------------------------------------------
+// Outcome Learning API Functions
+// ---------------------------------------------------------------------------
+
+export async function recordAction(homeId: number | string, data: {
+  systemId?: number;
+  relatedRecommendationId?: number;
+  relatedTaskId?: number;
+  actionType: string;
+  costActual?: number;
+  contractorId?: number;
+  notes?: string;
+}): Promise<UserAction> {
+  const response = await fetch(`/v2/homes/${homeId}/actions`, {
+    method: "POST",
+    headers: v2Headers(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse<UserAction>(response);
+}
+
+export async function recordOutcome(homeId: number | string, data: {
+  systemId?: number;
+  relatedActionId?: number;
+  outcomeType: string;
+  severity?: string;
+  costImpact?: number;
+  description?: string;
+}): Promise<OutcomeEvent> {
+  const response = await fetch(`/v2/homes/${homeId}/outcomes`, {
+    method: "POST",
+    headers: v2Headers(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse<OutcomeEvent>(response);
+}
+
+export async function getActions(homeId: number | string): Promise<UserAction[]> {
+  const response = await fetch(`/v2/homes/${homeId}/actions`, {
+    headers: v2Headers(),
+  });
+  return handleResponse<UserAction[]>(response);
+}
+
+export async function getOutcomes(homeId: number | string): Promise<OutcomeEvent[]> {
+  const response = await fetch(`/v2/homes/${homeId}/outcomes`, {
+    headers: v2Headers(),
+  });
+  return handleResponse<OutcomeEvent[]>(response);
+}
+
+export async function getLearningSummary(homeId: number | string): Promise<LearningSummary> {
+  const response = await fetch(`/v2/homes/${homeId}/learning-summary`, {
+    headers: v2Headers(),
+  });
+  return handleResponse<LearningSummary>(response);
+}
+
+// ---------------------------------------------------------------------------
+// Calendar feed
+// ---------------------------------------------------------------------------
+
+export interface CalendarFeed {
+  url: string;
+  webcalUrl: string;
+  token: string;
+}
+
+export async function getCalendarFeed(): Promise<CalendarFeed> {
+  const response = await fetch("/api/me/calendar-feed", {
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+  return handleResponse<CalendarFeed>(response);
+}
+
+// ---------------------------------------------------------------------------
+// Chat sessions
+// ---------------------------------------------------------------------------
+
+export interface ChatSession {
+  id: string;
+  homeId: string;
+  title: string;
+  messageCount: number;
+  createdAt: string;
+}
+
+export interface V2ChatMessage {
+  id: string;
+  homeId: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+}
+
+export async function getChatSessions(homeId: number | string): Promise<ChatSession[]> {
+  const response = await fetch(`/v2/homes/${homeId}/chat/sessions`, {
+    headers: v2Headers(),
+  });
+  return handleResponse<ChatSession[]>(response);
+}
+
+export async function createChatSession(homeId: number | string): Promise<{ sessionId: string }> {
+  const response = await fetch(`/v2/chat/sessions`, {
+    method: "POST",
+    headers: v2Headers(),
+    body: JSON.stringify({ homeId }),
+  });
+  return handleResponse<{ sessionId: string }>(response);
+}
+
+export async function getChatSession(sessionId: string): Promise<{ session: ChatSession; messages: V2ChatMessage[] }> {
+  const response = await fetch(`/v2/chat/sessions/${sessionId}`, {
+    headers: v2Headers(),
+  });
+  return handleResponse<{ session: ChatSession; messages: V2ChatMessage[] }>(response);
+}
+
+export async function updateChatSessionTitle(sessionId: string, title: string): Promise<{ sessionId: string; title: string }> {
+  const response = await fetch(`/v2/chat/sessions/${sessionId}`, {
+    method: "PATCH",
+    headers: v2Headers(),
+    body: JSON.stringify({ title }),
+  });
+  return handleResponse<{ sessionId: string; title: string }>(response);
 }

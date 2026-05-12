@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { isAuthenticated } from "./replit_integrations/auth";
+import { requireUnderLimit, requireUnderSystemsLimit } from "./lib/plans";
 import { logInfo, logError, logWarn } from "./lib/logger";
 import { authStorage } from "./replit_integrations/auth/storage";
 import multer from "multer";
@@ -151,7 +152,7 @@ export async function registerRoutes(
     }
   });
   
-  app.post("/api/home", isAuthenticated, async (req: any, res) => {
+  app.post("/api/home", isAuthenticated, requireUnderLimit("homes"), async (req: any, res) => {
     try {
       const userId = req.user.id;
       const homeData = insertHomeSchema.parse({ ...req.body, userId }) as unknown as InsertHome;
@@ -192,7 +193,7 @@ export async function registerRoutes(
     }
   });
   
-  app.post("/api/home/:homeId/systems", isAuthenticated, async (req: any, res) => {
+  app.post("/api/home/:homeId/systems", isAuthenticated, requireUnderSystemsLimit(), async (req: any, res) => {
     try {
       const homeId = validateIntParam(req.params.homeId);
       if (homeId === null) return res.status(400).json({ message: "Invalid home ID", code: "VALIDATION_ERROR" });
@@ -363,7 +364,35 @@ export async function registerRoutes(
     },
   });
 
-  app.post("/api/home/:homeId/analyze-document", isAuthenticated, upload.single("document"), async (req: any, res) => {
+  /**
+   * Best-effort magic-byte sniff. `fileFilter` only sees the client-asserted
+   * mimetype (easy to spoof: any .exe can be uploaded as application/pdf).
+   * Checking the first few bytes in the buffer lets us reject obvious
+   * mismatches — PDFs must start with "%PDF-", text types should be valid
+   * UTF-8 without null bytes. Not a full format validator, just a cheap
+   * sanity check before we feed the buffer into the PDF extractor.
+   */
+  function validateDocumentMagicBytes(buf: Buffer, mimetype: string): string | null {
+    if (!buf || buf.length === 0) return "Empty file";
+    if (mimetype === "application/pdf") {
+      // PDF spec: file must start with %PDF-<version> within first 1024 bytes.
+      // We check the first 5 bytes for strictness — real PDFs always start here.
+      const header = buf.subarray(0, 5).toString("ascii");
+      if (header !== "%PDF-") {
+        return "File claims to be a PDF but does not start with %PDF- magic bytes";
+      }
+      return null;
+    }
+    // text/* types: reject files containing NUL bytes in the first 4KB — that's
+    // a reliable signal of binary content masquerading as text.
+    const sample = buf.subarray(0, Math.min(buf.length, 4096));
+    if (sample.includes(0x00)) {
+      return "File claims to be text but contains binary NUL bytes";
+    }
+    return null;
+  }
+
+  app.post("/api/home/:homeId/analyze-document", isAuthenticated, requireUnderLimit("docAnalyses"), upload.single("document"), async (req: any, res) => {
     try {
       const homeId = validateIntParam(req.params.homeId);
       if (homeId === null) return res.status(400).json({ message: "Invalid home ID", code: "VALIDATION_ERROR" });
@@ -374,6 +403,11 @@ export async function registerRoutes(
 
       if (!req.file) {
         return res.status(400).json({ message: "No document file provided", code: "VALIDATION_ERROR" });
+      }
+
+      const magicBytesError = validateDocumentMagicBytes(req.file.buffer, req.file.mimetype);
+      if (magicBytesError) {
+        return res.status(400).json({ message: magicBytesError, code: "VALIDATION_ERROR" });
       }
 
       const text = await extractTextFromDocument(req.file.buffer, req.file.mimetype);
@@ -443,7 +477,10 @@ export async function registerRoutes(
           .join("\n");
         const fullDescription = [task.description, attrSummary].filter(Boolean).join("\n\n");
 
-        const result = await storage.createMaintenanceTask({
+        // storage exposes `createTask` (not `createMaintenanceTask`) — the
+        // name mismatch was a stale import that TS was reporting as an error
+        // on every build. Same underlying method, same shape.
+        const result = await storage.createTask({
           homeId,
           title: sanitizeText(task.title),
           description: fullDescription ? sanitizeText(fullDescription) : null,
@@ -857,36 +894,88 @@ Only return the JSON object, no other text.`;
       if (!report) {
         return res.status(404).json({ message: "Report not found", code: "NOT_FOUND" });
       }
-      
+
       await storage.updateInspectionReport(id, { status: "analyzing" });
-      
-      setTimeout(async () => {
+      res.json({ message: "Analysis started", status: "analyzing" });
+
+      // Run analysis in background — response already sent above
+      (async () => {
         try {
-          const sampleFindings = [
-            { reportId: id, category: "Roof", title: "Shingle wear observed", description: "Minor wear on south-facing shingles", severity: "minor", location: "Roof - South side", estimatedCost: "$500-1,500", urgency: "later", diyLevel: "Pro-Only" },
-            { reportId: id, category: "HVAC", title: "Filter replacement needed", description: "HVAC filter is dirty and should be replaced", severity: "minor", location: "HVAC Unit", estimatedCost: "$20-50", urgency: "soon", diyLevel: "DIY-Safe" },
-            { reportId: id, category: "Plumbing", title: "Minor leak under kitchen sink", description: "Small drip from P-trap connection", severity: "moderate", location: "Kitchen", estimatedCost: "$50-150", urgency: "soon", diyLevel: "Caution" },
-          ];
-          
-          for (const finding of sampleFindings) {
-            await storage.createFinding(finding as any);
+          // 1. Fetch the uploaded file from object storage
+          let buffer: Buffer | null = null;
+          let mimeType = report.fileType || "application/pdf";
+
+          if (report.objectPath) {
+            try {
+              const { objectStorageClient, ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+              const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+              const svc = new ObjectStorageService();
+              const entityId = report.objectPath.replace(/^\/objects\//, "");
+              const key = `${svc.getPrivateObjectDir()}/${entityId}`;
+              const resp = await objectStorageClient.send(
+                new GetObjectCommand({ Bucket: svc.getBucket(), Key: key })
+              );
+              if (resp.Body) {
+                buffer = Buffer.from(await (resp.Body as any).transformToByteArray());
+              }
+            } catch (fetchErr) {
+              logWarn("reports.analyze", `Could not fetch report file, proceeding without content: ${(fetchErr as Error).message}`);
+            }
           }
-          
-          await storage.updateInspectionReport(id, { 
+
+          // 2. Extract text — fall back to empty string so LLM still runs
+          let documentText = "";
+          if (buffer) {
+            try {
+              documentText = await extractTextFromDocument(buffer, mimeType);
+            } catch (parseErr) {
+              logWarn("reports.analyze", `Could not parse report file: ${(parseErr as Error).message}`);
+            }
+          }
+
+          // 3. Analyze with LLM (uses home context for better results)
+          const analysis = await analyzeDocumentWithLLM(
+            documentText || "[No readable text could be extracted from the uploaded file.]",
+            report.homeId
+          );
+
+          // 4. Map urgency → severity for the findings table
+          const urgencyToSeverity: Record<string, string> = {
+            now: "critical",
+            soon: "major",
+            later: "moderate",
+            monitor: "minor",
+          };
+
+          // 5. Persist findings
+          for (const issue of analysis.issues) {
+            await storage.createFinding({
+              reportId: id,
+              category: issue.category || null,
+              title: issue.title,
+              description: issue.description || null,
+              severity: urgencyToSeverity[issue.urgency || "later"] || "moderate",
+              location: null,
+              estimatedCost: issue.estimatedCost || null,
+              urgency: issue.urgency || "later",
+              diyLevel: issue.diyLevel || "Caution",
+            } as any);
+          }
+
+          // 6. Mark report done
+          await storage.updateInspectionReport(id, {
             status: "analyzed",
-            summary: "Inspection analysis complete. 3 issues identified - 1 moderate, 2 minor. Estimated total repair cost: $570-1,700.",
-            issuesFound: sampleFindings.length,
+            summary: `Inspection analysis complete. ${analysis.issues.length} issue${analysis.issues.length === 1 ? "" : "s"} identified.`,
+            issuesFound: analysis.issues.length,
             analyzedAt: new Date(),
           } as any);
-          
-          logInfo("reports.analyze", "Report analyzed successfully", { reportId: id, findingsCount: sampleFindings.length });
+
+          logInfo("reports.analyze", "Report analyzed successfully", { reportId: id, findingsCount: analysis.issues.length });
         } catch (err) {
           logError("reports.analyze.background", err);
           await storage.updateInspectionReport(id, { status: "error" });
         }
-      }, 2000);
-      
-      res.json({ message: "Analysis started", status: "analyzing" });
+      })();
     } catch (error) {
       return handleApiError(res, "reports.analyze", error);
     }

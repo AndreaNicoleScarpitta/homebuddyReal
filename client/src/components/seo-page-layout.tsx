@@ -22,7 +22,7 @@ interface SeoPageLayoutProps {
 }
 
 export function SeoPageLayout({ children, slug, title, description, faq, datePublished = "2026-03-29", author = "Drew" }: SeoPageLayoutProps) {
-  const canonicalUrl = `https://home-buddy.replit.app${typeof window !== "undefined" ? window.location.pathname : ""}`;
+  const canonicalUrl = `https://homebuddy.space${typeof window !== "undefined" ? window.location.pathname : ""}`;
 
   useEffect(() => {
     trackSlugPageView(slug);
@@ -55,13 +55,13 @@ export function SeoPageLayout({ children, slug, title, description, faq, datePub
     publisher: {
       "@type": "Organization",
       name: "Home Buddy",
-      url: "https://home-buddy.replit.app",
-      logo: { "@type": "ImageObject", url: "https://home-buddy.replit.app/images/home-buddy-icon.png" },
+      url: "https://homebuddy.space",
+      logo: { "@type": "ImageObject", url: "https://homebuddy.space/images/home-buddy-icon.png" },
     },
     datePublished,
     dateModified: datePublished,
     mainEntityOfPage: { "@type": "WebPage", "@id": canonicalUrl },
-    image: "https://home-buddy.replit.app/opengraph.jpg",
+    image: "https://homebuddy.space/opengraph.jpg",
   };
 
   // BreadcrumbList schema
@@ -69,8 +69,8 @@ export function SeoPageLayout({ children, slug, title, description, faq, datePub
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: "https://home-buddy.replit.app/" },
-      { "@type": "ListItem", position: 2, name: "Guides", item: "https://home-buddy.replit.app/guides" },
+      { "@type": "ListItem", position: 1, name: "Home", item: "https://homebuddy.space/" },
+      { "@type": "ListItem", position: 2, name: "Guides", item: "https://homebuddy.space/guides" },
       { "@type": "ListItem", position: 3, name: title, item: canonicalUrl },
     ],
   };

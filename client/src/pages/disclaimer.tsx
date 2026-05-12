@@ -34,6 +34,11 @@ export default function Disclaimer() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Read the return destination from query params (e.g. ?from=document-analysis)
+  const returnTo = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("from")
+    : null;
+
   useEffect(() => { trackSlugPageView(PAGE_SLUGS.disclaimer); }, []);
 
   const acceptMutation = useMutation({
@@ -46,7 +51,7 @@ export default function Disclaimer() {
         title: "Disclaimer accepted",
         description: "You can now use file upload and analysis features.",
       });
-      navigate("/document-analysis");
+      navigate(returnTo ? `/${returnTo}` : "/document-analysis");
     },
     onError: () => {
       toast({
@@ -60,6 +65,15 @@ export default function Disclaimer() {
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-6 pb-28 md:pb-6">
+        {returnTo && (
+          <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3 flex items-start gap-2.5">
+            <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+            <p className="text-sm text-blue-800 dark:text-blue-300">
+              <strong>Document Analysis requires accepting this notice.</strong>{" "}
+              Once you accept, you'll be taken straight back to upload your files.
+            </p>
+          </div>
+        )}
         <header>
           <div className="flex items-center gap-2 mb-1">
             <ShieldAlert className="h-6 w-6 text-primary" />

@@ -47,6 +47,9 @@ export const AssistantActionStates = [
 ] as const;
 export type AssistantActionState = (typeof AssistantActionStates)[number];
 
+export const RecommendationStates = ["open", "accepted", "dismissed", "completed"] as const;
+export type RecommendationState = (typeof RecommendationStates)[number];
+
 // ---------------------------------------------------------------------------
 // Transition maps — source state → set of allowed event types
 // ---------------------------------------------------------------------------
@@ -135,6 +138,12 @@ const assistantActionTransitions: Record<string, Set<string>> = {
   ]),
 };
 
+const recommendationTransitions: Record<string, Set<string>> = {
+  open: new Set([EventTypes.RecommendationAccepted, EventTypes.RecommendationDismissed]),
+  accepted: new Set([]),
+  dismissed: new Set([]),
+};
+
 // ---------------------------------------------------------------------------
 // Aggregate type → transition map registry
 // ---------------------------------------------------------------------------
@@ -144,6 +153,7 @@ const transitionRegistry: Record<string, Record<string, Set<string>>> = {
   inspection_report: reportTransitions,
   finding: findingTransitions,
   assistant_action: assistantActionTransitions,
+  recommendation: recommendationTransitions,
 };
 
 // Event types that create new aggregates (version 0 → 1) and bypass guards
@@ -151,6 +161,7 @@ const creationEvents = new Set<string>([
   EventTypes.TaskCreated,
   EventTypes.InspectionReportUploaded,
   EventTypes.AssistantActionProposed,
+  EventTypes.RecommendationCreated,
 ]);
 
 // Aggregates without lifecycle state machines (additive only)
@@ -159,6 +170,8 @@ const statelessAggregates = new Set<string>([
   "system",
   "chat_session",
   "notification_pref",
+  "component",
+  "warranty",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -269,6 +282,7 @@ export function getAllowedTransitions(
       if (aggregateType === "task") return e === EventTypes.TaskCreated;
       if (aggregateType === "inspection_report") return e === EventTypes.InspectionReportUploaded;
       if (aggregateType === "assistant_action") return e === EventTypes.AssistantActionProposed;
+      if (aggregateType === "recommendation") return e === EventTypes.RecommendationCreated;
       return false;
     });
   }

@@ -143,7 +143,7 @@ async function processUserDigest(
   const dueTodayTasks: TaskRow[] = [];
   const dueSoonTasks: TaskRow[] = [];
 
-  for (const t of tasks.rows as TaskRow[]) {
+  for (const t of tasks.rows as unknown as TaskRow[]) {
     if (!t.due_at) continue;
     const dueDate = new Date(t.due_at);
     if (dueDate < todayStart) {

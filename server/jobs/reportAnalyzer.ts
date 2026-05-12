@@ -55,19 +55,28 @@ async function fetchAndAnalyzeReport(storageRef: string): Promise<AnalysisResult
   let textContent = "";
   if (storageRef) {
     try {
-      const { objectStorageClient } = await import("../replit_integrations/object_storage/objectStorage");
-      const objectName = storageRef.replace(/^\/objects\//, "");
-      const parts = objectName.split("/");
-      const bucketName = parts[0];
-      const filePath = parts.slice(1).join("/");
-      const bucket = objectStorageClient.bucket(bucketName);
-      const [buffer] = await bucket.file(filePath).download();
+      const { objectStorageClient, ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+      const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+      const svc = new ObjectStorageService();
+      const entityId = storageRef.replace(/^\/objects\//, "");
+      const key = `${svc.getPrivateObjectDir()}/${entityId}`;
+      const resp = await objectStorageClient.send(new GetObjectCommand({ Bucket: svc.getBucket(), Key: key }));
+      const buffer = resp.Body ? Buffer.from(await (resp.Body as any).transformToByteArray()) : null;
       if (buffer) {
-        const isPdf = objectName.toLowerCase().endsWith(".pdf") || storageRef.includes("pdf");
+        const isPdf = key.toLowerCase().endsWith(".pdf") || storageRef.toLowerCase().includes("pdf");
+        const isText = !isPdf && (key.toLowerCase().endsWith(".txt") || key.toLowerCase().endsWith(".csv") || key.toLowerCase().endsWith(".md"));
         if (isPdf) {
-          textContent = buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r\t]/g, " ").substring(0, 8000);
+          try {
+            const { extractTextFromDocument } = await import("../lib/document-analysis");
+            textContent = await extractTextFromDocument(buffer, "application/pdf");
+          } catch {
+            // Fallback: strip non-printable bytes — better than nothing
+            textContent = buffer.toString("latin1").replace(/[^\x20-\x7E\n\r\t]/g, " ").substring(0, 8000);
+          }
+        } else if (isText) {
+          textContent = buffer.toString("utf-8").substring(0, 15000);
         } else {
-          textContent = `[Image file uploaded: ${objectName}]`;
+          textContent = `[Binary file uploaded: ${key}]`;
         }
       }
     } catch {

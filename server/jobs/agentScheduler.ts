@@ -6,7 +6,7 @@
  * the last 50 seconds, fire it.
  *
  * Supports standard 5-field cron: "minute hour day-of-month month day-of-week"
- * Wildcards (*), lists (1,2,3), and ranges (1-5) supported. No step values (*/5).
+ * Wildcards, lists (1,2,3), and ranges (1-5) supported. No step values.
  */
 
 import { db } from "../db";

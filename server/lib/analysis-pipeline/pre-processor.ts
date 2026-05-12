@@ -48,13 +48,15 @@ export async function runPreProcessor(
 ): Promise<PreProcessorOutput> {
   const openai = new OpenAI(openaiConfig);
 
+  // Guard on actual document content length (not the header-padded combined text)
+  const totalContentLength = texts.reduce((sum, t) => sum + t.text.trim().length, 0);
+  if (totalContentLength < 10) {
+    return emptyOutput();
+  }
+
   const combinedText = texts
     .map((t, i) => `--- FILE ${i + 1}: ${t.fileName} (${t.fileType}) ---\n${t.text.slice(0, 12000)}`)
     .join("\n\n");
-
-  if (combinedText.trim().length < 10) {
-    return emptyOutput();
-  }
 
   logInfo("pre-processor", "Running pre-processor", {
     fileCount: texts.length,

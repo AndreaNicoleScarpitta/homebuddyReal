@@ -59,11 +59,11 @@
 }
 
 :root {
-  /* Modern Utility Palette - Construction Orange & Industrial Grey */
-  --background: 0 0% 100%;
+  /* Modern Utility Palette - Construction Orange, Warm Stone, Industrial Grey */
+  --background: 30 20% 97%; /* Warm stone — NOT pure white */
   --foreground: 220 15% 15%; /* Soft Black */
 
-  --card: 0 0% 100%;
+  --card: 0 0% 100%; /* Cards stay white for contrast against stone bg */
   --card-foreground: 220 15% 15%;
 
   --popover: 0 0% 100%;
@@ -72,11 +72,11 @@
   --primary: 25 95% 53%; /* Vibrant Construction Orange */
   --primary-foreground: 0 0% 98%;
 
-  --secondary: 210 15% 96%; /* Light Industrial Grey */
+  --secondary: 25 15% 94%; /* Warm grey (tertiary — warm not cold) */
   --secondary-foreground: 220 15% 15%;
 
-  --muted: 210 15% 96%;
-  --muted-foreground: 215 10% 45%;
+  --muted: 25 12% 94%; /* Warm muted — matches the warm palette */
+  --muted-foreground: 220 10% 45%;
 
   --accent: 25 95% 96%; /* Very light orange tint */
   --accent-foreground: 25 95% 45%;
@@ -84,8 +84,8 @@
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
 
-  --border: 220 13% 91%;
-  --input: 220 13% 91%;
+  --border: 25 10% 90%; /* Warm border instead of cold grey */
+  --input: 25 10% 90%;
   --ring: 25 95% 53%;
 
   --radius: 0.75rem;
@@ -96,13 +96,13 @@
   --chart-4: 45 90% 55%; /* Yellow (Warning) */
   --chart-5: 0 80% 60%; /* Red (Danger) */
 
-  --sidebar: 210 20% 98%;
+  --sidebar: 30 15% 98%; /* Warm sidebar — subtle distinction from content */
   --sidebar-foreground: 220 15% 15%;
   --sidebar-primary: 25 95% 53%;
   --sidebar-primary-foreground: 0 0% 98%;
-  --sidebar-accent: 210 15% 94%;
+  --sidebar-accent: 25 12% 93%;
   --sidebar-accent-foreground: 220 15% 15%;
-  --sidebar-border: 220 13% 91%;
+  --sidebar-border: 25 10% 90%;
   --sidebar-ring: 25 95% 53%;
 }
 

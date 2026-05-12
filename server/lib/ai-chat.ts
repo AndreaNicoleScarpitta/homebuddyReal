@@ -5,6 +5,9 @@ import { logInfo, logError } from "./logger";
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  // 60s ceiling so a hung upstream can't hold a request worker indefinitely.
+  timeout: 60_000,
+  maxRetries: 1,
 });
 
 const SYSTEM_PROMPT = `You are "Home Buddy Assistant," a calm, trustworthy home-repair planning helper for homeowners age 27-45.

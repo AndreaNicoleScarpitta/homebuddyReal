@@ -1,4 +1,4 @@
-import { Calendar, MessageSquare, ArrowRight, Sparkles, FileText, Scan, CalendarClock, Shield, Heart, Zap, ChevronRight, CheckCircle2 } from "lucide-react";
+import { Calendar, MessageSquare, ArrowRight, Sparkles, FileText, Scan, CalendarClock, Shield, Heart, Zap, ChevronRight, CheckCircle2, RefreshCw, Smartphone } from "lucide-react";
 import { motion } from "framer-motion";
 import { DashboardDemo, ChatDemo, DocumentAnalysisDemo, TaskGenerationDemo } from "@/components/landing-demos";
 import { trackEvent, trackSlugPageView } from "@/lib/analytics";
@@ -86,8 +86,8 @@ export default function Landing() {
           <div className="container mx-auto px-6 py-20">
             <div className="grid lg:grid-cols-2 gap-16 items-center">
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 transition={{ duration: 0.5 }}
                 className="space-y-8"
               >
@@ -120,8 +120,8 @@ export default function Landing() {
               </motion.div>
 
               <motion.div
-                initial={{ opacity: 0, x: 40 }}
-                animate={{ opacity: 1, x: 0 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 transition={{ duration: 0.7, delay: 0.2 }}
                 className="hidden lg:block"
               >
@@ -137,8 +137,8 @@ export default function Landing() {
               {stats.map((stat, i) => (
                 <motion.div
                   key={i}
-                  initial={{ opacity: 0, y: 10 }}
-                  whileInView={{ opacity: 1, y: 0 }}
+                  initial={{ opacity: 0 }}
+                  whileInView={{ opacity: 1 }}
                   transition={{ delay: i * 0.1 }}
                   viewport={{ once: true }}
                   className="text-center"
@@ -154,8 +154,8 @@ export default function Landing() {
         <section className="py-24">
           <div className="container mx-auto px-6">
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               className="max-w-2xl mb-16"
             >
@@ -171,16 +171,16 @@ export default function Landing() {
 
             <div className="grid lg:grid-cols-2 gap-12 items-start">
               <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
                 viewport={{ once: true }}
               >
                 <DocumentAnalysisDemo />
               </motion.div>
 
               <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
                 transition={{ delay: 0.2 }}
                 viewport={{ once: true }}
                 className="space-y-6 lg:py-8"
@@ -208,8 +208,8 @@ export default function Landing() {
         <section className="py-24 bg-secondary/30">
           <div className="container mx-auto px-6">
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               className="max-w-2xl mb-16"
             >
@@ -225,8 +225,8 @@ export default function Landing() {
 
             <div className="grid lg:grid-cols-2 gap-12 items-start">
               <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
                 transition={{ delay: 0.2 }}
                 viewport={{ once: true }}
                 className="space-y-6 lg:py-8 order-2 lg:order-1"
@@ -249,8 +249,8 @@ export default function Landing() {
               </motion.div>
 
               <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
                 viewport={{ once: true }}
                 className="order-1 lg:order-2"
               >
@@ -260,11 +260,101 @@ export default function Landing() {
           </div>
         </section>
 
+        {/* ── Calendar Sync section ────────────────────────────────────────── */}
         <section className="py-24">
           <div className="container mx-auto px-6">
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              className="max-w-2xl mb-16"
+            >
+              <p className="text-sm font-medium text-primary mb-3 tracking-wide uppercase">Calendar Integration</p>
+              <h2 className="text-4xl font-heading font-bold text-foreground mb-4">
+                Your maintenance schedule,<br />
+                inside your calendar.
+              </h2>
+              <p className="text-lg text-muted-foreground leading-relaxed">
+                Subscribe once and your tasks appear in Google Calendar, Apple Calendar, or Outlook — automatically, alongside your dentist appointments. When a contractor is booked, it shows up as a timed event. No app-switching required.
+              </p>
+            </motion.div>
+
+            <div className="grid lg:grid-cols-2 gap-12 items-center">
+              <motion.div
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
+                viewport={{ once: true }}
+                className="space-y-6 lg:py-8"
+              >
+                {[
+                  { icon: CalendarClock, title: "One-time setup", desc: "Click Subscribe. Your entire maintenance schedule syncs to your calendar app instantly — no manual exports, ever." },
+                  { icon: RefreshCw, title: "Auto-updates every 6 hours", desc: "Set a due date on a new task and it appears in your calendar automatically. New tasks, completed tasks, contractor bookings — all reflected." },
+                  { icon: Smartphone, title: "Works on every platform", desc: "Google Calendar, Apple Calendar, Outlook, and any app that supports iCal subscriptions. One URL, any device." },
+                ].map((item, i) => (
+                  <div key={i} className="flex gap-4">
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <item.icon className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-heading font-bold text-foreground mb-1">{item.title}</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+
+              {/* Inline calendar subscribe mockup — no extra component needed */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+                viewport={{ once: true }}
+                className="rounded-2xl border bg-card p-6 shadow-xl shadow-black/5 space-y-3"
+              >
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Subscribe with your calendar app</p>
+                {[
+                  { name: "Google Calendar", sub: 'Opens in a new tab → click "Add"', bg: "#1a73e8", label: "G" },
+                  { name: "Apple Calendar", sub: "macOS / iOS — opens Calendar app", bg: "#ff3b30", label: "A" },
+                  { name: "Outlook", sub: "Outlook.com or Office 365", bg: "#0078d4", label: "O" },
+                ].map((platform) => (
+                  <div
+                    key={platform.name}
+                    className="flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 border-border bg-background"
+                  >
+                    <div
+                      className="w-9 h-9 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0"
+                      style={{ backgroundColor: platform.bg }}
+                    >
+                      {platform.label}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground text-sm">{platform.name}</p>
+                      <p className="text-xs text-muted-foreground">{platform.sub}</p>
+                    </div>
+                  </div>
+                ))}
+                <div className="pt-3 border-t">
+                  <p className="text-xs text-muted-foreground mb-2 font-medium">Or copy the URL for any other app</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-muted px-3 py-2 rounded-lg truncate font-mono text-muted-foreground">
+                      https://homebuddy.space/api/calendar/…
+                    </code>
+                    <div className="shrink-0 px-3 py-2 rounded-md border text-xs font-medium text-muted-foreground">
+                      Copy
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── "More than a to-do list" ─────────────────────────────────────── */}
+        <section className="py-24">
+          <div className="container mx-auto px-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               className="text-center mb-16"
             >
@@ -278,8 +368,8 @@ export default function Landing() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
               <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
                 transition={{ delay: 0 }}
                 viewport={{ once: true }}
               >
@@ -291,16 +381,15 @@ export default function Landing() {
                   <div>
                     <h3 className="font-heading font-bold text-foreground text-lg" data-testid="text-feature-assistant">
                       AI Assistant
-                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary align-middle">Coming Soon</span>
                     </h3>
-                    <p className="text-sm text-muted-foreground">Ask anything. Get real answers with cost estimates, safety guidance, and step-by-step instructions.</p>
+                    <p className="text-sm text-muted-foreground">Ask anything about your home. Get real answers with cost estimates, safety guidance, and step-by-step instructions.</p>
                   </div>
                 </div>
               </motion.div>
 
               <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
                 transition={{ delay: 0.15 }}
                 viewport={{ once: true }}
               >
@@ -322,8 +411,8 @@ export default function Landing() {
         <section className="py-24 bg-secondary/30">
           <div className="container mx-auto px-6">
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               className="text-center mb-16"
             >
@@ -339,8 +428,8 @@ export default function Landing() {
               {howItWorks.map((step, i) => (
                 <motion.div
                   key={i}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
+                  initial={{ opacity: 0 }}
+                  whileInView={{ opacity: 1 }}
                   transition={{ delay: i * 0.15 }}
                   viewport={{ once: true }}
                   className="relative"
@@ -361,8 +450,8 @@ export default function Landing() {
         <section className="py-24 bg-muted/20">
           <div className="container mx-auto px-6">
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               className="text-center mb-12"
             >
@@ -409,8 +498,8 @@ export default function Landing() {
               ].map((article, i) => (
                 <motion.div
                   key={article.href}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
+                  initial={{ opacity: 0 }}
+                  whileInView={{ opacity: 1 }}
                   transition={{ delay: i * 0.1 }}
                   viewport={{ once: true }}
                 >
@@ -439,8 +528,8 @@ export default function Landing() {
           <div className="absolute inset-0 bg-gradient-to-t from-primary/5 to-transparent" />
           <div className="container mx-auto px-6 relative">
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               className="max-w-3xl mx-auto text-center space-y-8"
             >

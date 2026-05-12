@@ -2,10 +2,10 @@
  * Billing routes — Stripe Checkout + Customer Portal
  *
  * Env vars used:
- *   STRIPE_PRICE_PLUS   — Stripe Price ID for the Plus tier
- *   STRIPE_PRICE_PRO    — Stripe Price ID for the Pro tier
+ *   STRIPE_PRICE_PLUS     — Stripe Price ID for the Plus tier ($5/mo)
+ *   STRIPE_PRICE_PREMIUM  — Stripe Price ID for the Premium tier ($9/mo)
  *
- * POST /api/billing/create-checkout-session { plan: "plus" | "pro" }
+ * POST /api/billing/create-checkout-session { plan: "plus" | "premium" }
  * POST /api/billing/portal   — opens Stripe Customer Portal
  * GET  /api/billing/plans    — returns plan metadata (public)
  */
@@ -14,7 +14,7 @@ import type { Express, Request, Response } from "express";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { getUncachableStripeClient } from "./stripeClient";
 import { logger } from "./lib/logger";
-import { db } from "./db";
+import { db, stripeBreaker } from "./db";
 import { sql } from "drizzle-orm";
 
 const PLANS = {
@@ -25,37 +25,39 @@ const PLANS = {
     priceId: null,
     features: [
       "1 home",
-      "Up to 10 active tasks",
-      "Manual task entry",
-      "Basic reminders",
+      "Unlimited systems per home",
+      "Manual task tracking",
+      "Calendar subscription feed",
+      "Document analysis (5/mo)",
       "Community support",
     ],
   },
   plus: {
     id: "plus",
     name: "Plus",
-    priceMonthly: 9,
+    priceMonthly: 5,
     priceId: process.env.STRIPE_PRICE_PLUS || null,
     features: [
-      "Up to 3 homes",
-      "Unlimited tasks",
+      "2 homes",
+      "Unlimited systems per home",
       "AI task suggestions",
       "Document analysis (10/mo)",
+      "AI home reports (2/mo)",
       "Smart reminders",
       "Email support",
     ],
     popular: true,
   },
-  pro: {
-    id: "pro",
-    name: "Pro",
-    priceMonthly: 19,
-    priceId: process.env.STRIPE_PRICE_PRO || null,
+  premium: {
+    id: "premium",
+    name: "Premium",
+    priceMonthly: 9,
+    priceId: process.env.STRIPE_PRICE_PREMIUM || null,
     features: [
-      "Unlimited homes",
-      "Unlimited tasks",
-      "AI-powered home reports",
+      "4 homes",
+      "Unlimited systems per home",
       "Unlimited document analysis",
+      "Unlimited AI home reports",
       "Seasonal prep campaigns",
       "Priority support",
       "Early access to new features",
@@ -64,6 +66,7 @@ const PLANS = {
 };
 
 function appUrl(): string {
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
   if (process.env.REPLIT_DEPLOYMENT_URL) return process.env.REPLIT_DEPLOYMENT_URL;
   if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}`;
   return "http://localhost:5000";
@@ -85,13 +88,17 @@ export function registerBillingRoutes(app: Express): void {
 
   app.post("/api/billing/create-checkout-session", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { plan } = req.body as { plan: "plus" | "pro" };
+      const { plan } = req.body as { plan: "plus" | "premium" };
       const user = (req as any).user;
 
-      const config = plan === "plus" ? PLANS.plus : plan === "pro" ? PLANS.pro : null;
+      const config = plan === "plus" ? PLANS.plus : plan === "premium" ? PLANS.premium : null;
       if (!config || !config.priceId) {
-        return res.status(400).json({ error: "Invalid plan or pricing not configured. Set STRIPE_PRICE_PLUS / STRIPE_PRICE_PRO env vars." });
+        return res.status(400).json({ error: "Invalid plan or pricing not configured. Set STRIPE_PRICE_PLUS / STRIPE_PRICE_PREMIUM env vars." });
       }
+      // Pull priceId into a local so TS keeps the narrowing through the
+      // stripeBreaker arrow function below (property narrows are lost
+      // across closure boundaries).
+      const priceId: string = config.priceId;
 
       const stripe = await getUncachableStripeClient();
 
@@ -103,11 +110,11 @@ export function registerBillingRoutes(app: Express): void {
       customerId = (existing.rows[0] as any)?.stripe_customer_id || null;
 
       if (!customerId && user.email) {
-        const customer = await stripe.customers.create({
+        const customer = await stripeBreaker.execute(() => stripe.customers.create({
           email: user.email,
           name: [user.firstName, user.lastName].filter(Boolean).join(" ") || undefined,
           metadata: { userId: user.id },
-        });
+        }));
         customerId = customer.id;
 
         // Persist best-effort (tolerate schema missing the column)
@@ -120,19 +127,19 @@ export function registerBillingRoutes(app: Express): void {
         }
       }
 
-      const session = await stripe.checkout.sessions.create({
+      const session = await stripeBreaker.execute(() => stripe.checkout.sessions.create({
         mode: "subscription",
         payment_method_types: ["card"],
         customer: customerId || undefined,
         customer_email: customerId ? undefined : user.email,
-        line_items: [{ price: config.priceId, quantity: 1 }],
+        line_items: [{ price: priceId, quantity: 1 }],
         success_url: `${appUrl()}/profile?checkout=success&plan=${plan}`,
         cancel_url: `${appUrl()}/pricing?checkout=canceled`,
         allow_promotion_codes: true,
         subscription_data: {
           metadata: { userId: user.id, plan },
         },
-      });
+      }));
 
       res.json({ url: session.url, sessionId: session.id });
     } catch (err: any) {
@@ -152,10 +159,10 @@ export function registerBillingRoutes(app: Express): void {
         return res.status(404).json({ error: "No Stripe customer on file" });
       }
       const stripe = await getUncachableStripeClient();
-      const portal = await stripe.billingPortal.sessions.create({
+      const portal = await stripeBreaker.execute(() => stripe.billingPortal.sessions.create({
         customer: customerId,
         return_url: `${appUrl()}/profile`,
-      });
+      }));
       res.json({ url: portal.url });
     } catch (err: any) {
       logger.error({ err: err?.message }, "Failed to open billing portal");

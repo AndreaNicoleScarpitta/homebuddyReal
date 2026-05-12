@@ -8,6 +8,7 @@ import "./marketing/seo-content-agent";
 import "./marketing/social-content-agent";
 import "./marketing/email-drip-agent";
 import "./marketing/landing-copy-agent";
+import "./marketing/seo-performance-agent";
 
 // Engagement agents
 import "./engagement/maintenance-reminder-agent";

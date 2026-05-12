@@ -1,86 +1,55 @@
-const CACHE_VERSION = '3';
-const CACHE_NAME = `home-buddy-v${CACHE_VERSION}`;
-const STATIC_ASSETS = [
-  '/manifest.json'
-];
+/**
+ * SELF-DESTRUCT service worker.
+ *
+ * A prior version of this file cached assets too aggressively (cache-first
+ * for everything) and served stale JS bundles after deploys, leaving users
+ * stuck on broken old code — most notably missing the CSRF-injecting fetch
+ * wrapper, which made onboarding mutations fail silently.
+ *
+ * This version does nothing useful: on install+activate it unregisters
+ * itself, deletes every cache, and tells open tabs to reload. The browser
+ * auto-checks /sw.js on every navigation, so existing installs pick this
+ * up and dispose of themselves. New visitors never install a worker
+ * because the registration call in index.html has been removed.
+ *
+ * If we want offline support back later, replace this file with a proper
+ * network-first-for-JS/HTML worker and restore the registration script.
+ */
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
+self.addEventListener("install", () => {
+  // Skip the waiting phase so we activate immediately and can clean up.
   self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    })
-  );
-  self.clients.claim();
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    try {
+      const names = await caches.keys();
+      await Promise.all(names.map((n) => caches.delete(n)));
+    } catch {
+      // ignore — best-effort
+    }
+    try {
+      await self.registration.unregister();
+    } catch {
+      // ignore — best-effort
+    }
+    const clients = await self.clients.matchAll({ type: "window" });
+    for (const client of clients) {
+      // Reload so the page re-fetches /index.html and the current JS bundle
+      // straight from the network, without any SW interception.
+      try {
+        client.navigate(client.url);
+      } catch {
+        // Some browsers disallow navigate(); postMessage as a fallback so
+        // a client listener can reload itself.
+        client.postMessage({ type: "SW_SELF_DESTRUCT" });
+      }
+    }
+  })());
 });
 
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-
-  const url = new URL(event.request.url);
-  const authPaths = ['/api/login', '/api/callback', '/api/logout'];
-  if (authPaths.some((p) => url.pathname.startsWith(p))) {
-    return;
-  }
-
-  if (event.request.url.includes('/api/') || event.request.url.includes('/v2/')) {
-    event.respondWith(
-      fetch(event.request).catch(() => {
-        return new Response(
-          JSON.stringify({ error: 'You appear to be offline' }),
-          { headers: { 'Content-Type': 'application/json' } }
-        );
-      })
-    );
-    return;
-  }
-
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).then((response) => {
-        if (response && response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, clone);
-          });
-        }
-        return response;
-      }).catch(() => {
-        return caches.match(event.request).then((cached) => {
-          return cached || caches.match('/').then((root) => {
-            return root || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } });
-          });
-        });
-      })
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const fetched = fetch(event.request).then((response) => {
-        if (response && response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, clone);
-          });
-        }
-        return response;
-      }).catch(() => cached);
-
-      return cached || fetched;
-    })
-  );
+// Pass every fetch straight through to the network. No caching, no fallback.
+self.addEventListener("fetch", () => {
+  // Intentionally empty — let the browser handle the request normally.
 });

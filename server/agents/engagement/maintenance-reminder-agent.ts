@@ -11,7 +11,7 @@ import { db } from "../../db";
 import { sql } from "drizzle-orm";
 import { sendEmail } from "../../lib/email";
 import { logInfo, logWarn } from "../../lib/logger";
-import OpenAI from "openai";
+import { getOpenAIClient } from "../../lib/openai-client";
 
 registerAgent("maintenance-reminder-agent", async (ctx: AgentContext) => {
   const { lookAheadDays = 7, minOverdueDays = 1 } = ctx.input as {
@@ -49,7 +49,7 @@ registerAgent("maintenance-reminder-agent", async (ctx: AgentContext) => {
     return;
   }
 
-  const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY });
+  const openai = getOpenAIClient();
 
   let emailsSent = 0;
 

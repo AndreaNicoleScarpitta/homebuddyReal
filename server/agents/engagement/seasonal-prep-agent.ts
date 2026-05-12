@@ -10,7 +10,7 @@ import { db } from "../../db";
 import { sql } from "drizzle-orm";
 import { sendEmail } from "../../lib/email";
 import { logInfo } from "../../lib/logger";
-import OpenAI from "openai";
+import { getOpenAIClient } from "../../lib/openai-client";
 
 function getCurrentSeason(): string {
   const month = new Date().getMonth() + 1;
@@ -50,7 +50,7 @@ registerAgent("seasonal-prep-agent", async (ctx: AgentContext) => {
     return;
   }
 
-  const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY });
+  const openai = getOpenAIClient();
 
   const seasonEmojis: Record<string, string> = { spring: "🌱", summer: "☀️", fall: "🍂", winter: "❄️" };
   const emoji = seasonEmojis[season] || "🏠";

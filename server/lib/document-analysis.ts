@@ -21,10 +21,17 @@ export {
   type KnownSystem,
 };
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+function getOpenAI() {
+  // Timeout prevents a hung upstream (network blip, provider outage) from
+  // tying up a request worker forever. 60s matches our Railway worker budget.
+  return new OpenAI({
+    apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "dummy",
+    baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    timeout: 60_000,
+    maxRetries: 1,
+  });
+}
+const openai = getOpenAI();
 
 export const extractedIssueSchema = z.object({
   title: z.string().min(1),

@@ -1,3 +1,6 @@
+import "./instrument"; // ← must be first: patches Node built-ins before anything else loads
+import "dotenv/config";
+import * as Sentry from "@sentry/node";
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -5,13 +8,15 @@ import { registerRoutes } from "./routes";
 import { v2Router } from "./routes_v2";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { setupAuth, registerAuthRoutes, registerLocalAuthRoutes } from "./replit_integrations/auth";
 import { logEnvironmentStatus } from "./lib/env-validation";
 import { logger } from "./lib/logger";
 import { bootstrapMigrationTracking } from "./lib/db-bootstrap";
 import { WebhookHandlers } from "./webhookHandlers";
 import { registerDonationRoutes } from "./donation-routes";
 import { registerBillingRoutes } from "./billing-routes";
+import { registerMeRoutes } from "./me-routes";
+import { registerCalendarRoutes } from "./calendar-routes";
 import { startNotificationScheduler, stopNotificationScheduler } from "./jobs/notificationScheduler";
 import { startAgentScheduler, stopAgentScheduler } from "./jobs/agentScheduler";
 import { pool } from "./db";
@@ -96,12 +101,12 @@ app.use(
         styleSrc: ["'self'", ((_req: any, res: any) => `'nonce-${res.locals.cspNonce}'`) as any, "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "blob:", "https://www.google-analytics.com"],
-        connectSrc: ["'self'", "https://www.google-analytics.com", "https://analytics.google.com", "https://checkout.stripe.com", "https://api.stripe.com"],
+        connectSrc: ["'self'", "https://www.google-analytics.com", "https://analytics.google.com", "https://checkout.stripe.com", "https://api.stripe.com", "https://maps.googleapis.com", "https://places.googleapis.com", "https://*.ingest.sentry.io"],
         frameSrc: ["'none'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         formAction: ["'self'"],
-        frameAncestors: ["'self'", "https://*.replit.dev", "https://*.replit.app"],
+        frameAncestors: ["'none'"],
       },
     },
     crossOriginEmbedderPolicy: false,
@@ -161,7 +166,10 @@ app.use((req, res, next) => {
       await runMigrations({ databaseUrl });
       logger.info("Stripe schema ready");
       const stripeSync = await getStripeSync();
-      const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      const webhookBaseUrl =
+        process.env.APP_URL?.replace(/\/$/, "") ||
+        (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : null) ||
+        "http://localhost:5000";
       const webhookResult = await stripeSync.findOrCreateManagedWebhook(
         `${webhookBaseUrl}/api/stripe/webhook`
       );
@@ -174,18 +182,26 @@ app.use((req, res, next) => {
     logger.error({ err: (error as Error).message }, "Failed to initialize Stripe (non-fatal)");
   }
 
-  // Setup auth BEFORE registering other routes
-  await setupAuth(app);
-  registerAuthRoutes(app);
-  registerCsrfRoute(app);
-  registerOpenApiRoute(app);
+  // ── Rate limiters ─────────────────────────────────────────────────────────
+  // IMPORTANT: these MUST be registered before route handlers so they run first.
+  // Express processes middleware in registration order; a limiter added after a
+  // matching route handler is never reached.
 
-  // CSRF protection for all mutation routes (after auth so session is available)
-  app.use("/api", csrfProtection);
-  app.use("/v2", csrfProtection);
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many login attempts, please try again later" },
+  });
 
-  registerDonationRoutes(app);
-  registerBillingRoutes(app);
+  const contactLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many messages. Please wait a minute before sending another." },
+  });
 
   const mutationLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -205,32 +221,40 @@ app.use((req, res, next) => {
     skip: (req) => req.method !== "GET",
   });
 
-  const contactLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    max: 5,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: "Too many messages. Please wait a minute before sending another." },
-  });
-
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 20,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: "Too many login attempts, please try again later" },
-  });
-
-  app.use("/api/contact", contactLimiter);
+  // Apply limiters before routes so they are guaranteed to run
   app.use("/api/auth", authLimiter);
+  app.use("/api/contact", contactLimiter);
   app.use("/api", mutationLimiter);
   app.use("/api", readLimiter);
   app.use("/v2", mutationLimiter);
   app.use("/v2", readLimiter);
 
+  // ── Auth + CSRF ────────────────────────────────────────────────────────────
+  // Setup auth BEFORE registering other routes
+  await setupAuth(app);
+  registerAuthRoutes(app);
+  registerLocalAuthRoutes(app);
+  registerCsrfRoute(app);
+  registerOpenApiRoute(app);
+
+  // CSRF protection for all mutation routes (after auth so session is available)
+  app.use("/api", csrfProtection);
+  app.use("/v2", csrfProtection);
+
+  registerDonationRoutes(app);
+  registerBillingRoutes(app);
+  registerMeRoutes(app);
+  registerCalendarRoutes(app);
+
   app.use("/v2", v2Router);
   app.use("/api/agents", agentRouter);
   await registerRoutes(httpServer, app);
+
+  // Sentry error handler — must come BEFORE our own error handler so Sentry
+  // sees the raw error object before we sanitise the response.
+  if (process.env.SENTRY_DSN) {
+    Sentry.setupExpressErrorHandler(app);
+  }
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

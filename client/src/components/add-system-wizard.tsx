@@ -827,7 +827,10 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [],
                     </thead>
                     <tbody>
                       {wizardPaintColors.map((entry, index) => (
-                        <tr key={index} className="group border-b border-border/50 hover:bg-muted/30" data-testid={`wizard-paint-row-${index}`}>
+                        // Key combines content with index as a last-resort tiebreaker so
+                        // deleting row N doesn't shift the key of rows N+1, N+2 onto stale
+                        // DOM nodes (which kept focus/state on the wrong row before).
+                        <tr key={`${entry.room}|${entry.wall}|${entry.hex}|${index}`} className="group border-b border-border/50 hover:bg-muted/30" data-testid={`wizard-paint-row-${index}`}>
                           <td className="py-2 px-3">{entry.room || <span className="text-muted-foreground/50">—</span>}</td>
                           <td className="py-2 px-3">{entry.wall || <span className="text-muted-foreground/50">—</span>}</td>
                           <td className="py-2 px-3">{entry.color || <span className="text-muted-foreground/50">—</span>}</td>
@@ -1030,7 +1033,7 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [],
                         </thead>
                         <tbody>
                           {wizardPaintColors.map((entry, i) => (
-                            <tr key={i} className="border-b border-border/50">
+                            <tr key={`${entry.room}|${entry.wall}|${entry.hex}|${i}`} className="border-b border-border/50">
                               <td className="py-1.5 px-2">{entry.room || "—"}</td>
                               <td className="py-1.5 px-2">{entry.wall || "—"}</td>
                               <td className="py-1.5 px-2">{entry.color || "—"}</td>
@@ -1112,7 +1115,10 @@ export function AddSystemWizard({ isOpen, onClose, homeId, existingSystems = [],
                 <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                   {suggestedTasks.map((task, index) => (
                     <div
-                      key={index}
+                      // Use task title + index so toggling approval (which recreates
+                      // the array) preserves React's reconciliation mapping even if
+                      // the array is re-sorted upstream.
+                      key={`${task.title}|${index}`}
                       className={`p-3 rounded-lg border transition-colors cursor-pointer ${
                         task.approved 
                           ? "bg-primary/5 border-primary/30" 

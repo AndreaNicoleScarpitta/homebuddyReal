@@ -10,7 +10,7 @@ import { db } from "../../db";
 import { sql } from "drizzle-orm";
 import { sendEmail } from "../../lib/email";
 import { logInfo } from "../../lib/logger";
-import OpenAI from "openai";
+import { getOpenAIClient } from "../../lib/openai-client";
 
 registerAgent("reengagement-agent", async (ctx: AgentContext) => {
   const { dormantDays = 14, maxUsers = 50 } = ctx.input as {
@@ -46,7 +46,7 @@ registerAgent("reengagement-agent", async (ctx: AgentContext) => {
     return;
   }
 
-  const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY });
+  const openai = getOpenAIClient();
 
   for (const user of dormantResult.rows as any[]) {
     const daysDormant = Math.floor((Date.now() - new Date(user.updated_at || user.created_at).getTime()) / (1000 * 60 * 60 * 24));

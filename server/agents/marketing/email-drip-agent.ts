@@ -7,7 +7,7 @@
 
 import { registerAgent, type AgentContext } from "../runner";
 import { logInfo } from "../../lib/logger";
-import OpenAI from "openai";
+import { getOpenAIClient } from "../../lib/openai-client";
 
 const SEQUENCES = {
   onboarding: {
@@ -45,7 +45,7 @@ registerAgent("email-drip-agent", async (ctx: AgentContext) => {
 
   logInfo("agent.email-drip", `Generating ${sequence.name} sequence (${sequence.emails.length} emails)`);
 
-  const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY });
+  const openai = getOpenAIClient();
 
   for (const emailDef of sequence.emails) {
     const completion = await openai.chat.completions.create({

@@ -3,7 +3,7 @@ FROM node:20-slim AS build
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm ci --include=dev
 
 COPY . .
 RUN npm run build
@@ -13,20 +13,20 @@ FROM node:20-slim AS production
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=5000
 
-# Install only production dependencies
+# Install ALL deps (including drizzle-kit, tsx) — needed for db:push at startup.
+# Trade-off: larger image, but avoids a separate migrations job.
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --include=dev && npm cache clean --force
 
-# Copy built artifacts
+# Copy built artifacts + files needed by db:push and startup scripts
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=build /app/shared ./shared
+COPY --from=build /app/script ./script
 
 EXPOSE 5000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://localhost:5000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
-
-CMD ["node", "dist/index.cjs"]
+# Push schema, then start. If db:push fails, the container still exits non-zero
+# so Railway flags a bad deploy instead of running with stale schema.
+CMD ["sh", "-c", "npm run db:push && node dist/index.cjs"]

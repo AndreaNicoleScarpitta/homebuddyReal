@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
-import { db } from "./db";
+import { db, stripeBreaker } from "./db";
 import { sql } from "drizzle-orm";
 import { logInfo, logError } from "./lib/logger";
 
@@ -102,16 +102,16 @@ export function registerDonationRoutes(app: Express) {
 
       let customerId = user.stripeCustomerId;
       if (!customerId) {
-        const customer = await stripe.customers.create({
+        const customer = await stripeBreaker.execute(() => stripe.customers.create({
           email: user.email || undefined,
           metadata: { userId: user.id },
-        });
+        }));
         await authStorage.updateStripeCustomerId(user.id, customer.id);
         customerId = customer.id;
       }
 
       const baseUrl = `${req.protocol}://${req.get("host")}`;
-      const session = await stripe.checkout.sessions.create({
+      const session = await stripeBreaker.execute(() => stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ["card"],
         line_items: [{ price: priceId, quantity: 1 }],
@@ -119,7 +119,7 @@ export function registerDonationRoutes(app: Express) {
         success_url: `${baseUrl}/profile?donation=success&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/profile?donation=cancelled`,
         metadata: { userId: user.id, type: "donation" },
-      });
+      }));
 
       logInfo("donations.checkout", "Checkout session created", { userId: user.id, priceId });
       res.json({ url: session.url });
@@ -153,7 +153,7 @@ export function registerDonationRoutes(app: Express) {
       }
 
       const stripe = await getUncachableStripeClient();
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      const session = await stripeBreaker.execute(() => stripe.checkout.sessions.retrieve(sessionId));
 
       if (session.payment_status !== "paid") {
         return res.status(400).json({ message: "Payment not completed" });

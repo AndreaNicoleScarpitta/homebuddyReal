@@ -25,17 +25,17 @@
   "categories": ["utilities", "lifestyle"],
   "shortcuts": [
     {
-      "name": "Ask Assistant",
-      "short_name": "Chat",
-      "description": "Chat with your home maintenance assistant",
-      "url": "/chat",
+      "name": "Dashboard",
+      "short_name": "Home",
+      "description": "View your home maintenance dashboard",
+      "url": "/dashboard",
       "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
     },
     {
-      "name": "View Budget",
-      "short_name": "Budget",
-      "description": "Check your home repair budget",
-      "url": "/budget",
+      "name": "Calendar Sync",
+      "short_name": "Calendar",
+      "description": "Sync your maintenance schedule to your calendar app",
+      "url": "/calendar",
       "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
     }
   ]

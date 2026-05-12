@@ -13,13 +13,21 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { initGA, trackSlugPageView } from "@/lib/analytics";
 import { validateUniqueSlugs, PAGE_SLUGS } from "@/lib/slug-registry";
-import { DonationModal } from "@/components/donation-modal";
+import { initSentry } from "@/lib/sentry";
+
+// Init Sentry before any render so it can capture errors from the first paint.
+initSentry();
+// Donation modal temporarily disabled — was firing too eagerly on first session.
+// Re-enable by restoring this import + the <DonationModal /> render below.
+// import { DonationModal } from "@/components/donation-modal";
 
 // Eagerly loaded — core app pages
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Login from "@/pages/login";
 import Signup from "@/pages/signup";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import Dashboard from "@/pages/dashboard";
 import DocumentAnalysis from "@/pages/document-analysis";
 import Onboarding from "@/pages/onboarding";
@@ -33,6 +41,7 @@ import SystemDetail from "@/pages/system-detail";
 import Disclaimer from "@/pages/disclaimer";
 import Timeline from "@/pages/timeline";
 import Intelligence from "@/pages/intelligence";
+import CalendarPage from "@/pages/calendar";
 
 // Lazy-loaded — hidden admin-only pages (not in nav)
 const AdminApprovals = lazy(() => import("@/pages/admin/approvals"));
@@ -134,63 +143,75 @@ function Router() {
   
   if (!isAuthenticated) {
     return (
-      <Suspense fallback={<PageSkeleton />}>
-        <Switch>
-          <Route path="/login" component={Login} />
-          <Route path="/signup" component={Signup} />
-          <Route path="/pricing" component={Pricing} />
-          <Route path="/terms" component={PublicTermsPage} />
-          <Route path="/contact" component={Contact} />
-          <Route path="/guides/home-maintenance-checklist-by-month" component={MonthlyChecklist} />
-          <Route path="/guides/annual-home-maintenance-schedule" component={AnnualSchedule} />
-          <Route path="/guides/what-to-maintain-in-a-new-house" component={NewHomeowner} />
-          <Route path="/guides/first-90-days-after-buying-a-house" component={First90Days} />
-          <Route path="/guides/what-to-fix-after-home-inspection" component={HomeInspection} />
-          <Route path="/guides/how-much-does-home-maintenance-cost" component={MaintenanceCost} />
-          <Route path="/guides/printable-home-maintenance-schedule" component={PrintableSchedule} />
-          <Route component={Landing} />
-        </Switch>
-      </Suspense>
+      // Page-level boundary inside the outer ErrorBoundary in <App />:
+      // a crash in a public page falls back to an inline retry instead of
+      // nuking the whole app shell (toasts, tooltips, query client).
+      <ErrorBoundary scope="public-routes" inline>
+        <Suspense fallback={<PageSkeleton />}>
+          <Switch>
+            <Route path="/login" component={Login} />
+            <Route path="/signup" component={Signup} />
+            <Route path="/forgot-password" component={ForgotPassword} />
+            <Route path="/reset-password" component={ResetPassword} />
+            <Route path="/pricing" component={Pricing} />
+            <Route path="/terms" component={PublicTermsPage} />
+            <Route path="/contact" component={Contact} />
+            <Route path="/guides/home-maintenance-checklist-by-month" component={MonthlyChecklist} />
+            <Route path="/guides/annual-home-maintenance-schedule" component={AnnualSchedule} />
+            <Route path="/guides/what-to-maintain-in-a-new-house" component={NewHomeowner} />
+            <Route path="/guides/first-90-days-after-buying-a-house" component={First90Days} />
+            <Route path="/guides/what-to-fix-after-home-inspection" component={HomeInspection} />
+            <Route path="/guides/how-much-does-home-maintenance-cost" component={MaintenanceCost} />
+            <Route path="/guides/printable-home-maintenance-schedule" component={PrintableSchedule} />
+            <Route component={Landing} />
+          </Switch>
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
   return (
     <>
-      <DonationModal />
-      <Suspense fallback={<PageSkeleton />}>
-        <Switch>
-          <Route path="/" component={Dashboard} />
-          <Route path="/onboarding" component={Onboarding} />
-          <Route path="/dashboard" component={Dashboard} />
-          <Route path="/document-analysis" component={DocumentAnalysis} />
-          <Route path="/disclaimer" component={Disclaimer} />
+      {/* <DonationModal /> — disabled, see import above */}
+      <ErrorBoundary scope="authed-routes" inline>
+        <Suspense fallback={<PageSkeleton />}>
+          <Switch>
+            <Route path="/" component={Dashboard} />
+            <Route path="/onboarding" component={Onboarding} />
+            <Route path="/dashboard" component={Dashboard} />
+            <Route path="/document-analysis" component={DocumentAnalysis} />
+            <Route path="/disclaimer" component={Disclaimer} />
 
-          <Route path="/maintenance-log" component={MaintenanceLog} />
-          <Route path="/systems/:id" component={SystemDetail} />
-          <Route path="/systems" component={Systems} />
-          <Route path="/documents" component={Documents} />
-          <Route path="/profile" component={Profile} />
-          <Route path="/contact" component={Contact} />
-          <Route path="/terms" component={Terms} />
-          <Route path="/timeline" component={Timeline} />
-          <Route path="/intelligence" component={Intelligence} />
-          <Route path="/pricing" component={Pricing} />
+            <Route path="/maintenance-log" component={MaintenanceLog} />
+            <Route path="/systems/:id" component={SystemDetail} />
+            <Route path="/systems" component={Systems} />
+            <Route path="/documents" component={Documents} />
+            <Route path="/profile" component={Profile} />
+            <Route path="/forgot-password" component={ForgotPassword} />
+            <Route path="/reset-password" component={ResetPassword} />
+            <Route path="/contact" component={Contact} />
+            <Route path="/terms" component={Terms} />
+            <Route path="/timeline" component={Timeline} />
+            <Route path="/intelligence" component={Intelligence} />
+            <Route path="/calendar" component={CalendarPage} />
+            <Route path="/pricing" component={Pricing} />
 
-          {/* Hidden admin-only routes — not linked in nav, gated by ADMIN_EMAILS env */}
-          <Route path="/admin/approvals" component={AdminApprovals} />
-          <Route path="/admin/agents" component={AdminAgents} />
+            {/* Hidden admin-only routes — not linked in nav, gated by ADMIN_EMAILS env */}
+            <Route path="/admin/approvals" component={AdminApprovals} />
+            <Route path="/admin/agents" component={AdminAgents} />
 
-          {/* Public guides — accessible to authenticated users too */}
-          <Route path="/guides/home-maintenance-checklist-by-month" component={MonthlyChecklist} />
-          <Route path="/guides/annual-home-maintenance-schedule" component={AnnualSchedule} />
-          <Route path="/guides/what-to-maintain-in-a-new-house" component={NewHomeowner} />
-          <Route path="/guides/first-90-days-after-buying-a-house" component={First90Days} />
-          <Route path="/guides/what-to-fix-after-home-inspection" component={HomeInspection} />
-          <Route path="/guides/how-much-does-home-maintenance-cost" component={MaintenanceCost} />
-          <Route path="/guides/printable-home-maintenance-schedule" component={PrintableSchedule} />
-          <Route component={NotFound} />
-        </Switch>
-      </Suspense>
+            {/* Public guides — accessible to authenticated users too */}
+            <Route path="/guides/home-maintenance-checklist-by-month" component={MonthlyChecklist} />
+            <Route path="/guides/annual-home-maintenance-schedule" component={AnnualSchedule} />
+            <Route path="/guides/what-to-maintain-in-a-new-house" component={NewHomeowner} />
+            <Route path="/guides/first-90-days-after-buying-a-house" component={First90Days} />
+            <Route path="/guides/what-to-fix-after-home-inspection" component={HomeInspection} />
+            <Route path="/guides/how-much-does-home-maintenance-cost" component={MaintenanceCost} />
+            <Route path="/guides/printable-home-maintenance-schedule" component={PrintableSchedule} />
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
+      </ErrorBoundary>
     </>
   );
 }

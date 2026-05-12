@@ -30,10 +30,22 @@ export const v2Router = Router();
 
 v2Router.use(requireIdempotencyKey);
 
-if (process.env.NODE_ENV !== "production") {
+// Test-user header bypass: lets integration tests inject a user via
+// `x-test-user-id` without going through OIDC. Double-gated:
+//   1. NODE_ENV !== "production"
+//   2. ALLOW_TEST_USER_HEADER === "1" (explicit opt-in)
+//
+// The second gate matters because non-production builds still get deployed
+// (staging, preview envs). A stray NODE_ENV=development on a public host
+// would otherwise let anyone spoof any user id. Require an explicit env
+// flag that no deployed environment should ever set.
+if (
+  process.env.NODE_ENV !== "production" &&
+  process.env.ALLOW_TEST_USER_HEADER === "1"
+) {
   v2Router.use((req, _res, next) => {
     const testUserId = req.headers["x-test-user-id"];
-    if (testUserId && !req.user) {
+    if (testUserId && !(req as any).user) {
       (req as any).user = { id: parseInt(String(testUserId), 10) || 1 };
       (req as any).isAuthenticated = () => true;
     }
@@ -46,7 +58,7 @@ v2Router.use(isAuthenticated);
 // Helper: build actor from session or default to system
 // ---------------------------------------------------------------------------
 function getActor(req: Request): Actor {
-  const user = req.user as { id?: number | string } | undefined;
+  const user = (req as any).user as { id?: number | string } | undefined;
   if (user?.id) {
     return { actorType: "user", actorId: String(user.id) };
   }
@@ -54,12 +66,12 @@ function getActor(req: Request): Actor {
 }
 
 function getUserId(req: Request): string {
-  const user = req.user as { id?: number | string } | undefined;
+  const user = (req as any).user as { id?: number | string } | undefined;
   return String(user?.id ?? "");
 }
 
 function requireDisclaimer(req: Request, res: Response): boolean {
-  const user = req.user as any;
+  const user = (req as any).user as any;
   if (
     !user?.disclaimerAccepted ||
     user?.disclaimerVersion !== CURRENT_DISCLAIMER_VERSION
@@ -321,28 +333,37 @@ v2Router.post("/homes", async (req: Request, res: Response) => {
     const userId = getUserId(req);
     const homeId = crypto.randomUUID();
 
+    // Onboarding posture: ZIP is the only truly required field. Everything
+    // else — street, city, state — is deferred to "when you want a feature
+    // that needs it." This is the UX flip from the old "fill out profile
+    // before you see any value" onboarding. See the Phase 1 plan.
     const addressLine1 = (req.body.addressLine1 as string) || null;
     const addressLine2 = (req.body.addressLine2 as string) || null;
     const city = (req.body.city as string) || null;
     const state = (req.body.state as string) || null;
     const zipCode = (req.body.zipCode as string) || null;
 
-    if (!addressLine1 || !city || !state || !zipCode) {
-      res.status(400).json({ error: "Address line 1, city, state, and ZIP code are required." });
-      return;
-    }
-    if (state.length !== 2) {
-      res.status(400).json({ error: "State must be a 2-letter abbreviation." });
+    if (!zipCode) {
+      res.status(400).json({ error: "ZIP code is required." });
       return;
     }
     if (!/^\d{5}(-\d{4})?$/.test(zipCode)) {
       res.status(400).json({ error: "ZIP code must be 5 digits (or ZIP+4 format)." });
       return;
     }
+    // State is optional now, but if provided it must be a 2-letter code.
+    if (state && state.length !== 2) {
+      res.status(400).json({ error: "State must be a 2-letter abbreviation." });
+      return;
+    }
 
-    const compositeAddress = [addressLine1, addressLine2, `${city}, ${state} ${zipCode}`]
-      .filter(Boolean)
-      .join(", ");
+    // Composite address is best-effort: only include the pieces the user
+    // actually gave us. The downstream display code (home-info-card,
+    // calendar-routes) already falls back gracefully.
+    const cityStateZip =
+      city && state ? `${city}, ${state} ${zipCode}` : city ? `${city} ${zipCode}` : zipCode;
+    const compositeAddress =
+      [addressLine1, addressLine2, cityStateZip].filter(Boolean).join(", ") || null;
 
     const builtYear = req.body.builtYear != null ? Number(req.body.builtYear) : null;
     const sqFt = req.body.sqFt != null ? Number(req.body.sqFt) : null;
@@ -704,7 +725,7 @@ v2Router.get("/homes/:homeId/tasks", async (req: Request, res: Response) => {
       overdue: "pending",
     };
 
-    let tasks;
+    let tasks: any[] = [];
     if (result.rows.length > 0) {
       tasks = result.rows.map((row: any) => {
         const meta = row.estimates || {};
@@ -732,6 +753,13 @@ v2Router.get("/homes/:homeId/tasks", async (req: Request, res: Response) => {
           recurrenceCadence: eventMeta.recurrenceCadence ?? null,
           namespacePrefix: eventMeta.namespacePrefix ?? null,
           namespacedAttributes: eventMeta.namespacedAttributes ?? null,
+          // Contractor / pro-workflow fields (stored in estimates JSONB)
+          proStatus: (eventMeta.proStatus as string | undefined) ?? null,
+          contractorName: (eventMeta.contractorName as string | undefined) ?? null,
+          contractorPhone: (eventMeta.contractorPhone as string | undefined) ?? null,
+          contractorNotes: (eventMeta.contractorNotes as string | undefined) ?? null,
+          scheduledProDate: (eventMeta.scheduledProDate as string | undefined) ?? null,
+          quotedCost: (eventMeta.quotedCost as string | undefined) ?? null,
         };
       });
     } else {
@@ -1953,6 +1981,7 @@ import { runAnalysisPipeline } from "./lib/analysis-pipeline";
 import type { AnalysisResult, SuggestedSystem } from "./lib/analysis-pipeline";
 import { extractTextFromDocument } from "./lib/document-analysis";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage/objectStorage";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { homeDocuments } from "@shared/schema";
 
 async function extractTextFromImage(
@@ -2079,25 +2108,16 @@ v2Router.post(
           try {
             const objectId = crypto.randomUUID();
             const privateDir = objectService.getPrivateObjectDir();
-            const fullPath = `${privateDir}/uploads/${objectId}`;
-            const parts = fullPath.replace(/^\//, "").split("/");
-            const bucketName = parts[0];
-            const objectName = parts.slice(1).join("/");
-            const bucket = objectStorageClient.bucket(bucketName);
-            const gcsFile = bucket.file(objectName);
+            const key = `${privateDir}/${objectId}`;
 
-            await new Promise<void>((resolve, reject) => {
-              const stream = gcsFile.createWriteStream({
-                resumable: false,
-                contentType: file.mimetype || "application/octet-stream",
-                metadata: { contentType: file.mimetype || "application/octet-stream" },
-              });
-              stream.on("error", reject);
-              stream.on("finish", () => resolve());
-              stream.end(file.buffer);
-            });
+            await objectStorageClient.send(new PutObjectCommand({
+              Bucket: objectService.getBucket(),
+              Key: key,
+              Body: file.buffer,
+              ContentType: file.mimetype || "application/octet-stream",
+            }));
 
-            const objectPath = `/objects/uploads/${objectId}`;
+            const objectPath = `/objects/${objectId}`;
             await db.insert(homeDocuments).values({
               homeId: legacyHomeId,
               name: file.originalname,

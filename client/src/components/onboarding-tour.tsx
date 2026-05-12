@@ -73,11 +73,19 @@ const mobileTourSteps: TourStep[] = [
 ];
 
 interface OnboardingTourProps {
+  /** Called when the user finishes the tour normally (last step CTA). */
   onComplete: () => void;
+  /**
+   * Called when the user explicitly dismisses the tour early (X button,
+   * backdrop click). Defaults to `onComplete` if not provided so the
+   * component stays backwards-compatible, but callers should pass a
+   * separate handler when skip and finish have different side-effects.
+   */
+  onSkip?: () => void;
   isOpen: boolean;
 }
 
-export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
+export function OnboardingTour({ onComplete, onSkip, isOpen }: OnboardingTourProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
@@ -188,7 +196,9 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
   };
 
   const handleSkip = () => {
-    onComplete();
+    // Use the dedicated skip handler if provided; otherwise fall back to
+    // onComplete so the tour still closes if the caller didn't differentiate.
+    (onSkip ?? onComplete)();
   };
 
   if (!isOpen) return null;
