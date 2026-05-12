@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 
 const GoogleIcon = () => (
   <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -30,6 +31,13 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => { trackSlugPageView(PAGE_SLUGS.login); }, []);
+
+  // Check which OAuth providers are configured on the server
+  const { data: providers } = useQuery<{ google: boolean }>({
+    queryKey: ["/api/auth/providers"],
+    queryFn: () => fetch("/api/auth/providers").then((r) => r.json()),
+    staleTime: Infinity,
+  });
 
   useEffect(() => {
     // Surface OAuth errors from query string
@@ -61,9 +69,6 @@ export default function Login() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Invalid email or password");
       trackEvent("login_success", "auth", "email");
-      // Prime the auth cache so App.tsx treats the user as authenticated immediately.
-      // Without this, useAuth()'s 5-min stale cache keeps the app on the public
-      // landing route until a hard reload.
       if (data.user) queryClient.setQueryData(["/api/auth/user"], data.user);
       setLocation("/");
     } catch (err: any) {
@@ -72,6 +77,8 @@ export default function Login() {
       setSubmitting(false);
     }
   }
+
+  const googleAvailable = providers?.google ?? true; // optimistic until loaded
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -109,18 +116,20 @@ export default function Login() {
 
           {!showEmailForm ? (
             <div className="space-y-3">
-              <a
-                href="/auth/google"
-                onClick={() => trackEvent("login_attempt", "auth", "google")}
-                className={cn(
-                  buttonVariants({ variant: "outline", size: "default" }),
-                  "w-full h-11 text-sm font-medium gap-3 justify-center no-underline",
-                )}
-                data-testid="button-login-google"
-              >
-                <GoogleIcon />
-                Continue with Google
-              </a>
+              {googleAvailable && (
+                <a
+                  href="/auth/google"
+                  onClick={() => trackEvent("login_attempt", "auth", "google")}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "default" }),
+                    "w-full h-11 text-sm font-medium gap-3 justify-center no-underline",
+                  )}
+                  data-testid="button-login-google"
+                >
+                  <GoogleIcon />
+                  Continue with Google
+                </a>
+              )}
 
               <button
                 type="button"
@@ -143,7 +152,16 @@ export default function Login() {
                   onChange={(e) => setEmail(e.target.value)} data-testid="input-login-email" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="login-password">Password</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="login-password">Password</Label>
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs text-muted-foreground hover:text-foreground no-underline"
+                    data-testid="link-forgot-password"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
                 <Input id="login-password" type="password" autoComplete="current-password" required
                   value={password} onChange={(e) => setPassword(e.target.value)}
                   data-testid="input-login-password" />

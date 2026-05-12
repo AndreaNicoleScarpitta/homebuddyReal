@@ -13,6 +13,8 @@ export const PAGE_SLUGS = {
   landing: "landing",
   login: "login",
   signup: "signup",
+  forgotPassword: "forgot-password",
+  resetPassword: "reset-password",
   budget: "budget",
   chat: "chat",
   inspections: "inspections",

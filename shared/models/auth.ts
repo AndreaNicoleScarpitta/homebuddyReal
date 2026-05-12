@@ -29,6 +29,8 @@ export const users = pgTable("users", {
   loginCount: integer("login_count").default(0),
   hasDonated: boolean("has_donated").default(false),
   donationPromptSnoozeUntilLoginCount: integer("donation_prompt_snooze_until_login_count"),
+  passwordResetToken: varchar("password_reset_token"),
+  passwordResetTokenExpiresAt: timestamp("password_reset_token_expires_at"),
   stripeCustomerId: varchar("stripe_customer_id"),
   stripeSubscriptionId: varchar("stripe_subscription_id"),
   plan: varchar("plan", { length: 20 }).notNull().default("free"), // "free" | "plus" | "pro"

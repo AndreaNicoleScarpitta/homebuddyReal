@@ -5,21 +5,27 @@
  * paths share the same session (connect-pg-simple) and the same users table.
  *
  * Routes exposed:
- *   POST /api/auth/signup          email/password signup
- *   POST /api/auth/login           email/password login
- *   GET  /auth/google              start Google OAuth
- *   GET  /auth/google/callback     Google OAuth return
+ *   GET  /api/auth/providers          which OAuth providers are configured
+ *   POST /api/auth/signup             email/password signup
+ *   POST /api/auth/login              email/password login
+ *   POST /api/auth/forgot-password    request a reset link
+ *   POST /api/auth/reset-password     consume token + set new password
+ *   GET  /auth/google                 start Google OAuth
+ *   GET  /auth/google/callback        Google OAuth return
  */
 
 import type { Express } from "express";
+import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import * as oidc from "openid-client";
 import { authStorage } from "./storage";
 import { db } from "../../db";
 import { users } from "@shared/models/auth";
 import { eq } from "drizzle-orm";
+import { sendWelcomeEmail, sendPasswordResetEmail } from "../../lib/email";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 function getBaseUrl(req: any): string {
   const envBase = process.env.OAUTH_BASE_URL;
@@ -52,8 +58,20 @@ async function getGoogleConfig(): Promise<oidc.Configuration | null> {
   }
 }
 
+function isGoogleConfigured(): boolean {
+  return !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+}
+
 export function registerLocalAuthRoutes(app: Express) {
-  // ──────────────── Email / password signup ────────────────
+
+  // ──────────────── Provider availability ─────────────────────────────────────
+  // Used by the frontend to decide which sign-in buttons to render.
+  // Never exposes keys — only boolean availability.
+  app.get("/api/auth/providers", (_req, res) => {
+    res.json({ google: isGoogleConfigured() });
+  });
+
+  // ──────────────── Email / password signup ────────────────────────────────────
   app.post("/api/auth/signup", async (req, res) => {
     try {
       const email = String(req.body?.email ?? "").trim().toLowerCase();
@@ -70,7 +88,6 @@ export function registerLocalAuthRoutes(app: Express) {
 
       const existing = await authStorage.getUserByEmail(email);
       if (existing) {
-        // Don't leak which accounts exist; treat as generic conflict.
         return res.status(409).json({ error: "An account with that email already exists" });
       }
 
@@ -78,10 +95,14 @@ export function registerLocalAuthRoutes(app: Express) {
       const user = await authStorage.createLocalUser({ email, passwordHash, firstName, lastName });
       await authStorage.incrementLoginCount(user.id);
 
+      // Fire-and-forget — welcome email failure must not block signup
+      sendWelcomeEmail(email, firstName).catch(() => {});
+
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) return res.status(500).json({ error: "Session save failed" });
-        res.json({ success: true, user: sanitize(user) });
+        // isNewUser: true tells the client to redirect to /onboarding
+        res.json({ success: true, user: sanitize(user), isNewUser: true });
       });
     } catch (err) {
       console.error("Signup error:", err);
@@ -89,7 +110,7 @@ export function registerLocalAuthRoutes(app: Express) {
     }
   });
 
-  // ──────────────── Email / password login ────────────────
+  // ──────────────── Email / password login ─────────────────────────────────────
   app.post("/api/auth/login", async (req, res) => {
     try {
       const email = String(req.body?.email ?? "").trim().toLowerCase();
@@ -120,7 +141,74 @@ export function registerLocalAuthRoutes(app: Express) {
     }
   });
 
-  // ──────────────── Google OAuth start ────────────────
+  // ──────────────── Forgot password ────────────────────────────────────────────
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const email = String(req.body?.email ?? "").trim().toLowerCase();
+
+      if (!EMAIL_RE.test(email)) {
+        return res.status(400).json({ error: "Valid email required" });
+      }
+
+      const user = await authStorage.getUserByEmail(email);
+
+      // Always respond the same way — don't reveal whether the account exists
+      if (!user || !user.passwordHash) {
+        // No local account (or OAuth-only) — still return 200 to avoid enumeration
+        return res.json({ success: true });
+      }
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+      await authStorage.setPasswordResetToken(user.id, token, expiresAt);
+
+      const baseUrl = getBaseUrl(req);
+      const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+      sendPasswordResetEmail(email, user.firstName, resetUrl).catch(() => {});
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Forgot-password error:", err);
+      res.status(500).json({ error: "Something went wrong. Please try again." });
+    }
+  });
+
+  // ──────────────── Reset password ─────────────────────────────────────────────
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const token = String(req.body?.token ?? "").trim();
+      const password = String(req.body?.password ?? "");
+
+      if (!token) return res.status(400).json({ error: "Reset token required" });
+      if (password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters" });
+
+      const user = await authStorage.getUserByResetToken(token);
+
+      if (!user || !user.passwordResetToken || !user.passwordResetTokenExpiresAt) {
+        return res.status(400).json({ error: "Invalid or expired reset link" });
+      }
+
+      if (new Date() > user.passwordResetTokenExpiresAt) {
+        await authStorage.clearPasswordResetToken(user.id);
+        return res.status(400).json({ error: "Reset link has expired. Please request a new one." });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      await authStorage.updatePassword(user.id, passwordHash);
+
+      // Log the user in immediately after reset
+      req.session.userId = user.id;
+      req.session.save((err) => {
+        if (err) return res.status(500).json({ error: "Session save failed" });
+        res.json({ success: true, user: sanitize(user) });
+      });
+    } catch (err) {
+      console.error("Reset-password error:", err);
+      res.status(500).json({ error: "Something went wrong. Please try again." });
+    }
+  });
+
+  // ──────────────── Google OAuth start ─────────────────────────────────────────
   app.get("/auth/google", async (req, res) => {
     const config = await getGoogleConfig();
     if (!config) return res.redirect("/login?error=google_unavailable");
@@ -147,7 +235,7 @@ export function registerLocalAuthRoutes(app: Express) {
     });
   });
 
-  // ──────────────── Google OAuth callback ────────────────
+  // ──────────────── Google OAuth callback ──────────────────────────────────────
   app.get("/auth/google/callback", async (req, res) => {
     const config = await getGoogleConfig();
     if (!config) return res.redirect("/login?error=google_unavailable");
@@ -172,6 +260,7 @@ export function registerLocalAuthRoutes(app: Express) {
       if (!email || !sub) return res.redirect("/login?error=google_no_email");
 
       // If an existing user has this email (from email/password signup), link Google to them.
+      let isNewUser = false;
       let user = await authStorage.getUserByEmail(email);
       if (user) {
         await db.update(users).set({
@@ -184,6 +273,7 @@ export function registerLocalAuthRoutes(app: Express) {
           updatedAt: new Date(),
         }).where(eq(users.id, user.id));
       } else {
+        isNewUser = true;
         const [created] = await db.insert(users).values({
           email,
           firstName: givenName ?? null,
@@ -194,6 +284,8 @@ export function registerLocalAuthRoutes(app: Express) {
           emailVerified: true,
         }).returning();
         user = created;
+        // Fire-and-forget welcome email for new Google sign-ups
+        sendWelcomeEmail(email, givenName ?? null).catch(() => {});
       }
 
       await authStorage.incrementLoginCount(user.id);
@@ -202,7 +294,8 @@ export function registerLocalAuthRoutes(app: Express) {
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) return res.redirect("/login?error=session_failed");
-        res.redirect("/?auth=success");
+        // New Google users go to onboarding; returning users go to dashboard
+        res.redirect(isNewUser ? "/onboarding?auth=success" : "/?auth=success");
       });
     } catch (err) {
       console.error("Google callback error:", err);
@@ -213,6 +306,6 @@ export function registerLocalAuthRoutes(app: Express) {
 
 function sanitize(u: any) {
   if (!u) return u;
-  const { passwordHash, ...rest } = u;
+  const { passwordHash, passwordResetToken, passwordResetTokenExpiresAt, ...rest } = u;
   return rest;
 }

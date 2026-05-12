@@ -64,6 +64,79 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
   }
 }
 
+// ─── Shared email wrapper ─────────────────────────────────────────────────────
+
+function emailShell(content: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;overflow:hidden;">
+        <tr>
+          <td style="background:#f97316;padding:24px 32px;">
+            <span style="font-size:20px;font-weight:700;color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">🏠 Home Buddy</span>
+          </td>
+        </tr>
+        <tr><td style="padding:32px;">${content}</td></tr>
+        <tr>
+          <td style="padding:16px 32px 24px;border-top:1px solid #f3f4f6;">
+            <p style="margin:0;font-size:12px;color:#9ca3af;">© 2026 Home Buddy. You're receiving this because you have an account with us.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+// ─── Welcome email ─────────────────────────────────────────────────────────────
+
+export async function sendWelcomeEmail(email: string, firstName: string | null): Promise<boolean> {
+  const name = escapeHtml(firstName || "there");
+  return sendEmail({
+    to: email,
+    subject: "Welcome to Home Buddy 🏠",
+    html: emailShell(`
+      <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#111827;">Welcome, ${name}!</h1>
+      <p style="margin:0 0 24px;font-size:15px;color:#6b7280;line-height:1.6;">You're all set. Home Buddy will help you stay on top of your home's maintenance so nothing sneaks up on you.</p>
+      <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#374151;">Here's how to get started:</p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:24px;">
+        <tr><td style="padding:8px 0;font-size:14px;color:#374151;">✅ &nbsp;Add your home's details and systems</td></tr>
+        <tr><td style="padding:8px 0;font-size:14px;color:#374151;">📄 &nbsp;Upload an inspection report or warranty doc</td></tr>
+        <tr><td style="padding:8px 0;font-size:14px;color:#374151;">🔧 &nbsp;Review the maintenance tasks AI generates for you</td></tr>
+      </table>
+      <a href="https://homebuddy.app/onboarding" style="display:inline-block;background:#f97316;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:8px;">Set up my home →</a>
+    `),
+  });
+}
+
+// ─── Password reset email ──────────────────────────────────────────────────────
+
+export async function sendPasswordResetEmail(
+  email: string,
+  firstName: string | null,
+  resetUrl: string,
+): Promise<boolean> {
+  const name = escapeHtml(firstName || "there");
+  const safeUrl = escapeHtml(resetUrl);
+  return sendEmail({
+    to: email,
+    subject: "Reset your Home Buddy password",
+    html: emailShell(`
+      <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#111827;">Reset your password</h1>
+      <p style="margin:0 0 24px;font-size:15px;color:#6b7280;line-height:1.6;">Hi ${name}, we received a request to reset your password. Click the button below — this link expires in <strong>1 hour</strong>.</p>
+      <a href="${safeUrl}" style="display:inline-block;background:#f97316;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:8px;">Reset my password →</a>
+      <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">If you didn't request this, you can safely ignore this email. Your password won't change.</p>
+      <p style="margin:8px 0 0;font-size:12px;color:#d1d5db;word-break:break-all;">Or copy this link: ${safeUrl}</p>
+    `),
+  });
+}
+
+// ─── Contact form ─────────────────────────────────────────────────────────────
+
 export async function sendContactFormNotification(
   name: string,
   email: string,

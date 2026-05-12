@@ -26,6 +26,8 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Login from "@/pages/login";
 import Signup from "@/pages/signup";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import Dashboard from "@/pages/dashboard";
 import DocumentAnalysis from "@/pages/document-analysis";
 import Onboarding from "@/pages/onboarding";
@@ -149,6 +151,8 @@ function Router() {
           <Switch>
             <Route path="/login" component={Login} />
             <Route path="/signup" component={Signup} />
+            <Route path="/forgot-password" component={ForgotPassword} />
+            <Route path="/reset-password" component={ResetPassword} />
             <Route path="/pricing" component={Pricing} />
             <Route path="/terms" component={PublicTermsPage} />
             <Route path="/contact" component={Contact} />
@@ -183,6 +187,8 @@ function Router() {
             <Route path="/systems" component={Systems} />
             <Route path="/documents" component={Documents} />
             <Route path="/profile" component={Profile} />
+            <Route path="/forgot-password" component={ForgotPassword} />
+            <Route path="/reset-password" component={ResetPassword} />
             <Route path="/contact" component={Contact} />
             <Route path="/terms" component={Terms} />
             <Route path="/timeline" component={Timeline} />
