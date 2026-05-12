@@ -19,3 +19,7 @@ replit.nix
 *.pem
 *-service-account*.json
 gcp-*.json
+
+# Local dev helper scripts that may contain real credentials
+start-local.bat
+start-local.sh
