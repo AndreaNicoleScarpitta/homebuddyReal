@@ -90,65 +90,9 @@ jobs:
       - run: npm run build
       - name: Start server & run E2E tests
         run: |
-          set +e
-          NODE_ENV=production node dist/index.cjs > server.log 2>&1 &
-          SERVER_PID=$!
-          echo "Server started with PID: $SERVER_PID"
-
-          npx wait-on http://localhost:5000/api/health --timeout 60000
-          WAIT_ON_EXIT=$?
-          echo "--- wait-on exited with $WAIT_ON_EXIT ---"
-
-          echo "--- Manual health probe ---"
-          HEALTH_OUT=$(curl -sS -i http://localhost:5000/api/health 2>&1 || echo "curl failed")
-          echo "$HEALTH_OUT"
-
-          # Capture playwright output regardless of wait-on result
-          PW_OUT=""
-          PW_EXIT=99
-          if [ "$WAIT_ON_EXIT" -eq 0 ]; then
-            echo "--- Running playwright ---"
-            PW_OUT=$(npx playwright test --reporter=list 2>&1)
-            PW_EXIT=$?
-            echo "$PW_OUT"
-          fi
-
-          # Upload combined diagnostic to a public paste service (0x0.st)
-          {
-            echo "=== wait-on exit: $WAIT_ON_EXIT ==="
-            echo "=== playwright exit: $PW_EXIT ==="
-            echo ""
-            echo "=== Health probe ==="
-            echo "$HEALTH_OUT"
-            echo ""
-            echo "=== Server log (full) ==="
-            cat server.log 2>/dev/null || echo "(no server.log)"
-            echo ""
-            echo "=== Playwright output ==="
-            echo "$PW_OUT"
-          } > /tmp/e2e-diag.txt
-
-          # Dump playwright output as annotations (each ≤4KB, max 50 per run)
-          # Server log is mostly noise; playwright output is what we need.
-          echo "::error title=E2E Summary::wait-on=$WAIT_ON_EXIT pw=$PW_EXIT"
-
-          # Strip ANSI color codes and split into chunks so we don't hit per-annotation limit
-          printf '%s' "$PW_OUT" | sed -r 's/\x1B\[[0-9;]*[mK]//g' | awk '
-            BEGIN { buf=""; n=0 }
-            { buf = buf $0 "\n"; n++ }
-            n == 30 { printf "::error title=PW chunk::%s\n", buf; buf=""; n=0 }
-            END { if (n > 0) printf "::error title=PW chunk::%s\n", buf }
-          '
-
-          if [ "$WAIT_ON_EXIT" -ne 0 ]; then exit 1; fi
-          exit $PW_EXIT
-      - name: Upload server log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-server-log
-          path: server.log
-          if-no-files-found: ignore
+          NODE_ENV=production node dist/index.cjs &
+          npx wait-on http://localhost:5000/api/health --timeout 30000
+          npx playwright test
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
