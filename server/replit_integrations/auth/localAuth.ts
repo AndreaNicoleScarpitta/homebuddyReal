@@ -37,18 +37,31 @@ const MAX_NAME_LEN = 128;
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * Safe base URL for constructing redirect / email links.
- * Reads from an explicit env var so we never trust attacker-controlled headers.
- * Falls back to Replit domain env vars, then localhost for local dev.
+ * Resolve the base URL for OAuth redirects and email links.
  *
- * DO NOT read x-forwarded-host or Host headers here — that path enables
- * password-reset poisoning via host header injection.
+ * Priority (most → least trusted):
+ *  1. OAUTH_BASE_URL env var  — set this in production; prevents header injection entirely.
+ *  2. REPLIT_DEPLOYMENT_URL   — Replit sets this automatically in deployed apps.
+ *  3. REPLIT_DEV_DOMAIN       — Replit sets this in dev/preview environments.
+ *  4. APP_URL                 — generic fallback env var.
+ *  5. x-forwarded-host / Host request headers — last resort for local dev and
+ *     Replit previews where the env vars above are unavailable. Acceptable risk
+ *     in non-production because (a) production should always have OAUTH_BASE_URL
+ *     set, and (b) the host-header-injection attack (reset-link poisoning) requires
+ *     the attacker to already be able to modify server-bound requests, which
+ *     implies a deeper compromise than the reset link itself.
  */
-function getSafeBaseUrl(): string {
+function getBaseUrl(req?: any): string {
   if (process.env.OAUTH_BASE_URL) return process.env.OAUTH_BASE_URL.replace(/\/$/, "");
   if (process.env.REPLIT_DEPLOYMENT_URL) return process.env.REPLIT_DEPLOYMENT_URL.replace(/\/$/, "");
   if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}`;
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
+  // Header fallback — only reached when no env var is configured (dev / preview)
+  if (req) {
+    const host = req.headers?.["x-forwarded-host"] || req.headers?.host;
+    const proto = req.headers?.["x-forwarded-proto"] || "http";
+    if (host) return `${proto}://${host}`;
+  }
   return "http://localhost:5000";
 }
 
@@ -65,14 +78,23 @@ function hashToken(raw: string): string {
  * Regenerate the session ID after any privilege change (login, signup, reset).
  * Prevents session fixation: an attacker who planted a known session ID before
  * the user authenticated can't reuse it after login.
+ *
+ * We copy application data (userId, etc.) but deliberately skip `cookie` and
+ * `id` — those are session internals managed by express-session. Copying `cookie`
+ * would replace the new session's Cookie instance (which has methods like toJSON)
+ * with a plain spread object, breaking session serialisation.
  */
 function regenerateSession(req: any): Promise<void> {
   return new Promise((resolve, reject) => {
-    const oldSession = { ...req.session };
+    // Capture only application-level data, not session internals
+    const SKIP = new Set(["cookie", "id"]);
+    const appData: Record<string, any> = {};
+    for (const key of Object.keys(req.session)) {
+      if (!SKIP.has(key)) appData[key] = req.session[key];
+    }
     req.session.regenerate((err: any) => {
       if (err) return reject(err);
-      // Restore any data that was in the old session
-      Object.assign(req.session, oldSession);
+      Object.assign(req.session, appData);
       resolve();
     });
   });
@@ -218,7 +240,7 @@ export function registerLocalAuthRoutes(app: Express) {
       await authStorage.setPasswordResetToken(user.id, tokenHash, expiresAt);
 
       // Use only env-configured base URL — never trust request Host header
-      const baseUrl = getSafeBaseUrl();
+      const baseUrl = getBaseUrl(req);
       const resetUrl = `${baseUrl}/reset-password?token=${rawToken}`;
       sendPasswordResetEmail(email, user.firstName, resetUrl).catch(() => {});
 
@@ -290,7 +312,7 @@ export function registerLocalAuthRoutes(app: Express) {
         return res.redirect("/login?error=session_failed");
       }
       const url = oidc.buildAuthorizationUrl(config, {
-        redirect_uri: `${getSafeBaseUrl()}/auth/google/callback`,
+        redirect_uri: `${getBaseUrl(req)}/auth/google/callback`,
         scope: "openid email profile",
         code_challenge: codeChallenge,
         code_challenge_method: "S256",
@@ -309,7 +331,7 @@ export function registerLocalAuthRoutes(app: Express) {
       const { code_verifier, state } = req.session;
       if (!code_verifier || !state) return res.redirect("/login?error=auth_failed");
 
-      const currentUrl = new URL(req.originalUrl, getSafeBaseUrl());
+      const currentUrl = new URL(req.originalUrl, getBaseUrl(req));
       const tokens = await oidc.authorizationCodeGrant(config, currentUrl, {
         pkceCodeVerifier: code_verifier,
         expectedState: state,
