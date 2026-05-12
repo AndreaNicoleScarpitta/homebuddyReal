@@ -40,6 +40,7 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   uniqueIndex("users_uuid_idx").on(table.uuid),
+  uniqueIndex("users_email_idx").on(table.email),
 ]);
 
 // Object ACL policies live in the DB instead of being stamped into R2 object metadata,

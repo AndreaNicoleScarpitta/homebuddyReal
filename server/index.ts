@@ -182,21 +182,26 @@ app.use((req, res, next) => {
     logger.error({ err: (error as Error).message }, "Failed to initialize Stripe (non-fatal)");
   }
 
-  // Setup auth BEFORE registering other routes
-  await setupAuth(app);
-  registerAuthRoutes(app);
-  registerLocalAuthRoutes(app);
-  registerCsrfRoute(app);
-  registerOpenApiRoute(app);
+  // ── Rate limiters ─────────────────────────────────────────────────────────
+  // IMPORTANT: these MUST be registered before route handlers so they run first.
+  // Express processes middleware in registration order; a limiter added after a
+  // matching route handler is never reached.
 
-  // CSRF protection for all mutation routes (after auth so session is available)
-  app.use("/api", csrfProtection);
-  app.use("/v2", csrfProtection);
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many login attempts, please try again later" },
+  });
 
-  registerDonationRoutes(app);
-  registerBillingRoutes(app);
-  registerMeRoutes(app);
-  registerCalendarRoutes(app);
+  const contactLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many messages. Please wait a minute before sending another." },
+  });
 
   const mutationLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -216,28 +221,30 @@ app.use((req, res, next) => {
     skip: (req) => req.method !== "GET",
   });
 
-  const contactLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    max: 5,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: "Too many messages. Please wait a minute before sending another." },
-  });
-
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 20,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: "Too many login attempts, please try again later" },
-  });
-
-  app.use("/api/contact", contactLimiter);
+  // Apply limiters before routes so they are guaranteed to run
   app.use("/api/auth", authLimiter);
+  app.use("/api/contact", contactLimiter);
   app.use("/api", mutationLimiter);
   app.use("/api", readLimiter);
   app.use("/v2", mutationLimiter);
   app.use("/v2", readLimiter);
+
+  // ── Auth + CSRF ────────────────────────────────────────────────────────────
+  // Setup auth BEFORE registering other routes
+  await setupAuth(app);
+  registerAuthRoutes(app);
+  registerLocalAuthRoutes(app);
+  registerCsrfRoute(app);
+  registerOpenApiRoute(app);
+
+  // CSRF protection for all mutation routes (after auth so session is available)
+  app.use("/api", csrfProtection);
+  app.use("/v2", csrfProtection);
+
+  registerDonationRoutes(app);
+  registerBillingRoutes(app);
+  registerMeRoutes(app);
+  registerCalendarRoutes(app);
 
   app.use("/v2", v2Router);
   app.use("/api/agents", agentRouter);

@@ -21,18 +21,61 @@ import * as oidc from "openid-client";
 import { authStorage } from "./storage";
 import { db } from "../../db";
 import { users } from "@shared/models/auth";
-import { eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { sendWelcomeEmail, sendPasswordResetEmail } from "../../lib/email";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
-function getBaseUrl(req: any): string {
-  const envBase = process.env.OAUTH_BASE_URL;
-  if (envBase) return envBase.replace(/\/$/, "");
-  const host = req?.headers?.["x-forwarded-host"] || req?.headers?.host;
-  const proto = req?.headers?.["x-forwarded-proto"] || (process.env.NODE_ENV === "production" ? "https" : "http");
-  return host ? `${proto}://${host}` : "http://localhost:5000";
+// Input length caps — protect against oversized payloads being hashed/stored.
+// bcrypt silently truncates at 72 bytes so enormous passwords waste no real
+// CPU, but they shouldn't make it to the DB either.
+const MAX_EMAIL_LEN = 320; // RFC 5321 maximum
+const MAX_PASSWORD_LEN = 72; // bcrypt truncation boundary — no point exceeding
+const MAX_NAME_LEN = 128;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Safe base URL for constructing redirect / email links.
+ * Reads from an explicit env var so we never trust attacker-controlled headers.
+ * Falls back to Replit domain env vars, then localhost for local dev.
+ *
+ * DO NOT read x-forwarded-host or Host headers here — that path enables
+ * password-reset poisoning via host header injection.
+ */
+function getSafeBaseUrl(): string {
+  if (process.env.OAUTH_BASE_URL) return process.env.OAUTH_BASE_URL.replace(/\/$/, "");
+  if (process.env.REPLIT_DEPLOYMENT_URL) return process.env.REPLIT_DEPLOYMENT_URL.replace(/\/$/, "");
+  if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
+  return "http://localhost:5000";
+}
+
+/**
+ * We store a SHA-256 hash of the reset token in the DB.
+ * The raw token lives only in the email link — if the DB leaks, active tokens
+ * are not immediately exploitable.
+ */
+function hashToken(raw: string): string {
+  return crypto.createHash("sha256").update(raw).digest("hex");
+}
+
+/**
+ * Regenerate the session ID after any privilege change (login, signup, reset).
+ * Prevents session fixation: an attacker who planted a known session ID before
+ * the user authenticated can't reuse it after login.
+ */
+function regenerateSession(req: any): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const oldSession = { ...req.session };
+    req.session.regenerate((err: any) => {
+      if (err) return reject(err);
+      // Restore any data that was in the old session
+      Object.assign(req.session, oldSession);
+      resolve();
+    });
+  });
 }
 
 // Lazy-load Google OIDC config
@@ -62,28 +105,35 @@ function isGoogleConfigured(): boolean {
   return !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 }
 
+// ── Routes ────────────────────────────────────────────────────────────────────
+
 export function registerLocalAuthRoutes(app: Express) {
 
-  // ──────────────── Provider availability ─────────────────────────────────────
-  // Used by the frontend to decide which sign-in buttons to render.
-  // Never exposes keys — only boolean availability.
+  // ── Provider availability ──────────────────────────────────────────────────
   app.get("/api/auth/providers", (_req, res) => {
     res.json({ google: isGoogleConfigured() });
   });
 
-  // ──────────────── Email / password signup ────────────────────────────────────
+  // ── Email / password signup ────────────────────────────────────────────────
   app.post("/api/auth/signup", async (req, res) => {
     try {
       const email = String(req.body?.email ?? "").trim().toLowerCase();
       const password = String(req.body?.password ?? "");
-      const firstName = req.body?.firstName ? String(req.body.firstName).trim() : null;
-      const lastName = req.body?.lastName ? String(req.body.lastName).trim() : null;
+      const firstName = req.body?.firstName
+        ? String(req.body.firstName).trim().slice(0, MAX_NAME_LEN)
+        : null;
+      const lastName = req.body?.lastName
+        ? String(req.body.lastName).trim().slice(0, MAX_NAME_LEN)
+        : null;
 
-      if (!EMAIL_RE.test(email)) {
+      if (!EMAIL_RE.test(email) || email.length > MAX_EMAIL_LEN) {
         return res.status(400).json({ error: "Valid email required" });
       }
       if (password.length < 8) {
         return res.status(400).json({ error: "Password must be at least 8 characters" });
+      }
+      if (password.length > MAX_PASSWORD_LEN) {
+        return res.status(400).json({ error: "Password must be 72 characters or fewer" });
       }
 
       const existing = await authStorage.getUserByEmail(email);
@@ -98,6 +148,7 @@ export function registerLocalAuthRoutes(app: Express) {
       // Fire-and-forget — welcome email failure must not block signup
       sendWelcomeEmail(email, firstName).catch(() => {});
 
+      await regenerateSession(req);
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) return res.status(500).json({ error: "Session save failed" });
@@ -110,7 +161,7 @@ export function registerLocalAuthRoutes(app: Express) {
     }
   });
 
-  // ──────────────── Email / password login ─────────────────────────────────────
+  // ── Email / password login ─────────────────────────────────────────────────
   app.post("/api/auth/login", async (req, res) => {
     try {
       const email = String(req.body?.email ?? "").trim().toLowerCase();
@@ -118,6 +169,9 @@ export function registerLocalAuthRoutes(app: Express) {
 
       if (!email || !password) {
         return res.status(400).json({ error: "Email and password required" });
+      }
+      if (email.length > MAX_EMAIL_LEN || password.length > MAX_PASSWORD_LEN) {
+        return res.status(400).json({ error: "Invalid email or password" });
       }
 
       const user = await authStorage.getUserByEmail(email);
@@ -130,6 +184,7 @@ export function registerLocalAuthRoutes(app: Express) {
       }
 
       await authStorage.incrementLoginCount(user.id);
+      await regenerateSession(req);
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) return res.status(500).json({ error: "Session save failed" });
@@ -141,12 +196,12 @@ export function registerLocalAuthRoutes(app: Express) {
     }
   });
 
-  // ──────────────── Forgot password ────────────────────────────────────────────
+  // ── Forgot password ────────────────────────────────────────────────────────
   app.post("/api/auth/forgot-password", async (req, res) => {
     try {
       const email = String(req.body?.email ?? "").trim().toLowerCase();
 
-      if (!EMAIL_RE.test(email)) {
+      if (!EMAIL_RE.test(email) || email.length > MAX_EMAIL_LEN) {
         return res.status(400).json({ error: "Valid email required" });
       }
 
@@ -154,16 +209,17 @@ export function registerLocalAuthRoutes(app: Express) {
 
       // Always respond the same way — don't reveal whether the account exists
       if (!user || !user.passwordHash) {
-        // No local account (or OAuth-only) — still return 200 to avoid enumeration
         return res.json({ success: true });
       }
 
-      const token = crypto.randomBytes(32).toString("hex");
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = hashToken(rawToken);
       const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
-      await authStorage.setPasswordResetToken(user.id, token, expiresAt);
+      await authStorage.setPasswordResetToken(user.id, tokenHash, expiresAt);
 
-      const baseUrl = getBaseUrl(req);
-      const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+      // Use only env-configured base URL — never trust request Host header
+      const baseUrl = getSafeBaseUrl();
+      const resetUrl = `${baseUrl}/reset-password?token=${rawToken}`;
       sendPasswordResetEmail(email, user.firstName, resetUrl).catch(() => {});
 
       res.json({ success: true });
@@ -173,34 +229,43 @@ export function registerLocalAuthRoutes(app: Express) {
     }
   });
 
-  // ──────────────── Reset password ─────────────────────────────────────────────
+  // ── Reset password ─────────────────────────────────────────────────────────
   app.post("/api/auth/reset-password", async (req, res) => {
     try {
-      const token = String(req.body?.token ?? "").trim();
+      const rawToken = String(req.body?.token ?? "").trim();
       const password = String(req.body?.password ?? "");
 
-      if (!token) return res.status(400).json({ error: "Reset token required" });
+      if (!rawToken) return res.status(400).json({ error: "Reset token required" });
       if (password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters" });
+      if (password.length > MAX_PASSWORD_LEN) return res.status(400).json({ error: "Password must be 72 characters or fewer" });
 
-      const user = await authStorage.getUserByResetToken(token);
-
-      if (!user || !user.passwordResetToken || !user.passwordResetTokenExpiresAt) {
-        return res.status(400).json({ error: "Invalid or expired reset link" });
-      }
-
-      if (new Date() > user.passwordResetTokenExpiresAt) {
-        await authStorage.clearPasswordResetToken(user.id);
-        return res.status(400).json({ error: "Reset link has expired. Please request a new one." });
-      }
-
+      const tokenHash = hashToken(rawToken);
       const passwordHash = await bcrypt.hash(password, 12);
-      await authStorage.updatePassword(user.id, passwordHash);
+      const now = new Date();
 
-      // Log the user in immediately after reset
-      req.session.userId = user.id;
+      // Atomic: UPDATE WHERE token matches AND not expired → clears token in same op.
+      // If two simultaneous requests race, only one will match and return a row;
+      // the second gets no result and is rejected.
+      const [consumed] = await db
+        .update(users)
+        .set({ passwordHash, passwordResetToken: null, passwordResetTokenExpiresAt: null, updatedAt: now })
+        .where(
+          and(
+            eq(users.passwordResetToken, tokenHash),
+            gt(users.passwordResetTokenExpiresAt, now),
+          )
+        )
+        .returning();
+
+      if (!consumed) {
+        return res.status(400).json({ error: "Invalid or expired reset link. Please request a new one." });
+      }
+
+      await regenerateSession(req);
+      req.session.userId = consumed.id;
       req.session.save((err) => {
         if (err) return res.status(500).json({ error: "Session save failed" });
-        res.json({ success: true, user: sanitize(user) });
+        res.json({ success: true, user: sanitize(consumed) });
       });
     } catch (err) {
       console.error("Reset-password error:", err);
@@ -208,7 +273,7 @@ export function registerLocalAuthRoutes(app: Express) {
     }
   });
 
-  // ──────────────── Google OAuth start ─────────────────────────────────────────
+  // ── Google OAuth start ─────────────────────────────────────────────────────
   app.get("/auth/google", async (req, res) => {
     const config = await getGoogleConfig();
     if (!config) return res.redirect("/login?error=google_unavailable");
@@ -225,7 +290,7 @@ export function registerLocalAuthRoutes(app: Express) {
         return res.redirect("/login?error=session_failed");
       }
       const url = oidc.buildAuthorizationUrl(config, {
-        redirect_uri: `${getBaseUrl(req)}/auth/google/callback`,
+        redirect_uri: `${getSafeBaseUrl()}/auth/google/callback`,
         scope: "openid email profile",
         code_challenge: codeChallenge,
         code_challenge_method: "S256",
@@ -235,7 +300,7 @@ export function registerLocalAuthRoutes(app: Express) {
     });
   });
 
-  // ──────────────── Google OAuth callback ──────────────────────────────────────
+  // ── Google OAuth callback ──────────────────────────────────────────────────
   app.get("/auth/google/callback", async (req, res) => {
     const config = await getGoogleConfig();
     if (!config) return res.redirect("/login?error=google_unavailable");
@@ -244,7 +309,7 @@ export function registerLocalAuthRoutes(app: Express) {
       const { code_verifier, state } = req.session;
       if (!code_verifier || !state) return res.redirect("/login?error=auth_failed");
 
-      const currentUrl = new URL(req.originalUrl, getBaseUrl(req));
+      const currentUrl = new URL(req.originalUrl, getSafeBaseUrl());
       const tokens = await oidc.authorizationCodeGrant(config, currentUrl, {
         pkceCodeVerifier: code_verifier,
         expectedState: state,
@@ -259,7 +324,6 @@ export function registerLocalAuthRoutes(app: Express) {
 
       if (!email || !sub) return res.redirect("/login?error=google_no_email");
 
-      // If an existing user has this email (from email/password signup), link Google to them.
       let isNewUser = false;
       let user = await authStorage.getUserByEmail(email);
       if (user) {
@@ -284,17 +348,16 @@ export function registerLocalAuthRoutes(app: Express) {
           emailVerified: true,
         }).returning();
         user = created;
-        // Fire-and-forget welcome email for new Google sign-ups
         sendWelcomeEmail(email, givenName ?? null).catch(() => {});
       }
 
       await authStorage.incrementLoginCount(user.id);
       delete req.session.code_verifier;
       delete req.session.state;
+      await regenerateSession(req);
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) return res.redirect("/login?error=session_failed");
-        // New Google users go to onboarding; returning users go to dashboard
         res.redirect(isNewUser ? "/onboarding?auth=success" : "/?auth=success");
       });
     } catch (err) {
