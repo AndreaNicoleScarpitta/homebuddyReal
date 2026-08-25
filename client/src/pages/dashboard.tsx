@@ -8,6 +8,8 @@ import { AddSystemWizard } from "@/components/add-system-wizard";
 import { SystemsSummary } from "@/components/systems-summary";
 import { OnboardingTour, useTourState } from "@/components/onboarding-tour";
 import { ContractorSection } from "@/components/contractor-section";
+import { RiskCard } from "@/components/intelligence/risk-card";
+import { MissingDataPrompts } from "@/components/intelligence/missing-data-prompt";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,12 +17,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, ArrowRight, ListTodo, CheckCircle, CheckCircle2, Loader2, Sparkles, Wrench, AlertTriangle, ShieldCheck, ShieldAlert, Shield, RefreshCw, X } from "lucide-react";
+import { Plus, ArrowRight, FileSearch, ListTodo, CheckCircle, CheckCircle2, Loader2, Sparkles, Wrench, AlertTriangle, ShieldCheck, ShieldAlert, Shield, RefreshCw, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { FieldTooltip } from "@/components/field-tooltip";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getHome, getTasks, getSystems, createTask, updateTask, deleteTask, completeTask, analyzeTask } from "@/lib/api";
+import { getHome, getTasks, getSystems, createTask, updateTask, deleteTask, completeTask, analyzeTask, getHomeIntelligence } from "@/lib/api";
 import type { TaskAnalysis } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -146,8 +148,12 @@ function QuickAddTaskDialog({ isOpen, onClose, homeId }: { isOpen: boolean; onCl
       setManualDiy("Caution");
       setManualCost("");
     },
-    onError: () => {
-      toast({ title: "Error", description: "Could not create task.", variant: "destructive" });
+    onError: (err: Error) => {
+      toast({
+        title: "Couldn't add task",
+        description: err.message && err.message !== "Request failed" ? err.message : "Could not create task. Please try again.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -509,13 +515,23 @@ export default function Dashboard() {
     enabled: !!home?.id,
   });
 
-  // Pull-to-refresh — invalidates all three data sources, shows a top bar
+  // Deterministic, explainable, and cheap — no LLM call behind it. The
+  // dashboard reads it directly so "how is my house doing" is answered on
+  // the page the user actually lands on.
+  const { data: intelligence } = useQuery({
+    queryKey: ["intelligence", home?.id],
+    queryFn: () => getHomeIntelligence(home!.id),
+    enabled: !!home?.id,
+  });
+
+  // Pull-to-refresh — invalidates all data sources, shows a top bar
   const handlePullRefresh = useCallback(async () => {
     if (!home?.id) return;
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["home"] }),
       queryClient.invalidateQueries({ queryKey: ["tasks", home.id] }),
       queryClient.invalidateQueries({ queryKey: ["systems", home.id] }),
+      queryClient.invalidateQueries({ queryKey: ["intelligence", home.id] }),
     ]);
   }, [queryClient, home?.id]);
 
@@ -637,7 +653,21 @@ export default function Dashboard() {
   }).length;
   const poorSystemsCount = systems.filter(s => s.condition === "Poor").length;
 
+  // Highest-risk first, capped — the dashboard shows what needs attention,
+  // not an exhaustive audit of every system.
+  const watchSystems = (intelligence?.systems ?? [])
+    .filter((s) => s.conditionStatus !== "good")
+    .sort((a, b) => b.riskLevel - a.riskLevel)
+    .slice(0, 3);
+
+  // Health score has one source of truth: the server's rules engine, which
+  // explains itself and is the same number the risk cards below are derived
+  // from. The local formula is only a fallback for when that call has not
+  // landed (first paint, offline PWA) — otherwise the dashboard and the
+  // insights disagree about the same house.
   const computedHealthScore = (() => {
+    const serverScore = intelligence?.insight?.overallHealthScore;
+    if (typeof serverScore === "number" && serverScore > 0) return serverScore;
     const stored = home.healthScore;
     if (stored && stored > 0) return stored;
     if (systems.length === 0) return 0;
@@ -692,17 +722,27 @@ export default function Dashboard() {
       )}
 
       <div className="space-y-8">
-        {/* Header */}
-        <header>
-          <h1 className="text-3xl font-heading font-bold text-foreground" data-testid="text-heading">
-            Your Home
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            {activeTasks.length > 0 
-              ? `${activeTasks.length} task${activeTasks.length > 1 ? 's' : ''} need${activeTasks.length === 1 ? 's' : ''} attention`
-              : "Everything looks good"
-            }
-          </p>
+        {/* Header. Document analysis lives here rather than in the nav: it is
+            the fastest way to turn a report you already own into a real plan,
+            so it belongs where the plan is, as an action. */}
+        <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-heading font-bold text-foreground" data-testid="text-heading">
+              Your Home
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              {activeTasks.length > 0
+                ? `${activeTasks.length} task${activeTasks.length > 1 ? 's' : ''} need${activeTasks.length === 1 ? 's' : ''} attention`
+                : "Everything looks good"
+              }
+            </p>
+          </div>
+          <Link href="/document-analysis">
+            <Button variant="outline" className="shrink-0" data-testid="button-analyze-document-header">
+              <FileSearch className="h-4 w-4 mr-2" />
+              Analyze a document
+            </Button>
+          </Link>
         </header>
 
         {/* At a Glance */}
@@ -722,10 +762,31 @@ export default function Dashboard() {
 
         </section>
 
+        {/* Systems to watch — the part of Home Intelligence worth seeing
+            without going looking for it. Only rendered when something
+            actually needs attention, so a healthy home stays quiet. */}
+        {watchSystems.length > 0 && (
+          <section className="space-y-3" data-testid="section-systems-to-watch">
+            <h2 className="text-lg font-heading font-semibold">Systems to watch</h2>
+            <div className="space-y-3">
+              {watchSystems.map((s) => (
+                <RiskCard key={s.systemId} insight={s} />
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Systems Summary */}
         <section data-tour="systems-section">
           <SystemsSummary systems={systems} onAddSystem={() => setShowAddSystem(true)} />
         </section>
+
+        {/* What we still need to know to make the above sharper. */}
+        {(intelligence?.insight?.missingCriticalData?.length ?? 0) > 0 && (
+          <section data-testid="section-missing-data">
+            <MissingDataPrompts items={intelligence!.insight.missingCriticalData} />
+          </section>
+        )}
 
         {/* Add System Wizard */}
         <AddSystemWizard 
@@ -747,11 +808,16 @@ export default function Dashboard() {
         <section className="space-y-6" data-tour="maintenance-plan">
           <div className="flex justify-between items-baseline">
             <h2 className="text-lg font-heading font-semibold">Maintenance Plan</h2>
-            <Link href="/maintenance-log">
-              <Button variant="ghost" size="sm" className="text-muted-foreground" data-testid="button-view-plan">
-                View all <ArrowRight className="h-3 w-3 ml-1" />
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="sm" onClick={() => setShowAddTask(true)} data-testid="button-add-task">
+                <Plus className="h-3 w-3 mr-1" /> Add Task
               </Button>
-            </Link>
+              <Link href="/maintenance-log">
+                <Button variant="ghost" size="sm" className="text-muted-foreground" data-testid="button-view-plan">
+                  View all <ArrowRight className="h-3 w-3 ml-1" />
+                </Button>
+              </Link>
+            </div>
           </div>
           
           {tasks.length === 0 ? (
@@ -771,11 +837,6 @@ export default function Dashboard() {
                     <ListTodo className="h-4 w-4 mr-2" />
                     Add Task
                   </Button>
-                  <Link href="/inspections">
-                    <Button variant="outline" data-testid="button-upload-inspection">
-                      Upload Report
-                    </Button>
-                  </Link>
                 </div>
               </div>
             </Card>

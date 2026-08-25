@@ -230,7 +230,7 @@ export default function Onboarding() {
 
   const handleGoToInspectionsUpload = useCallback(() => {
     trackEvent("onboarding_step", "onboarding", "inspection_upload_redirect");
-    setLocation("/inspections");
+    setLocation("/document-analysis");
   }, [setLocation]);
 
   // Progress dots — one per step in the happy path. The inspection-alt

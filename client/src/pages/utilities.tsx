@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -134,7 +133,7 @@ function UtilityForm({ homeId, initial, onSaved }: { homeId: number; initial?: P
   );
 }
 
-export default function UtilitiesPage() {
+export function UtilitiesSection() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -159,12 +158,11 @@ export default function UtilitiesPage() {
   const totalMonthly = accounts.reduce((s, a) => s + (a.averageMonthlyBill ?? 0), 0);
 
   return (
-    <Layout>
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+    <>
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-heading font-bold">Utilities</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Provider contacts, account numbers, and billing info</p>
+            <p className="text-sm text-muted-foreground">Provider contacts, account numbers, and billing info</p>
           </div>
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
@@ -239,6 +237,6 @@ export default function UtilitiesPage() {
           )}
         </DialogContent>
       </Dialog>
-    </Layout>
+    </>
   );
 }

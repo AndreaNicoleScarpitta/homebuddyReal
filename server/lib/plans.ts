@@ -28,8 +28,6 @@ export interface PlanLimits {
   maxActiveTasks: number | null;
   /** How many document analyses per calendar month. `null` = unlimited. */
   maxDocAnalysesPerMonth: number | null;
-  /** How many AI-generated home reports per month. `null` = unlimited. */
-  maxAiReportsPerMonth: number | null;
   /** Whether the user can use AI-powered task suggestions. */
   aiTaskSuggestions: boolean;
   /** Whether the user gets seasonal prep campaigns (auto-emails). */
@@ -63,7 +61,6 @@ export const PLANS: Record<PlanId, { id: PlanId; name: string; priceMonthly: num
       // feature for a third inspection report they're paywalled out
       // before they had a chance to say "this is useful."
       maxDocAnalysesPerMonth: 5,
-      maxAiReportsPerMonth: 0,
       aiTaskSuggestions: false,
       seasonalCampaigns: false,
       prioritySupport: false,
@@ -78,7 +75,6 @@ export const PLANS: Record<PlanId, { id: PlanId; name: string; priceMonthly: num
       maxSystemsPerHome: null, // unlimited
       maxActiveTasks: null,
       maxDocAnalysesPerMonth: 10,
-      maxAiReportsPerMonth: 2,
       aiTaskSuggestions: true,
       seasonalCampaigns: false,
       prioritySupport: false,
@@ -93,7 +89,6 @@ export const PLANS: Record<PlanId, { id: PlanId; name: string; priceMonthly: num
       maxSystemsPerHome: null,
       maxActiveTasks: null,
       maxDocAnalysesPerMonth: null,
-      maxAiReportsPerMonth: null,
       aiTaskSuggestions: true,
       seasonalCampaigns: true,
       prioritySupport: true,
@@ -178,7 +173,6 @@ export interface UsageSnapshot {
   homes: number;
   activeTasks: number;
   docAnalysesThisMonth: number;
-  aiReportsThisMonth: number;
 }
 
 export async function getUserUsage(userId: string): Promise<UsageSnapshot> {
@@ -193,7 +187,7 @@ export async function getUserUsage(userId: string): Promise<UsageSnapshot> {
     }
   };
 
-  const [homes, activeTasks, docs, reports] = await Promise.all([
+  const [homes, activeTasks, docs] = await Promise.all([
     safe(sql`SELECT COUNT(*)::int AS count FROM homes WHERE user_id = ${userId}`),
     safe(sql`
       SELECT COUNT(*)::int AS count
@@ -206,20 +200,12 @@ export async function getUserUsage(userId: string): Promise<UsageSnapshot> {
       FROM inspection_reports
       WHERE user_id = ${userId} AND created_at >= date_trunc('month', NOW())
     `),
-    safe(sql`
-      SELECT COUNT(*)::int AS count
-      FROM agent_outputs
-      WHERE output_type = 'home_report'
-        AND metadata->>'userId' = ${userId}
-        AND created_at >= date_trunc('month', NOW())
-    `),
   ]);
 
   return {
     homes,
     activeTasks,
     docAnalysesThisMonth: docs,
-    aiReportsThisMonth: reports,
   };
 }
 
@@ -227,7 +213,7 @@ export async function getUserUsage(userId: string): Promise<UsageSnapshot> {
 // Permission helpers — call these before doing the thing
 // ---------------------------------------------------------------------------
 
-export type LimitKey = "homes" | "activeTasks" | "docAnalyses" | "aiReports";
+export type LimitKey = "homes" | "activeTasks" | "docAnalyses";
 
 export interface LimitCheck {
   allowed: boolean;
@@ -259,10 +245,6 @@ export async function checkLimit(userId: string, feature: LimitKey): Promise<Lim
       limit = limits.maxDocAnalysesPerMonth;
       current = usage.docAnalysesThisMonth;
       break;
-    case "aiReports":
-      limit = limits.maxAiReportsPerMonth;
-      current = usage.aiReportsThisMonth;
-      break;
   }
 
   const allowed = limit === null || current < limit;
@@ -283,7 +265,6 @@ function featureLabel(f: LimitKey): string {
     case "homes": return "homes";
     case "activeTasks": return "active tasks";
     case "docAnalyses": return "document analyses this month";
-    case "aiReports": return "AI reports this month";
   }
 }
 

@@ -48,9 +48,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run db:push
-      - name: Apply event_log immutability trigger (not created by db:push)
-        run: psql "$DATABASE_URL" -f migrations/0001_event_log_immutability_trigger.sql
+      - run: npm run db:migrate
       - name: Start server for integration tests
         run: npx tsx server/index.ts &
       - name: Wait for server to be ready
@@ -86,7 +84,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run db:push
+      - run: npm run db:migrate
       - run: npm run build
       - name: Start server & run E2E tests
         run: |

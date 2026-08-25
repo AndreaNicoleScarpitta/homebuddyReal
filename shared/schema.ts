@@ -5,7 +5,6 @@ import { z } from "zod";
 
 // Export auth models (IMPORTANT for Replit Auth)
 export * from "./models/auth";
-export * from "./models/chat";
 // Export event sourcing models (state-machine + immutable event log)
 export * from "./models/eventing";
 // Export agent system models

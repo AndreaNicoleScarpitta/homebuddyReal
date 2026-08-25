@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { User, MapPin, Home, Shield, Trash2, Heart, Coffee, Sparkles, CheckCircle2, Calendar, Copy, Check, AlertCircle } from "lucide-react";
+import { User, MapPin, Home, Shield, Trash2, Calendar, Copy, Check, AlertCircle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getHome, getNotificationPreferences, updateNotificationPreferences, updateHome } from "@/lib/api";
@@ -15,8 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { trackEvent, trackSlugPageView, trackModalOpen } from "@/lib/analytics";
 import { PAGE_SLUGS, MODAL_SLUGS } from "@/lib/slug-registry";
-import { useSearch } from "wouter";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -197,157 +196,6 @@ function ProfileSkeleton() {
       <Skeleton className="h-48" />
       <Skeleton className="h-96" />
     </div>
-  );
-}
-
-function SupportCard() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const searchString = useSearch();
-  const params = new URLSearchParams(searchString);
-  const supportRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (params.get("section") === "support" && supportRef.current) {
-      setTimeout(() => {
-        supportRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 300);
-    }
-  }, [searchString]);
-
-  const { data: config } = useQuery({
-    queryKey: ["donationConfig"],
-    queryFn: async () => {
-      const res = await fetch("/api/donations/config", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load");
-      return res.json() as Promise<{ publishableKey: string; donations: { priceId: string; amount: number; productName: string }[] }>;
-    },
-  });
-
-  const { data: status } = useQuery({
-    queryKey: ["donationStatus"],
-    queryFn: async () => {
-      const res = await fetch("/api/donations/status", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load");
-      return res.json() as Promise<{ hasDonated: boolean }>;
-    },
-  });
-
-  const checkoutMutation = useMutation({
-    mutationFn: async (priceId: string) => {
-      const res = await fetch("/api/donations/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ priceId }),
-      });
-      if (!res.ok) throw new Error("Failed to create checkout");
-      return res.json();
-    },
-    onSuccess: (data) => {
-      if (data.url) window.location.href = data.url;
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Could not start checkout. Please try again.", variant: "destructive" });
-    },
-  });
-
-  const verifyDonationMutation = useMutation({
-    mutationFn: async (sessionId: string) => {
-      const res = await fetch("/api/donations/verify-and-mark", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ sessionId }),
-      });
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["donationStatus"] });
-    },
-  });
-
-  useEffect(() => {
-    const donationParam = params.get("donation");
-    const sessionId = params.get("session_id");
-    if (donationParam === "success" && sessionId) {
-      verifyDonationMutation.mutate(sessionId);
-      toast({ title: "Thank you!", description: "Your donation means a lot and helps keep Home Buddy running." });
-      trackEvent("donation_completed", "donations", "success");
-      window.history.replaceState({}, "", "/profile");
-    } else if (donationParam === "cancelled") {
-      window.history.replaceState({}, "", "/profile");
-    }
-  }, []);
-
-  const tierIcons = [Coffee, Heart, Sparkles];
-  const tierLabels = ["$1", "$5", "$10"];
-
-  return (
-    <Card ref={supportRef}>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg font-heading flex items-center gap-2">
-          <Heart className="h-5 w-5 text-primary" />
-          Support Home Buddy
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {status?.hasDonated ? (
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/10">
-            <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
-            <p className="text-sm text-muted-foreground">
-              Thank you for your support! Your donation helps keep Home Buddy running.
-            </p>
-          </div>
-        ) : (
-          <>
-            <p className="text-sm text-muted-foreground">
-              If you find Home Buddy helpful, a small one-time donation helps cover hosting costs and keeps development going.
-            </p>
-            {config?.donations && config.donations.length > 0 ? (
-              <div className="grid grid-cols-3 gap-3">
-                {config.donations.map((tier, i) => {
-                  const Icon = tierIcons[i] || Heart;
-                  return (
-                    <Button
-                      key={tier.priceId}
-                      variant="outline"
-                      className="flex flex-col items-center gap-2 h-auto py-4 hover:border-primary hover:bg-primary/5 transition-colors"
-                      onClick={() => {
-                        trackEvent("donation_profile_click", "donations", `$${tier.amount / 100}`);
-                        checkoutMutation.mutate(tier.priceId);
-                      }}
-                      disabled={checkoutMutation.isPending}
-                      data-testid={`button-profile-donate-${tier.amount}`}
-                    >
-                      <Icon className="h-5 w-5 text-primary" />
-                      <span className="text-lg font-semibold">{tierLabels[i]}</span>
-                    </Button>
-                  );
-                })}
-              </div>
-            ) : (
-              <Button
-                className="w-full"
-                onClick={() => {
-                  trackEvent("donation_profile_click", "donations", "default_$5");
-                  checkoutMutation.mutate("price_1T8mUJCsyvg4oGAnj6XYLAGy");
-                }}
-                disabled={checkoutMutation.isPending}
-                data-testid="button-profile-donate-default"
-              >
-                <Heart className="h-4 w-4 mr-2" />
-                {checkoutMutation.isPending ? "Redirecting to Stripe..." : "Donate $5"}
-              </Button>
-            )}
-            <p className="text-xs text-muted-foreground text-center">
-              One-time payment via Stripe. No recurring charges.
-            </p>
-          </>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -646,8 +494,6 @@ export default function Profile() {
           <NotificationSettings />
 
           <CalendarSubscriptionCard />
-
-          <SupportCard />
 
           <Card>
             <CardHeader className="pb-3">

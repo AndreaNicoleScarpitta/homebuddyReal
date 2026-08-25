@@ -219,15 +219,10 @@ function generateNarrative(healthScore: number, systemInsights: SystemInsight[])
 export async function computeHomeIntelligence(homeId: number): Promise<HomeIntelligenceResponse> {
   const allContexts = await loadAllSystemContexts(homeId);
 
-  // Load learning adjustments (non-fatal if fails)
-  let learningParams: Record<string, number> = {};
-  try {
-    const { loadAdjustments } = await import("./learning-engine");
-    learningParams = await loadAdjustments(homeId);
-  } catch {
-    // Non-fatal: default to no adjustments
-  }
-  const riskAdjustmentFactor = learningParams["risk_adjustment_factor"] ?? 1.0;
+  // Risk is unadjusted. The outcome-learning loop that used to tune this
+  // required users to hand-report every action and its eventual outcome,
+  // which nobody did, so the factor was always 1.0 in practice.
+  const riskAdjustmentFactor = 1.0;
 
   // Compute insights for each system
   const systemInsights: SystemInsight[] = allContexts.map(({ ctx }) => computeSystemInsightFromContext(ctx));
@@ -300,15 +295,10 @@ export async function computeSystemInsightDetail(systemId: number, homeId: numbe
 
   if (!match) throw new Error("System not found");
 
-  // Load learning adjustments (non-fatal if fails)
-  let learningParams: Record<string, number> = {};
-  try {
-    const { loadAdjustments } = await import("./learning-engine");
-    learningParams = await loadAdjustments(homeId);
-  } catch {
-    // Non-fatal: default to no adjustments
-  }
-  const riskAdjustmentFactor = learningParams["risk_adjustment_factor"] ?? 1.0;
+  // Risk is unadjusted. The outcome-learning loop that used to tune this
+  // required users to hand-report every action and its eventual outcome,
+  // which nobody did, so the factor was always 1.0 in practice.
+  const riskAdjustmentFactor = 1.0;
 
   const { ctx } = match;
   const evaluation = evaluateSystem(ctx);

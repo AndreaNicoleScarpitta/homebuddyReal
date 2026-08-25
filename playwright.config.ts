@@ -33,7 +33,8 @@ export default defineConfig({
     timeout: 30_000,
     env: {
       NODE_ENV: "development",
-      DATABASE_URL: process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/home_buddy",
+      // Port 5433 on purpose — see scripts/dev-start.cjs
+      DATABASE_URL: process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5433/home_buddy",
     },
   },
 });

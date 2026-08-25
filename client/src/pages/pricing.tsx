@@ -200,13 +200,13 @@ export default function PricingPage() {
       {/* Plans grid */}
       <div className="max-w-6xl mx-auto px-6 pb-16">
         {isLoading ? (
-          <div className="grid md:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
+          <div className="grid md:grid-cols-2 gap-6">
+            {[1, 2].map((i) => (
               <div key={i} className="border border-border rounded-2xl p-8 animate-pulse h-96 bg-card" />
             ))}
           </div>
         ) : (
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className={`grid gap-6 ${plans.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
             {plans.map((plan) => {
               const Icon = PLAN_ICONS[plan.id];
               const isPopular = plan.popular;

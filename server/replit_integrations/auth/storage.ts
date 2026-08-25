@@ -11,8 +11,6 @@ export interface IAuthStorage {
   updateUserPrivacy(id: string, dataStorageOptOut: boolean): Promise<User>;
   acceptDisclaimer(id: string, version: string, ipAddress?: string): Promise<User>;
   incrementLoginCount(id: string): Promise<User>;
-  snoozeDonationPrompt(id: string, snoozeUntilLoginCount: number): Promise<User>;
-  markDonated(id: string): Promise<User>;
   updateStripeCustomerId(id: string, stripeCustomerId: string): Promise<User>;
   setPasswordResetToken(id: string, token: string, expiresAt: Date): Promise<void>;
   clearPasswordResetToken(id: string): Promise<void>;
@@ -80,24 +78,6 @@ class AuthStorage implements IAuthStorage {
     const [updated] = await db
       .update(users)
       .set({ loginCount: sql`COALESCE(${users.loginCount}, 0) + 1`, updatedAt: new Date() })
-      .where(eq(users.id, id))
-      .returning();
-    return updated;
-  }
-
-  async snoozeDonationPrompt(id: string, snoozeUntilLoginCount: number): Promise<User> {
-    const [updated] = await db
-      .update(users)
-      .set({ donationPromptSnoozeUntilLoginCount: snoozeUntilLoginCount, updatedAt: new Date() })
-      .where(eq(users.id, id))
-      .returning();
-    return updated;
-  }
-
-  async markDonated(id: string): Promise<User> {
-    const [updated] = await db
-      .update(users)
-      .set({ hasDonated: true, updatedAt: new Date() })
       .where(eq(users.id, id))
       .returning();
     return updated;

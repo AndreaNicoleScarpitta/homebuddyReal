@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, Clock, FileText, Settings, Menu, LogOut, HelpCircle, Layers, ClipboardList, Brain, Shield, Zap, ShieldCheck, MessageSquare, PackageOpen } from "lucide-react";
+import { Home, Clock, Settings, Menu, LogOut, HelpCircle, Layers, ClipboardList, Brain, FolderOpen, PackageOpen, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState, useEffect } from "react";
@@ -12,31 +12,38 @@ import { PlanBadge } from "@/components/plan-badge";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { OfflineBanner } from "@/components/offline-banner";
 
-// Primary surfaces — the core of what homeowners need daily
+// Primary surfaces — what a homeowner actually comes here to do: see the
+// state of the house, work the plan, look up a system, find a record.
+// Document analysis is deliberately not a tab; it is an action on Home and
+// in onboarding, because it is something you do, not somewhere you live.
 const primaryNav = [
   { href: "/dashboard", icon: Home, label: "Home", match: ["/dashboard", "/"] },
-  { href: "/systems", icon: Layers, label: "Systems", match: ["/systems"] },
   { href: "/maintenance-log", icon: ClipboardList, label: "Plan", match: ["/maintenance-log"] },
-  { href: "/chat", icon: MessageSquare, label: "Ask AI", match: ["/chat"] },
-  { href: "/intelligence", icon: Brain, label: "Insights", match: ["/intelligence"] },
+  { href: "/systems", icon: Layers, label: "Systems", match: ["/systems"] },
+  {
+    href: "/records",
+    icon: FolderOpen,
+    label: "Records",
+    // The four pages Records absorbed still redirect here; keep them
+    // highlighting the tab while those URLs are in circulation.
+    match: ["/records", "/documents", "/warranties", "/insurance", "/utilities"],
+  },
 ];
 
-// Records — reference data homeowners look up occasionally
+// Secondary — reachable, but no longer competing for primary attention
+// while we work out whether they earn their place.
 const secondaryNav = [
-  { href: "/warranties", icon: Shield, label: "Warranties" },
-  { href: "/utilities", icon: Zap, label: "Utilities" },
-  { href: "/insurance", icon: ShieldCheck, label: "Insurance" },
-  { href: "/documents", icon: FileText, label: "Documents" },
-  { href: "/transfer-kit", icon: PackageOpen, label: "Transfer Kit" },
+  { href: "/chat", icon: MessageSquare, label: "Ask AI" },
+  { href: "/intelligence", icon: Brain, label: "Insights" },
   { href: "/timeline", icon: Clock, label: "Timeline" },
+  { href: "/transfer-kit", icon: PackageOpen, label: "Transfer Kit" },
 ];
 
 const bottomNavItems = [
   { href: "/dashboard", icon: Home, label: "Home" },
-  { href: "/systems", icon: Layers, label: "Systems" },
   { href: "/maintenance-log", icon: ClipboardList, label: "Plan" },
-  { href: "/chat", icon: MessageSquare, label: "Ask AI" },
-  { href: "/intelligence", icon: Brain, label: "Insights" },
+  { href: "/systems", icon: Layers, label: "Systems" },
+  { href: "/records", icon: FolderOpen, label: "Records" },
 ];
 
 function isNavActive(location: string, item: { href: string; match?: string[] }) {

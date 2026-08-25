@@ -5,8 +5,29 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1767817608021,
-      "tag": "0000_military_amazoness",
+      "when": 1783005640027,
+      "tag": "0000_baseline",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783005650750,
+      "tag": "0001_add_check_constraints",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783005653788,
+      "tag": "0002_event_log_immutability_trigger",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783005657057,
+      "tag": "0003_add_missing_fk_constraints",
       "breakpoints": true
     }
   ]

@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { ObjectUploader } from "@/components/ObjectUploader";
@@ -41,8 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { format } from "date-fns";
-import { trackEvent, trackSlugPageView } from "@/lib/analytics";
-import { PAGE_SLUGS } from "@/lib/slug-registry";
+import { trackEvent } from "@/lib/analytics";
 import { FieldTooltip } from "@/components/field-tooltip";
 import type { HomeDocument } from "@shared/schema";
 
@@ -165,14 +163,12 @@ function DocumentRow({
   );
 }
 
-export default function Documents() {
+export function DocumentsSection() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [uploadCategory, setUploadCategory] = useState<string>("General");
   const [previewDoc, setPreviewDoc] = useState<HomeDocument | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-
-  useEffect(() => { trackSlugPageView(PAGE_SLUGS.documents); }, []);
 
   const { data: home, isLoading: homeLoading } = useQuery({
     queryKey: ["home"],
@@ -233,38 +229,28 @@ export default function Documents() {
 
   if (homeLoading || docsLoading) {
     return (
-      <Layout>
-        <div className="flex items-center justify-center h-96">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </Layout>
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
     );
   }
 
   if (!home) {
     return (
-      <Layout>
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">
-            Please set up your home profile first.
-          </p>
-        </div>
-      </Layout>
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">
+          Please set up your home profile first.
+        </p>
+      </div>
     );
   }
 
   return (
-    <Layout>
-      <div className="space-y-8 max-w-4xl mx-auto">
+    <>
+      <div className="space-y-8">
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
           <div>
-            <h1
-              className="text-3xl font-heading font-bold text-foreground"
-              data-testid="text-heading"
-            >
-              Documents
-            </h1>
-            <p className="text-muted-foreground mt-1">
+            <p className="text-muted-foreground">
               Store and organize your important home files
             </p>
           </div>
@@ -411,6 +397,6 @@ export default function Documents() {
           </DialogContent>
         </Dialog>
       </div>
-    </Layout>
+    </>
   );
 }

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -114,7 +113,7 @@ function WarrantyForm({ homeId, onSaved }: { homeId: number; onSaved: () => void
   );
 }
 
-export default function WarrantiesPage() {
+export function WarrantiesSection() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -139,12 +138,11 @@ export default function WarrantiesPage() {
   const expired = warranties.filter(w => warrantyStatus(w) === "expired").length;
 
   return (
-    <Layout>
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+    <>
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-heading font-bold">Warranties</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Track coverage for appliances, systems, and home warranty plans</p>
+            <p className="text-sm text-muted-foreground">Track coverage for appliances, systems, and home warranty plans</p>
           </div>
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
@@ -211,6 +209,6 @@ export default function WarrantiesPage() {
           })}
         </div>
       </div>
-    </Layout>
+    </>
   );
 }

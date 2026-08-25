@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -141,7 +140,7 @@ function InsuranceForm({ homeId, initial, onSaved }: { homeId: number; initial?:
   );
 }
 
-export default function InsurancePage() {
+export function InsuranceSection() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -167,12 +166,11 @@ export default function InsurancePage() {
   const expired = policies.filter(p => renewalStatus(p) === "expired").length;
 
   return (
-    <Layout>
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+    <>
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-heading font-bold">Insurance</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Policies, carriers, agents, and renewal dates</p>
+            <p className="text-sm text-muted-foreground">Policies, carriers, agents, and renewal dates</p>
           </div>
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
@@ -259,6 +257,6 @@ export default function InsurancePage() {
           )}
         </DialogContent>
       </Dialog>
-    </Layout>
+    </>
   );
 }

@@ -10,24 +10,19 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupAuth, registerAuthRoutes, registerLocalAuthRoutes } from "./replit_integrations/auth";
 import { logEnvironmentStatus } from "./lib/env-validation";
+import { verifyDatabaseConnection } from "./lib/db-check";
 import { logger } from "./lib/logger";
-import { bootstrapMigrationTracking } from "./lib/db-bootstrap";
 import { WebhookHandlers } from "./webhookHandlers";
-import { registerDonationRoutes } from "./donation-routes";
 import { registerBillingRoutes } from "./billing-routes";
 import { registerMeRoutes } from "./me-routes";
 import { registerCalendarRoutes } from "./calendar-routes";
 import { startNotificationScheduler, stopNotificationScheduler } from "./jobs/notificationScheduler";
-import { startAgentScheduler, stopAgentScheduler } from "./jobs/agentScheduler";
 import { pool } from "./db";
 import crypto from "crypto";
 import cookieParser from "cookie-parser";
 import compression from "compression";
 import { csrfProtection, registerCsrfRoute } from "./lib/csrf";
 import { registerOpenApiRoute } from "./openapi";
-import { agentRouter } from "./agents/routes";
-// Register all agent handlers at startup
-import "./agents/index";
 
 const app = express();
 const httpServer = createServer(app);
@@ -153,10 +148,12 @@ app.use((req, res, next) => {
 
 (async () => {
   logEnvironmentStatus();
-  
-  // Bootstrap migration tracking for deployments
-  await bootstrapMigrationTracking();
-  
+
+  // Fail the boot loudly if the database is unreachable or rejects our
+  // credentials — otherwise the server comes up "healthy-looking" and every
+  // request 500s. Exits the process on failure.
+  await verifyDatabaseConnection();
+
   try {
     const { runMigrations } = await import('stripe-replit-sync');
     const { getStripeSync } = await import('./stripeClient');
@@ -241,13 +238,11 @@ app.use((req, res, next) => {
   app.use("/api", csrfProtection);
   app.use("/v2", csrfProtection);
 
-  registerDonationRoutes(app);
   registerBillingRoutes(app);
   registerMeRoutes(app);
   registerCalendarRoutes(app);
 
   app.use("/v2", v2Router);
-  app.use("/api/agents", agentRouter);
   await registerRoutes(httpServer, app);
 
   // Sentry error handler — must come BEFORE our own error handler so Sentry
@@ -303,7 +298,6 @@ app.use((req, res, next) => {
     () => {
       log(`serving on port ${port}`);
       startNotificationScheduler();
-      startAgentScheduler();
     },
   );
 
@@ -311,7 +305,6 @@ app.use((req, res, next) => {
   const shutdown = (signal: string) => {
     log(`${signal} received — shutting down gracefully`);
     stopNotificationScheduler();
-    stopAgentScheduler();
     httpServer.close(() => {
       log("HTTP server closed");
       pool.end().then(() => {

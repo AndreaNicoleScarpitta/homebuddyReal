@@ -12,6 +12,5 @@ Disallow: /profile
 Disallow: /contact
 Disallow: /onboarding
 Disallow: /chat
-Disallow: /inspections
 
 Sitemap: https://home-buddy.replit.app/sitemap.xml

@@ -8,9 +8,6 @@ import { CostOfInaction } from "@/components/intelligence/cost-of-inaction";
 import { RiskTimeline } from "@/components/intelligence/risk-timeline";
 import { Brain, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { RecordActionDialog, RecordOutcomeDialog } from "@/components/learning/outcome-prompt";
-import { LearningSummaryCard } from "@/components/learning/learning-summary-card";
-import { AvoidedRiskCard } from "@/components/learning/avoided-risk-card";
 
 export default function Intelligence() {
   const { data: home } = useQuery({
@@ -37,12 +34,6 @@ export default function Intelligence() {
           <p className="text-muted-foreground text-sm mt-1">
             Structured insights based on your home's systems, age, condition, and maintenance history.
           </p>
-          {homeId && (
-            <div className="flex gap-2 mt-3">
-              <RecordActionDialog homeId={homeId} />
-              <RecordOutcomeDialog homeId={homeId} />
-            </div>
-          )}
         </div>
 
         {isLoading ? (
@@ -128,14 +119,6 @@ export default function Intelligence() {
               <MissingDataPrompts items={intelligence.insight.missingCriticalData} />
             </section>
 
-            {/* Learning Engine */}
-            <section>
-              <AvoidedRiskCard homeId={homeId!} />
-            </section>
-
-            <section>
-              <LearningSummaryCard homeId={homeId!} />
-            </section>
           </div>
         )}
       </div>

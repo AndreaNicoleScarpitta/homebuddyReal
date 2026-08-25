@@ -27,8 +27,10 @@ import {
   Shield,
   Gauge,
   Calendar,
+  CalendarPlus,
   Image
 } from "lucide-react";
+import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -578,10 +580,20 @@ export default function MaintenanceLog() {
               Track tasks and completed work on your home
             </p>
           </div>
-          <Button onClick={() => { trackEvent('click', 'maintenance_log', 'log_work'); setSelectedTask(null); setShowAddEntry(true); }} data-testid="button-add-entry">
-            <Plus className="h-4 w-4 mr-2" />
-            Log Work
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Calendar sync belongs with the plan it syncs. The page was
+                previously unreachable from anywhere in the UI. */}
+            <Link href="/calendar">
+              <Button variant="outline" data-testid="button-calendar-sync">
+                <CalendarPlus className="h-4 w-4 mr-2" />
+                Sync to calendar
+              </Button>
+            </Link>
+            <Button onClick={() => { trackEvent('click', 'maintenance_log', 'log_work'); setSelectedTask(null); setShowAddEntry(true); }} data-testid="button-add-entry">
+              <Plus className="h-4 w-4 mr-2" />
+              Log Work
+            </Button>
+          </div>
         </header>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

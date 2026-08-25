@@ -4,9 +4,9 @@
  * This is not a mandatory step. It surfaces when the user clicks the
  * inspection CTA from the magic-moment screen. Instead of rebuilding
  * the whole upload pipeline here (PDF parsing, findings review, task
- * confirmation) we redirect to `/inspections` — that page already owns
- * the full upload → analyze → confirm flow and integrates with the v2
- * file-analysis pipeline.
+ * confirmation) we redirect to `/document-analysis` — that page already
+ * owns the full upload → analyze → confirm flow and integrates with the
+ * v2 file-analysis pipeline.
  *
  * Why we still keep it as its own component rather than a direct link:
  * the copy matters. Users arriving here just saw their plan, and we're
@@ -96,7 +96,7 @@ export function StepInspectionAlt({ onUpload, onSkip, onBack }: StepInspectionAl
       </div>
 
       <p className="text-xs text-center text-muted-foreground">
-        You can upload an inspection any time from the Inspections page.
+        You can upload an inspection any time from Document Analysis.
       </p>
     </div>
   );

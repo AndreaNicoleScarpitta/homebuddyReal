@@ -23,15 +23,11 @@ import {
   chatMessages,
   type ChatMessage,
   type InsertChatMessage,
+  // No CRUD left for these — they exist solely so deleteAllUserData can
+  // still purge legacy rows until the tables themselves are dropped.
   funds,
-  type Fund,
-  type InsertFund,
   fundAllocations,
-  type FundAllocation,
-  type InsertFundAllocation,
   expenses,
-  type Expense,
-  type InsertExpense,
   contactMessages,
   type ContactMessage,
   type InsertContactMessage,
@@ -86,35 +82,9 @@ export interface IStorage {
   getChatMessagesByHomeId(homeId: number): Promise<ChatMessage[]>;
   createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
   
-  // Funds
-  getFundsByHomeId(homeId: number): Promise<Fund[]>;
-  getFund(id: number): Promise<Fund | undefined>;
-  createFund(fund: InsertFund): Promise<Fund>;
-  updateFund(id: number, data: Partial<InsertFund>): Promise<Fund>;
-  deleteFund(id: number): Promise<void>;
-  
-  // Fund Allocations
-  getAllocationsByFundId(fundId: number): Promise<FundAllocation[]>;
-  getAllocationsByTaskId(taskId: number): Promise<FundAllocation[]>;
-  getAllocation(id: number): Promise<FundAllocation | undefined>;
-  createAllocation(allocation: InsertFundAllocation): Promise<FundAllocation>;
-  updateAllocation(id: number, data: Partial<InsertFundAllocation>): Promise<FundAllocation>;
-  deleteAllocation(id: number): Promise<void>;
-  
-  // Expenses
-  getExpensesByFundId(fundId: number): Promise<Expense[]>;
-  getExpensesByHomeId(homeId: number): Promise<Expense[]>;
-  getExpense(id: number): Promise<Expense | undefined>;
-  createExpense(expense: InsertExpense): Promise<Expense>;
-  updateExpense(id: number, data: Partial<InsertExpense>): Promise<Expense>;
-  deleteExpense(id: number): Promise<void>;
-  
   // Authorization helpers
   verifyHomeOwnership(homeId: number, userId: string): Promise<boolean>;
   verifyTaskOwnership(taskId: number, userId: string): Promise<boolean>;
-  verifyFundOwnership(fundId: number, userId: string): Promise<boolean>;
-  verifyAllocationOwnership(allocationId: number, userId: string): Promise<boolean>;
-  verifyExpenseOwnership(expenseId: number, userId: string): Promise<boolean>;
   
   // Contact Messages
   createContactMessage(message: InsertContactMessage): Promise<ContactMessage>;
@@ -316,114 +286,6 @@ export class DatabaseStorage implements IStorage {
     return message;
   }
   
-  // Funds
-  async getFundsByHomeId(homeId: number): Promise<Fund[]> {
-    return await db.select().from(funds).where(eq(funds.homeId, homeId));
-  }
-  
-  async getFund(id: number): Promise<Fund | undefined> {
-    const [fund] = await db.select().from(funds).where(eq(funds.id, id));
-    return fund;
-  }
-  
-  async createFund(fundData: InsertFund): Promise<Fund> {
-    const [fund] = await db.insert(funds).values(fundData as any).returning();
-    return fund;
-  }
-  
-  async updateFund(id: number, data: Partial<InsertFund>): Promise<Fund> {
-    const [fund] = await db
-      .update(funds)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(funds.id, id))
-      .returning();
-    return fund;
-  }
-  
-  async deleteFund(id: number): Promise<void> {
-    await db.delete(funds).where(eq(funds.id, id));
-  }
-  
-  // Fund Allocations
-  async getAllocationsByFundId(fundId: number): Promise<FundAllocation[]> {
-    return await db
-      .select()
-      .from(fundAllocations)
-      .where(eq(fundAllocations.fundId, fundId));
-  }
-  
-  async getAllocationsByTaskId(taskId: number): Promise<FundAllocation[]> {
-    return await db
-      .select()
-      .from(fundAllocations)
-      .where(eq(fundAllocations.taskId, taskId));
-  }
-  
-  async getAllocation(id: number): Promise<FundAllocation | undefined> {
-    const [allocation] = await db.select().from(fundAllocations).where(eq(fundAllocations.id, id));
-    return allocation;
-  }
-  
-  async createAllocation(allocationData: InsertFundAllocation): Promise<FundAllocation> {
-    const [allocation] = await db.insert(fundAllocations).values(allocationData as any).returning();
-    return allocation;
-  }
-  
-  async updateAllocation(id: number, data: Partial<InsertFundAllocation>): Promise<FundAllocation> {
-    const [allocation] = await db
-      .update(fundAllocations)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(fundAllocations.id, id))
-      .returning();
-    return allocation;
-  }
-  
-  async deleteAllocation(id: number): Promise<void> {
-    await db.delete(fundAllocations).where(eq(fundAllocations.id, id));
-  }
-  
-  // Expenses
-  async getExpensesByFundId(fundId: number): Promise<Expense[]> {
-    return await db
-      .select()
-      .from(expenses)
-      .where(eq(expenses.fundId, fundId))
-      .orderBy(desc(expenses.createdAt));
-  }
-  
-  async getExpensesByHomeId(homeId: number): Promise<Expense[]> {
-    return await db
-      .select()
-      .from(expenses)
-      .innerJoin(funds, eq(expenses.fundId, funds.id))
-      .where(eq(funds.homeId, homeId))
-      .orderBy(desc(expenses.createdAt))
-      .then(rows => rows.map(r => r.expenses));
-  }
-  
-  async getExpense(id: number): Promise<Expense | undefined> {
-    const [expense] = await db.select().from(expenses).where(eq(expenses.id, id));
-    return expense;
-  }
-  
-  async createExpense(expenseData: InsertExpense): Promise<Expense> {
-    const [expense] = await db.insert(expenses).values(expenseData as any).returning();
-    return expense;
-  }
-  
-  async updateExpense(id: number, data: Partial<InsertExpense>): Promise<Expense> {
-    const [expense] = await db
-      .update(expenses)
-      .set(data)
-      .where(eq(expenses.id, id))
-      .returning();
-    return expense;
-  }
-  
-  async deleteExpense(id: number): Promise<void> {
-    await db.delete(expenses).where(eq(expenses.id, id));
-  }
-  
   // Contact Messages
   async createContactMessage(messageData: InsertContactMessage): Promise<ContactMessage> {
     const [message] = await db.insert(contactMessages).values(messageData as any).returning();
@@ -447,24 +309,6 @@ export class DatabaseStorage implements IStorage {
     const task = await this.getTask(taskId);
     if (!task) return false;
     return this.verifyHomeOwnership(task.homeId, userId);
-  }
-  
-  async verifyFundOwnership(fundId: number, userId: string): Promise<boolean> {
-    const fund = await this.getFund(fundId);
-    if (!fund) return false;
-    return this.verifyHomeOwnership(fund.homeId, userId);
-  }
-  
-  async verifyAllocationOwnership(allocationId: number, userId: string): Promise<boolean> {
-    const allocation = await this.getAllocation(allocationId);
-    if (!allocation) return false;
-    return this.verifyFundOwnership(allocation.fundId, userId);
-  }
-  
-  async verifyExpenseOwnership(expenseId: number, userId: string): Promise<boolean> {
-    const expense = await this.getExpense(expenseId);
-    if (!expense) return false;
-    return this.verifyFundOwnership(expense.fundId, userId);
   }
   
   // Inspection Reports

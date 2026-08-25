@@ -1,5 +1,4 @@
 import { getStripeSync, getUncachableStripeClient } from './stripeClient';
-import { AgentRunner } from './agents/runner';
 import { logger } from './lib/logger';
 import { setUserPlan, type PlanId, type PlanStatus } from './lib/plans';
 
@@ -138,41 +137,14 @@ async function handleSubscriptionDeleted(subscription: any): Promise<void> {
 }
 
 async function handleInvoicePaymentFailed(invoice: any): Promise<void> {
-  const email = invoice?.customer_email;
-  if (!email) {
-    logger.info('invoice.payment_failed: no customer_email, skipping dunning');
-    return;
-  }
-
-  const attemptCount = Math.min(Math.max(invoice.attempt_count || 1, 1), 3);
-  const amount = invoice.amount_due || invoice.amount_remaining || 0;
-  const currency = invoice.currency || 'usd';
-  const firstName = invoice.customer_name?.split(' ')[0] || null;
-
-  // Generate Stripe customer portal link
-  let updatePaymentUrl = '';
-  try {
-    const stripe = await getUncachableStripeClient();
-    const portal = await stripe.billingPortal.sessions.create({
-      customer: invoice.customer,
-      return_url: process.env.REPLIT_DEPLOYMENT_URL
-        ? `${process.env.REPLIT_DEPLOYMENT_URL}/profile`
-        : 'http://localhost:5000/profile',
-    });
-    updatePaymentUrl = portal.url;
-  } catch (err: any) {
-    logger.warn({ err: err?.message }, 'Failed to create billing portal — dunning email will use fallback link');
-  }
-
-  AgentRunner.run('dunning-agent', {
-    stripeCustomerId: invoice.customer,
-    email,
-    firstName,
-    amount,
-    currency,
-    attemptCount,
-    updatePaymentUrl,
-  }, 'webhook:stripe').catch((err) => {
-    logger.error({ err: err?.message }, 'dunning-agent trigger failed');
-  });
+  // Recovery emails are Stripe's job. We used to generate our own multi-stage
+  // dunning sequence here; Stripe's built-in failed-payment emails and Smart
+  // Retries do the same thing more reliably, and are configured in the Stripe
+  // dashboard rather than in application code. We only record the event.
+  logger.warn({
+    customerId: invoice?.customer,
+    attemptCount: invoice?.attempt_count,
+    amountDue: invoice?.amount_due,
+    currency: invoice?.currency,
+  }, 'Stripe invoice payment failed');
 }

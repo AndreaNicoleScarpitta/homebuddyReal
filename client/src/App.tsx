@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { AnimatePresence } from "framer-motion";
@@ -18,9 +18,6 @@ import { initSentry } from "@/lib/sentry";
 
 // Init Sentry before any render so it can capture errors from the first paint.
 initSentry();
-// Donation modal temporarily disabled — was firing too eagerly on first session.
-// Re-enable by restoring this import + the <DonationModal /> render below.
-// import { DonationModal } from "@/components/donation-modal";
 
 // Eagerly loaded — core app pages
 import NotFound from "@/pages/not-found";
@@ -36,22 +33,15 @@ import Contact from "@/pages/contact";
 import Terms from "@/pages/terms";
 import MaintenanceLog from "@/pages/maintenance-log";
 import Profile from "@/pages/profile";
-import Documents from "@/pages/documents";
+import Records from "@/pages/records";
 import Systems from "@/pages/systems";
 import SystemDetail from "@/pages/system-detail";
 import Disclaimer from "@/pages/disclaimer";
 import Timeline from "@/pages/timeline";
 import Intelligence from "@/pages/intelligence";
 import CalendarPage from "@/pages/calendar";
-import Warranties from "@/pages/warranties";
-import Utilities from "@/pages/utilities";
-import Insurance from "@/pages/insurance";
 import Chat from "@/pages/chat";
 import TransferKit from "@/pages/transfer-kit";
-
-// Lazy-loaded — hidden admin-only pages (not in nav)
-const AdminApprovals = lazy(() => import("@/pages/admin/approvals"));
-const AdminAgents = lazy(() => import("@/pages/agents"));
 
 // Lazy-loaded — marketing/billing pages
 const Pricing = lazy(() => import("@/pages/pricing"));
@@ -178,7 +168,6 @@ function Router() {
 
   return (
     <>
-      {/* <DonationModal /> — disabled, see import above */}
       <ErrorBoundary scope="authed-routes" inline>
         <Suspense fallback={<PageSkeleton />}>
           <Switch>
@@ -191,7 +180,13 @@ function Router() {
             <Route path="/maintenance-log" component={MaintenanceLog} />
             <Route path="/systems/:id" component={SystemDetail} />
             <Route path="/systems" component={Systems} />
-            <Route path="/documents" component={Documents} />
+            <Route path="/records" component={Records} />
+            {/* Records absorbed four separate pages. Redirect rather than 404 —
+                these URLs are bookmarked and live in installed PWA shortcuts. */}
+            <Route path="/documents"><Redirect to="/records" /></Route>
+            <Route path="/warranties"><Redirect to="/records?type=warranties" /></Route>
+            <Route path="/insurance"><Redirect to="/records?type=insurance" /></Route>
+            <Route path="/utilities"><Redirect to="/records?type=utilities" /></Route>
             <Route path="/profile" component={Profile} />
             <Route path="/forgot-password" component={ForgotPassword} />
             <Route path="/reset-password" component={ResetPassword} />
@@ -200,16 +195,9 @@ function Router() {
             <Route path="/timeline" component={Timeline} />
             <Route path="/intelligence" component={Intelligence} />
             <Route path="/calendar" component={CalendarPage} />
-            <Route path="/warranties" component={Warranties} />
-            <Route path="/utilities" component={Utilities} />
-            <Route path="/insurance" component={Insurance} />
             <Route path="/chat" component={Chat} />
             <Route path="/transfer-kit" component={TransferKit} />
             <Route path="/pricing" component={Pricing} />
-
-            {/* Hidden admin-only routes — not linked in nav, gated by ADMIN_EMAILS env */}
-            <Route path="/admin/approvals" component={AdminApprovals} />
-            <Route path="/admin/agents" component={AdminAgents} />
 
             {/* Public guides — accessible to authenticated users too */}
             <Route path="/guides/home-maintenance-checklist-by-month" component={MonthlyChecklist} />

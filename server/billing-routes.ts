@@ -42,16 +42,23 @@ const PLANS = {
       "Unlimited systems per home",
       "AI task suggestions",
       "Document analysis (10/mo)",
-      "AI home reports (2/mo)",
       "Smart reminders",
       "Email support",
     ],
     popular: true,
   },
+  // Unlisted: Premium's headline promise is multiple homes, and the app
+  // cannot deliver it — /v2/home returns a single home per user and there is
+  // no way to switch between them in the UI. Selling it would be selling
+  // something that does not exist, so the tier is hidden and its checkout
+  // path is closed. Entitlements in lib/plans.ts are deliberately untouched,
+  // so anyone already subscribed keeps everything they are paying for.
+  // Relist once multi-home is actually built.
   premium: {
     id: "premium",
     name: "Premium",
     priceMonthly: 9,
+    listed: false,
     priceId: process.env.STRIPE_PRICE_PREMIUM || null,
     features: [
       "4 homes",
@@ -75,14 +82,16 @@ function appUrl(): string {
 export function registerBillingRoutes(app: Express): void {
   // Public — plan metadata for pricing page
   app.get("/api/billing/plans", (_req, res) => {
-    const plansPublic = Object.values(PLANS).map((p) => ({
-      id: p.id,
-      name: p.name,
-      priceMonthly: p.priceMonthly,
-      features: p.features,
-      popular: (p as any).popular || false,
-      available: p.priceId !== null || p.id === "free",
-    }));
+    const plansPublic = Object.values(PLANS)
+      .filter((p) => (p as any).listed !== false)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        priceMonthly: p.priceMonthly,
+        features: p.features,
+        popular: (p as any).popular || false,
+        available: p.priceId !== null || p.id === "free",
+      }));
     res.json(plansPublic);
   });
 
@@ -91,7 +100,12 @@ export function registerBillingRoutes(app: Express): void {
       const { plan } = req.body as { plan: "plus" | "premium" };
       const user = (req as any).user;
 
-      const config = plan === "plus" ? PLANS.plus : plan === "premium" ? PLANS.premium : null;
+      // Closed while Premium is unlisted — see the note on PLANS.premium.
+      if (plan === "premium") {
+        return res.status(400).json({ error: "The Premium plan is not currently available." });
+      }
+
+      const config = plan === "plus" ? PLANS.plus : null;
       if (!config || !config.priceId) {
         return res.status(400).json({ error: "Invalid plan or pricing not configured. Set STRIPE_PRICE_PLUS / STRIPE_PRICE_PREMIUM env vars." });
       }

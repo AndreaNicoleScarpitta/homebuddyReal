@@ -42,7 +42,10 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: options.from || "Home Buddy <onboarding@resend.dev>",
+        // onboarding@resend.dev is Resend's sandbox sender — it only
+        // delivers to the Resend account owner. Real recipients require
+        // EMAIL_FROM on a domain verified in Resend.
+        from: options.from || process.env.EMAIL_FROM || "Home Buddy <onboarding@resend.dev>",
         to: options.to,
         subject: options.subject,
         html: options.html,
