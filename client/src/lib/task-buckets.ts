@@ -1,4 +1,4 @@
-import { differenceInDays, isFuture, isPast, isToday } from "date-fns";
+import { differenceInCalendarDays, parseISO } from "date-fns";
 import type { V2Task } from "@/lib/api";
 
 /** A task is open unless either V2 lifecycle field explicitly marks it complete. */
@@ -25,14 +25,18 @@ export function categorizeTasks(tasks: V2Task[], now = new Date()) {
       continue;
     }
 
-    const parsedDate = task.dueDate ? new Date(task.dueDate) : null;
+    const parsedDate = task.dueDate
+      ? (/^\\d{4}-\\d{2}-\\d{2}$/.test(task.dueDate) ? parseISO(task.dueDate) : new Date(task.dueDate))
+      : null;
     const dueDate = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : null;
 
-    if (dueDate && isPast(dueDate) && !isToday(dueDate)) {
+    const daysUntilDue = dueDate ? differenceInCalendarDays(dueDate, now) : null;
+
+    if (daysUntilDue !== null && daysUntilDue < 0) {
       past_due.push(task);
     } else if (
       task.urgency === "now" ||
-      (dueDate && (isToday(dueDate) || (isFuture(dueDate) && differenceInDays(dueDate, now) <= 7)))
+      (daysUntilDue !== null && daysUntilDue <= 7)
     ) {
       due.push(task);
     } else {
