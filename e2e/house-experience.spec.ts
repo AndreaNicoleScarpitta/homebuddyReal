@@ -27,6 +27,14 @@ async function mockAuthenticatedHome(page: Page) {
   await page.route("**/v2/homes/house-uuid/systems", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([system]) }));
   await page.route("**/v2/homes/house-uuid/tasks", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) }));
   await page.route("**/api/home/41/documents", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(files) }));
+  // Plan and system profiles use additional authenticated endpoints. Intercept
+  // them individually so a real 401 from the unseeded CI backend cannot cause
+  // a redirect to /login during this mocked-authentication browser test.
+  await page.route("**/api/home/41/log-entries", r => r.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
+  await page.route("**/v2/homes/41/repairs", r => r.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
+  await page.route("**/v2/homes/41/recommendations", r => r.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
+  await page.route("**/v2/systems/*/components", r => r.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
+  await page.route("**/v2/systems/*/insight", r => r.fulfill({ status: 404, contentType: "application/json", body: '{"message":"No insight yet"}' }));
   await page.route("**/v2/homes/41/timeline*", r => r.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.route("**/v2/homes/41/warranties", r => r.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.route("**/api/home/41/insurance", r => r.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
