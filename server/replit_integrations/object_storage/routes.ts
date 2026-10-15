@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { isAuthenticated } from "../auth";
+import { ObjectPermission, setObjectAclPolicy } from "./objectAcl";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -29,6 +30,7 @@ export function registerObjectStorageRoutes(app: Express): void {
         ContentType: file.mimetype || "application/octet-stream",
       }));
 
+      await setObjectAclPolicy({ key }, { owner: String((req as any).user.id), visibility: "private" });
       const objectPath = `/objects/${objectId}`;
 
       res.json({
@@ -45,18 +47,21 @@ export function registerObjectStorageRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/uploads/request-url", async (req, res) => {
+  app.post("/api/uploads/request-url", isAuthenticated, async (req, res) => {
     try {
       const { name, size, contentType } = req.body;
 
-      if (!name) {
+      if (typeof name !== "string" || !name.trim() || name.length > 255 || !Number.isSafeInteger(size) || size < 1 || size > 10 * 1024 * 1024 || typeof contentType !== "string" || contentType.length > 128) {
         return res.status(400).json({
-          error: "Missing required field: name",
+          error: "A valid name, content type, and size (1–10485760 bytes) are required",
         });
       }
 
       const uploadURL = await objectStorageService.getObjectEntityUploadURL();
       const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      if (!objectPath.startsWith("/objects/")) throw new Error("Unexpected upload object path");
+      const key = `${objectStorageService.getPrivateObjectDir()}/${objectPath.slice("/objects/".length)}`;
+      await setObjectAclPolicy({ key }, { owner: String((req as any).user.id), visibility: "private" });
 
       res.json({
         uploadURL,
@@ -72,6 +77,13 @@ export function registerObjectStorageRoutes(app: Express): void {
   app.get("/objects/:objectPath(*)", async (req, res) => {
     try {
       const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      const userId = (req as any).session?.userId;
+      const allowed = await objectStorageService.canAccessObjectEntity({
+        userId: userId ? String(userId) : undefined,
+        objectFile,
+        requestedPermission: ObjectPermission.READ,
+      });
+      if (!allowed) return res.status(404).json({ error: "Object not found" });
       await objectStorageService.downloadObject(objectFile, res);
     } catch (error) {
       console.error("Error serving object:", error);
