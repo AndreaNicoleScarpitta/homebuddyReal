@@ -216,7 +216,6 @@ app.use((req, res, next) => {
   // ── Auth + CSRF ────────────────────────────────────────────────────────────
   // Setup auth BEFORE registering other routes
   await setupAuth(app);
-  registerAuthRoutes(app);
   // Cross-site POSTs to authentication endpoints must never modify a session.
   app.use("/api/auth", (req, res, next) => {
     if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return next();
@@ -230,6 +229,7 @@ app.use((req, res, next) => {
     }
     next();
   });
+  registerAuthRoutes(app);
   registerLocalAuthRoutes(app);
   registerCsrfRoute(app);
   registerOpenApiRoute(app);
