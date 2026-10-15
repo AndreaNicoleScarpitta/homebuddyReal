@@ -111,7 +111,7 @@ export async function sendWelcomeEmail(email: string, firstName: string | null):
         <tr><td style="padding:8px 0;font-size:14px;color:#374151;">📄 &nbsp;Upload an inspection report or warranty doc</td></tr>
         <tr><td style="padding:8px 0;font-size:14px;color:#374151;">🔧 &nbsp;Review the maintenance tasks AI generates for you</td></tr>
       </table>
-      <a href="https://homebuddy.app/onboarding" style="display:inline-block;background:#f97316;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:8px;">Set up my home →</a>
+      <a href="https://www.homebuddy.space/onboarding" style="display:inline-block;background:#f97316;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:8px;">Set up my home →</a>
     `),
   });
 }
