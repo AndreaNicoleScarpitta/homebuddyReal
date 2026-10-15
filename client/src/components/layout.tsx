@@ -154,7 +154,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   key={item.href}
                   href={item.href}
                   onClick={() => trackEvent('navigate', 'sidebar', item.label.toLowerCase())}
-                  data-tour={`nav-${item.label.toLowerCase()}`}
+                  data-tour={item.href === "/house" ? "nav-house" : item.href === "/dashboard" ? "nav-overview" : "nav-plan"}
                   className={`group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 ${
                     active
                       ? "bg-primary/8 text-foreground"
@@ -254,7 +254,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 className={`flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors ${
                   active ? "text-primary" : "text-muted-foreground/60"
                 }`}
-                data-testid={`bottom-nav-${item.label.toLowerCase()}`}
+                data-testid={`bottom-nav-${item.href === "/house" ? "house" : item.href === "/dashboard" ? "overview" : "plan"}`}
+                data-tour={item.href === "/house" ? "nav-house-mobile" : undefined}
               >
                 <item.icon className="h-5 w-5" />
                 <span className={`text-[10px] ${active ? "font-semibold" : "font-medium"}`}>

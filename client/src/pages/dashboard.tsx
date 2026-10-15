@@ -693,10 +693,8 @@ export default function Dashboard() {
         key={tourKey}
         isOpen={showTour}
         onComplete={() => {
-          // User finished the tour normally → mark done and open the Add System
-          // wizard so they can immediately take the next step.
           completeTour();
-          setShowAddSystem(true);
+          navigate("/house");
         }}
         onSkip={() => {
           // User dismissed early (X or backdrop) → just close the tour.
@@ -744,7 +742,7 @@ export default function Dashboard() {
             </p>
           </div>
           <Link href="/document-analysis">
-            <Button variant="outline" className="shrink-0" data-testid="button-analyze-document-header">
+            <Button variant="outline" className="shrink-0" data-testid="button-analyze-document-header" data-tour="document-analysis">
               <FileSearch className="h-4 w-4 mr-2" />
               Analyze a document
             </Button>
