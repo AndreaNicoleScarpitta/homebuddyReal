@@ -1,5 +1,6 @@
 import { Layout } from "@/components/layout";
 import { SwipeableTask } from "@/components/swipeable-task";
+import { ContractorSection } from "@/components/contractor-section";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -683,6 +684,11 @@ export default function MaintenanceLog() {
           })}
         </div>
 
+        {tasks.some(t => t.diyLevel === "Pro-Only" && t.status !== "completed") && home && (
+          <section className="space-y-3" aria-label="Contractor assistance">
+            <ContractorSection homeId={home.id} pendingTasks={tasks.filter(t => t.status !== "completed")} zipCode={home.zipCode || undefined} />
+          </section>
+        )}
         <div data-testid="task-list">
           {filteredTasks.length === 0 ? (
             <div className="text-center py-16">

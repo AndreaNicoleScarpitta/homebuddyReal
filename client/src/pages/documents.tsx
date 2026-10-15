@@ -189,7 +189,7 @@ export function DocumentsSection({ systemId }: { systemId?: number }) {
 
   const { data: documents = [], isLoading: docsLoading } = useQuery({
     queryKey: ["documents", homeId],
-    queryFn: () => getDocuments(homeId),
+    queryFn: () => getDocuments(homeId!),
     enabled: typeof homeId === "number",
   });
   const visibleDocuments = documents.filter(doc => (systemId === undefined || doc.systemId === systemId) &&

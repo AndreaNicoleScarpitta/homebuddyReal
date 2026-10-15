@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { FieldTooltip } from "@/components/field-tooltip";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getHome, getTasks, getSystems, createTask, updateTask, deleteTask, completeTask, analyzeTask, getHomeIntelligence } from "@/lib/api";
+import { getHome, getTasks, getSystems, createTask, updateTask, deleteTask, completeTask, analyzeTask, getHomeIntelligence, getTimeline } from "@/lib/api";
 import type { TaskAnalysis } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -524,6 +524,12 @@ export default function Dashboard() {
     enabled: !!home?.id,
   });
 
+  const { data: recentActivity = [] } = useQuery({
+    queryKey: ["recentHomeActivity", home?.legacyId ?? home?.id],
+    queryFn: () => getTimeline(home!.legacyId ?? home!.id, { limit: 3 }),
+    enabled: !!home?.id,
+  });
+
   // Pull-to-refresh — invalidates all data sources, shows a top bar
   const handlePullRefresh = useCallback(async () => {
     if (!home?.id) return;
@@ -728,7 +734,7 @@ export default function Dashboard() {
         <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-heading font-bold text-foreground" data-testid="text-heading">
-              Your Home
+              Overview
             </h1>
             <p className="text-muted-foreground mt-1">
               {activeTasks.length > 0
@@ -776,9 +782,10 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Systems Summary */}
-        <section data-tour="systems-section">
-          <SystemsSummary systems={systems} onAddSystem={() => setShowAddSystem(true)} />
+        <section className="text-sm text-muted-foreground" data-testid="overview-property-link">
+          <Link href="/house" className="inline-flex items-center gap-1 text-primary font-medium hover:underline">
+            Explore your home's operating record <ArrowRight className="h-4 w-4" />
+          </Link>
         </section>
 
         {/* What we still need to know to make the above sharper. */}
@@ -820,111 +827,43 @@ export default function Dashboard() {
             </div>
           </div>
           
-          {tasks.length === 0 ? (
-            <Card className="p-8">
-              <div className="max-w-md mx-auto text-center">
-                <h3 className="text-lg font-medium mb-2">No maintenance tasks yet</h3>
-                <p className="text-muted-foreground text-sm mb-6">
-                  Upload a document to detect issues, or add a task manually.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <Link href="/document-analysis">
-                    <Button data-testid="button-analyze-document">
-                      Analyze Document
-                    </Button>
-                  </Link>
-                  <Button variant="outline" onClick={() => setShowAddTask(true)} data-testid="button-add-task-empty">
-                    <ListTodo className="h-4 w-4 mr-2" />
-                    Add Task
-                  </Button>
-                </div>
-              </div>
-            </Card>
+          {activeTasks.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">No maintenance needs attention. Your plan is ready when you are.</p>
           ) : (
-            <div className="space-y-6">
-              {/* Swipe discovery hint — one-time, mobile only */}
-              {showSwipeHint && (
-                <div className="md:hidden flex items-center justify-between gap-3 px-3 py-2.5 bg-muted/50 rounded-lg border border-border/50 text-xs text-muted-foreground animate-in fade-in duration-300">
-                  <span>← swipe to complete&ensp;·&ensp;swipe → to delete</span>
-                  <button
-                    type="button"
-                    onClick={dismissSwipeHint}
-                    aria-label="Dismiss swipe hint"
-                    className="shrink-0 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                    data-testid="button-dismiss-swipe-hint"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
-              {["now", "soon", "later", "monitor"].map((urgency) => {
-                const urgencyTasks = tasks.filter(t => t.urgency === urgency && t.status !== "completed");
-                if (urgencyTasks.length === 0) return null;
-
-                const urgencyLabels: Record<string, string> = {
-                  now: "Fix Now",
-                  soon: "Plan Soon", 
-                  later: "Address Later",
-                  monitor: "Monitor"
-                };
-
-                return (
-                  <div key={urgency} className="space-y-3">
-                    <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${
-                        urgency === 'now' ? 'bg-red-500' : 
-                        urgency === 'soon' ? 'bg-orange-500' : 
-                        urgency === 'monitor' ? 'bg-blue-400' : 'bg-green-500'
-                      }`} />
-                      {urgencyLabels[urgency]}
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {urgencyTasks.map((task) => (
-                        <SwipeableTask
-                          key={task.id}
-                          onSwipeLeft={() => handleSwipeComplete(task)}
-                          onSwipeRight={() => handleDeleteTask(task)}
-                          disabled={task.status === "completed"}
-                        >
-                          <MaintenanceCard
-                            task={task}
-                            onComplete={(t) => swipeCompleteMutation.mutate(t)}
-                            zipCode={home.zipCode}
-                          />
-                        </SwipeableTask>
-                      ))}
+            <div className="space-y-2" data-testid="overview-next-actions">
+              {[...activeTasks]
+                .sort((a, b) => {
+                  const level: Record<string, number> = { now: 0, soon: 1, later: 2, monitor: 3 };
+                  return (level[a.urgency || "later"] ?? 2) - (level[b.urgency || "later"] ?? 2);
+                })
+                .slice(0, 3)
+                .map(task => (
+                  <Link key={task.id} href="/maintenance-log" className="flex items-center justify-between gap-3 rounded-lg border p-3 hover:border-primary/50">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{task.title}</p>
+                      <p className="text-xs text-muted-foreground">{task.urgency === "now" ? "Needs attention now" : task.dueDate ? `Due ${new Date(task.dueDate).toLocaleDateString()}` : "Review in Plan"}</p>
                     </div>
-                  </div>
-                );
-              })}
-
-              {(() => {
-                const completedTasks = tasks.filter(t => t.status === "completed");
-                if (completedTasks.length === 0) return null;
-                return (
-                  <div className="space-y-3 pt-4 border-t" data-testid="completed-tasks-section">
-                    <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                      <CheckCircle className="h-3 w-3 text-green-500" />
-                      Completed ({completedTasks.length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {completedTasks.map((task) => (
-                        <div key={task.id} className="opacity-60" data-testid={`completed-task-${task.id}`}>
-                          <MaintenanceCard task={task} onComplete={() => {}} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
+                    <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                  </Link>
+                ))}
             </div>
           )}
         </section>
 
-        {/* Pro tasks summary — shown when there are Pro-Only tasks not yet completed */}
-        {tasks.filter(t => t.diyLevel === "Pro-Only" && t.status !== "completed").length > 0 && (
-          <section className="space-y-4" data-tour="find-pro">
-            <ContractorSection homeId={home.id} pendingTasks={tasks} zipCode={home.zipCode || undefined} />
+        {recentActivity.length > 0 && (
+          <section className="space-y-3" data-testid="overview-recent-activity">
+            <div className="flex justify-between items-baseline gap-3">
+              <h2 className="text-lg font-heading font-semibold">Recent activity</h2>
+              <Link href="/house?section=history" className="text-sm text-primary hover:underline">Home history</Link>
+            </div>
+            <div className="divide-y rounded-xl border px-4">
+              {recentActivity.slice(0, 3).map(event => (
+                <div key={event.id} className="flex justify-between gap-4 py-3">
+                  <p className="text-sm font-medium">{event.title}</p>
+                  <time className="text-xs whitespace-nowrap text-muted-foreground">{event.eventDate ? new Date(event.eventDate).toLocaleDateString() : ""}</time>
+                </div>
+              ))}
+            </div>
           </section>
         )}
 
