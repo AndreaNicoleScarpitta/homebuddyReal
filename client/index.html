@@ -2,12 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Home Buddy — AI Home Maintenance Planner &amp; Tracker</title>
     <meta name="description" content="Home Buddy builds a personalized maintenance schedule for your home. Upload inspection reports, track HVAC, plumbing, roof and electrical systems, and know what's safe to DIY." />
     <meta name="keywords" content="home maintenance, home maintenance schedule, home maintenance planner, home maintenance tracker, HVAC maintenance, roof inspection, plumbing maintenance, home inspection report, DIY home repair, preventive home maintenance, home maintenance app" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://home-buddy.replit.app/" />
+    <link rel="canonical" href="https://www.homebuddy.space/" />
     <meta name="theme-color" content="#f97316" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -113,18 +113,6 @@
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // Service worker intentionally NOT registered here. A previous version
-      // of /sw.js cached JS bundles too aggressively and served stale code
-      // after deploys. The current /sw.js is a self-destruct stub that
-      // unregisters itself; existing installs will remove themselves on
-      // their next page load. If we want offline support back later, ship
-      // a network-first worker and restore this registration.
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then((regs) => {
-          regs.forEach((reg) => { reg.unregister().catch(() => {}); });
-        }).catch(() => {});
-      }
-    </script>
+    <script defer src="/pwa-register.js"></script>
   </body>
 </html>

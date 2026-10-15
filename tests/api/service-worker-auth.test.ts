@@ -1,45 +1,118 @@
-import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { describe, it, expect, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { runInNewContext } from "node:vm";
 
-const swSource = readFileSync(join(__dirname, "../../client/public/sw.js"), "utf-8");
+const source = readFileSync(join(__dirname, "../../client/public/sw.js"), "utf8");
 
-/**
- * The service worker was intentionally replaced with a self-destruct version
- * that does NOT cache or intercept any requests (including auth paths).
- * These tests verify the self-destruct behaviour rather than the old
- * authPaths allow-list approach.
- */
-describe("Service Worker auth path bypass", () => {
-  it("does not intercept /api/login (fetch handler passes everything through)", () => {
-    // Self-destruct SW has an intentionally empty fetch handler —
-    // no respondWith means every request, including /api/login, goes to the network.
-    const fetchHandler = swSource.match(/addEventListener\("fetch"[^)]*\)[\s\S]*?}\s*\)/)?.[0] ?? "";
-    expect(fetchHandler).not.toContain("respondWith");
+function createWorker({ offline = false } = {}) {
+  const handlers: Record<string, (event: any) => void> = {};
+  const contents = new Map<string, unknown>();
+  const offlineResponse = { offline: true };
+  const offlineCss = { css: true };
+  contents.set("/offline.html", offlineResponse);
+  contents.set("/offline.css", offlineCss);
+  const cache = {
+    addAll: vi.fn(async (paths: string[]) => {
+      expect(paths.sort()).toEqual(["/offline.css", "/offline.html"]);
+    }),
+  };
+  const mockFetch = vi.fn(async (req: any) => {
+    if (offline) throw new Error("network unavailable");
+    return { live: true, path: req.url };
+  });
+  const mockCaches = {
+    open: vi.fn(async (_name: string) => cache),
+    keys: vi.fn(async () => ["old-html-cache", "old-js-cache", "homebuddy-offline-v1"]),
+    delete: vi.fn(async (_name: string) => true),
+    match: vi.fn(async (key: string) => contents.get(key)),
+  };
+  const claim = vi.fn(async () => {});
+  const skipWaiting = vi.fn(async () => {});
+  runInNewContext(source, {
+    self: {
+      location: { origin: "https://www.homebuddy.space" },
+      addEventListener: (name: string, fn: (event: any) => void) => { handlers[name] = fn; },
+      skipWaiting,
+      clients: { claim },
+    },
+    caches: mockCaches,
+    fetch: mockFetch,
+    URL,
+    Response,
+  });
+  const emit = async (name: string, request?: any) => {
+    let response: Promise<unknown> | undefined;
+    let waitUntil: Promise<unknown> | undefined;
+    handlers[name]({
+      request,
+      respondWith: (promise: Promise<unknown>) => { response = Promise.resolve(promise); },
+      waitUntil: (promise: Promise<unknown>) => { waitUntil = Promise.resolve(promise); },
+    });
+    if (waitUntil) await waitUntil;
+    return response && await response;
+  };
+  return { emit, mockFetch, mockCaches, cache, claim, skipWaiting, offlineResponse };
+}
+
+describe("PWA worker privacy and update safety", () => {
+  it("pre-caches only the public offline notice and its stylesheet", async () => {
+    const w = createWorker();
+    await w.emit("install");
+    expect(w.cache.addAll).toHaveBeenCalledOnce();
+    expect(w.skipWaiting).toHaveBeenCalledOnce();
   });
 
-  it("does not intercept /api/callback", () => {
-    // The self-destruct SW has no routing logic at all.
-    expect(swSource).not.toContain("authPaths");
-    expect(swSource).not.toContain("/api/callback");
+  it("cleans up all legacy caches containing stale JS and private pages", async () => {
+    const w = createWorker();
+    await w.emit("activate");
+    expect(w.mockCaches.delete).toHaveBeenCalledTimes(2);
+    expect(w.mockCaches.delete).toHaveBeenCalledWith("old-html-cache");
+    expect(w.mockCaches.delete).toHaveBeenCalledWith("old-js-cache");
+    expect(w.mockCaches.delete).not.toHaveBeenCalledWith("homebuddy-offline-v1");
+    expect(w.claim).toHaveBeenCalledOnce();
   });
 
-  it("does not intercept /api/logout", () => {
-    expect(swSource).not.toContain("/api/logout");
+  it.each([
+    ["login mutation", "POST", "/api/login", "cors"],
+    ["private API", "GET", "/api/home", "cors"],
+    ["V2 records", "GET", "/v2/homes/secret", "cors"],
+    ["private object", "GET", "/objects/secret", "cors"],
+    ["hashed JavaScript", "GET", "/assets/index-hash.js", "no-cors"],
+    ["hashed CSS", "GET", "/assets/index-hash.css", "no-cors"],
+    ["third-party script", "GET", "https://cdn.example.com/lib.js", "no-cors"],
+  ])("never intercepts or caches %s", async (_label, method, path, mode) => {
+    const w = createWorker({ offline: true });
+    const url = path.startsWith("https://") ? path : `https://www.homebuddy.space${path}`;
+    expect(await w.emit("fetch", { method, url, mode })).toBeUndefined();
+    expect(w.mockFetch).not.toHaveBeenCalled();
+    expect(w.mockCaches.match).not.toHaveBeenCalled();
   });
 
-  it("checks auth paths before the general /api/ handler", () => {
-    // Self-destruct SW has no /api/ handler at all — both indices are -1,
-    // which trivially satisfies the "auth check before api handler" invariant.
-    const authCheckIndex = swSource.indexOf("authPaths");
-    const apiHandlerIndex = swSource.indexOf("event.request.url.includes('/api/')");
-    // Neither pattern is present in the self-destruct SW
-    expect(authCheckIndex).toBe(-1);
-    expect(apiHandlerIndex).toBe(-1);
+  it("uses the network for online navigation without storing HTML", async () => {
+    const w = createWorker();
+    const res = await w.emit("fetch", {
+      method: "GET", mode: "navigate", url: "https://www.homebuddy.space/house",
+    });
+    expect(res).toMatchObject({ live: true });
+    expect(w.mockCaches.match).not.toHaveBeenCalled();
+    expect(w.cache.addAll).not.toHaveBeenCalled();
   });
 
-  it("returns early (no respondWith) for auth paths", () => {
-    // The fetch handler is intentionally empty — no respondWith anywhere.
-    expect(swSource).not.toContain("respondWith");
+  it("shows a static offline notice when a navigation cannot reach the network", async () => {
+    const w = createWorker({ offline: true });
+    const res = await w.emit("fetch", {
+      method: "GET", mode: "navigate", url: "https://www.homebuddy.space/dashboard",
+    });
+    expect(res).toBe(w.offlineResponse);
+    expect(w.mockCaches.match).toHaveBeenCalledWith("/offline.html");
+  });
+
+  it("never replaces API failures with a success-looking offline page", async () => {
+    const w = createWorker({ offline: true });
+    const res = await w.emit("fetch", {
+      method: "GET", mode: "navigate", url: "https://www.homebuddy.space/api/home",
+    });
+    expect(res).toBeUndefined();
   });
 });

@@ -24,6 +24,12 @@ export function serveStatic(app: Express) {
     express.static(distPath, {
       maxAge: "1d",
       setHeaders(res, filePath) {
+        // Always refetch the app manifest and service-worker control files.
+        if (["/sw.js", "/pwa-register.js", "/manifest.json", "/offline.html", "/offline.css", "/index.html"]
+          .some(name => filePath.endsWith(name))) {
+          res.setHeader("Cache-Control", "no-store, must-revalidate");
+          return;
+        }
         // Hashed files get immutable cache
         if (filePath.match(/\.[a-f0-9]{8,}\.(js|css)$/)) {
           res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
@@ -48,6 +54,7 @@ export function serveStatic(app: Express) {
     }
 
     // All other paths — serve SPA shell (client-side router handles 404 display)
+    res.setHeader("Cache-Control", "no-store");
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }

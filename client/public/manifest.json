@@ -1,42 +1,70 @@
 {
-  "name": "Home Buddy - Home Maintenance Assistant",
+  "name": "Home Buddy — Your Home's Operating Record",
   "short_name": "Home Buddy",
-  "description": "Your AI-powered home maintenance assistant. Get expert guidance on repairs, maintenance tasks, and budgeting for your home.",
-  "start_url": "/",
+  "description": "The intelligent operating record of your home. Connect systems, files, history, and maintenance in one place.",
+  "id": "/",
+  "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#f97316",
-  "orientation": "portrait-primary",
-  "scope": "/",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "any"
     }
   ],
-  "categories": ["utilities", "lifestyle"],
+  "categories": [
+    "utilities",
+    "lifestyle"
+  ],
   "shortcuts": [
     {
-      "name": "Dashboard",
-      "short_name": "Home",
-      "description": "View your home maintenance dashboard",
+      "name": "Overview",
+      "short_name": "Overview",
+      "description": "What matters about your home",
       "url": "/dashboard",
-      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
-      "name": "Calendar Sync",
-      "short_name": "Calendar",
-      "description": "Sync your maintenance schedule to your calendar app",
-      "url": "/calendar",
-      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+      "name": "My House",
+      "short_name": "My House",
+      "description": "Explore your home's information",
+      "url": "/house",
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Plan",
+      "short_name": "Plan",
+      "description": "View and complete maintenance tasks",
+      "url": "/maintenance-log",
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ]
 }
