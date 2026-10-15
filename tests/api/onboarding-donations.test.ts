@@ -61,6 +61,14 @@ describe.skipIf(!enabled)("quick onboarding starter tasks and donation-only bill
     expect((await afterReplay.json()).length).toBe(templates.length);
   });
 
+  it("does not recreate tasks when repairing an already populated plan", async () => {
+    const res = await fetch(`${base}/v2/homes/${homeId}/starter-tasks/repair`, {
+      method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ created: 0, skipped: true });
+  });
+
   it("blocks recurring subscription checkout even for an authenticated account", async () => {
     const response = await fetch(`${base}/api/billing/create-checkout-session`, {
       method: "POST", headers,
