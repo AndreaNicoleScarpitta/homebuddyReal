@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
+import { EmergencyShutoffs } from "@/components/emergency-shutoffs";
+import { HomeInfoCard } from "@/components/home-info-card";
+import { CircuitMapDialog } from "@/components/circuit-map";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { getHome, getSystems, getDocuments, getTimeline } from "@/lib/api";
@@ -11,11 +14,14 @@ import { UtilitiesSection } from "@/pages/utilities";
 import { WarrantySection } from "@/components/home-graph/warranty-card";
 import { trackSlugPageView } from "@/lib/analytics";
 import { PAGE_SLUGS } from "@/lib/slug-registry";
-import { Home, Layers, FileText, ShieldCheck, Phone, History, FileDown, ChevronRight, ArrowLeft, Search, Plus, MapPin, AlertTriangle } from "lucide-react";
+import { Home, Layers, FileText, ShieldCheck, Phone, History, FileDown, ChevronRight, ArrowLeft, Search, Plus, MapPin, AlertTriangle, Zap } from "lucide-react";
 
-type HouseSection = "systems" | "files" | "coverage" | "services" | "history" | "tools";
+type HouseSection = "systems" | "details" | "emergency" | "electrical" | "files" | "coverage" | "services" | "history" | "tools";
 const sections: Record<HouseSection, { title: string; description: string }> = {
   systems: { title: "Systems & appliances", description: "What makes your home work" },
+  details: { title: "Property details", description: "The facts and specifications of your home" },
+  emergency: { title: "Emergency & utilities", description: "Shutoffs, utility locations, and important access information" },
+  electrical: { title: "Electrical & circuits", description: "Your electrical system and circuit panel map" },
   files: { title: "House files", description: "Documents you can find again, whenever you need them" },
   coverage: { title: "Coverage", description: "Warranties and insurance for your home" },
   services: { title: "Services & contacts", description: "Providers and practical household information" },
@@ -23,7 +29,7 @@ const sections: Record<HouseSection, { title: string; description: string }> = {
   tools: { title: "Home tools", description: "Occasional actions for your home's information" },
 };
 const sectionKeys = Object.keys(sections) as HouseSection[];
-const sectionIcon = { systems: Layers, files: FileText, coverage: ShieldCheck, services: Phone, history: History, tools: FileDown };
+const sectionIcon = { systems: Layers, details: Home, emergency: AlertTriangle, electrical: Zap, files: FileText, coverage: ShieldCheck, services: Phone, history: History, tools: FileDown };
 
 export default function MyHouse() {
   const search = useSearch();
@@ -32,6 +38,7 @@ export default function MyHouse() {
   const focus = query.get("focus");
   const section = requested && sectionKeys.includes(requested as HouseSection) ? requested as HouseSection : null;
   const [term, setTerm] = useState("");
+  const [showCircuitMap, setShowCircuitMap] = useState(false);
   useEffect(() => { trackSlugPageView(PAGE_SLUGS.myHouse); }, []);
 
   const { data: home, isLoading: homeLoading, isError: homeError } = useQuery({ queryKey: ["home"], queryFn: getHome });
@@ -51,6 +58,7 @@ export default function MyHouse() {
   const q = term.trim().toLowerCase();
   const matchedSystems = systems.filter(s => [s.name, s.category, s.make, s.model].some(v => v?.toLowerCase().includes(q)));
   const matchedFiles = documents.filter(d => [d.name, d.category, d.notes].some(v => v?.toLowerCase().includes(q)));
+  const electricalSystem = systems.find(s => s.category?.toLowerCase() === "electrical");
 
   const description = home ? [home.streetAddress || home.address, home.city, home.state].filter(Boolean).join(", ") : "";
   const legacyAvailable = typeof legacyId === "number";
@@ -101,6 +109,40 @@ export default function MyHouse() {
                 ) : <p className="text-sm text-muted-foreground">{q ? "No systems match that search." : "No systems saved yet. Add your first system."}</p>}
               </div>
             )}
+            {section === "details" && <HomeInfoCard home={home} systems={systems} />}
+            {section === "emergency" && (
+              <div className="space-y-4">
+                <section className="rounded-xl border p-4 sm:p-5" aria-label="Shutoff locations" data-testid="house-emergency-shutoffs">
+                  <p className="text-sm text-muted-foreground">Store the locations of your main shutoffs so you can find them quickly when they matter.</p>
+                  <EmergencyShutoffs home={home} />
+                </section>
+                <Link href="/house?section=services" className="flex items-center justify-between gap-3 rounded-xl border p-4 text-sm font-medium hover:border-primary/50">
+                  Utility providers and accounts <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </Link>
+              </div>
+            )}
+            {section === "electrical" && (
+              <div className="space-y-4" data-testid="house-electrical-reference">
+                {electricalSystem ? (
+                  <section className="space-y-4 rounded-xl border p-4 sm:p-5">
+                    <p className="text-sm text-muted-foreground">Keep your breaker labels and circuit assignments in one place.</p>
+                    <Button variant="outline" className="w-full justify-start gap-2 sm:w-auto" onClick={() => setShowCircuitMap(true)} data-testid="button-open-circuit-map-house">
+                      <Zap className="h-4 w-4 text-primary" /> Circuit Panel Map
+                    </Button>
+                    <Link href={`/systems/${electricalSystem.id}`} className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                      View electrical system details <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </section>
+                ) : (
+                  <div className="rounded-xl border p-4 sm:p-5 space-y-2">
+                    <p className="text-sm text-muted-foreground">Add your electrical system to create a circuit panel map.</p>
+                    <Link href="/house/systems?type=Electrical" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                      Add electrical system <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
             {section === "files" && (!legacyAvailable
               ? <p className="text-sm text-muted-foreground">Home files become available once your home profile is fully saved.</p>
               : <DocumentsSection />)}
@@ -135,21 +177,13 @@ export default function MyHouse() {
                   <h1 className="font-heading text-3xl font-bold mt-1">My House</h1>
                   <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1"><MapPin className="h-3.5 w-3.5"/>{description || "Your property"}</p>
                 </div>
-                <Link href="/profile" className="text-sm font-medium text-muted-foreground hover:text-foreground underline underline-offset-4">Edit details</Link>
+                <Link href="/house?section=details" className="text-sm font-medium text-muted-foreground hover:text-foreground underline underline-offset-4">Edit details</Link>
               </div>
               <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
                 {home.builtYear && <span>Built {home.builtYear}</span>}
                 {home.sqFt && <span>{home.sqFt.toLocaleString()} sq ft</span>}
                 {home.healthScore != null && <span>Home health: {home.healthScore}/100</span>}
               </div>
-              {(home.waterShutoffLocation || home.gasShutoffLocation || home.electricalPanelLocation) && (
-                <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground space-y-1" aria-label="Emergency home details">
-                  <p className="font-semibold text-foreground flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5"/> Essential locations</p>
-                  {home.waterShutoffLocation && <p>Water shutoff: {home.waterShutoffLocation}</p>}
-                  {home.gasShutoffLocation && <p>Gas shutoff: {home.gasShutoffLocation}</p>}
-                  {home.electricalPanelLocation && <p>Electrical panel: {home.electricalPanelLocation}</p>}
-                </div>
-              )}
             </header>
             <div className="relative">
               <Search className="h-4 w-4 absolute left-3 top-3 text-muted-foreground"/>
@@ -167,6 +201,19 @@ export default function MyHouse() {
               </div>
             ) : (
               <>
+                <section className="space-y-3" data-testid="house-reference">
+                  <h2 className="font-heading font-semibold text-lg">Home reference</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {(["emergency", "electrical"] as HouseSection[]).map(key => {
+                      const Icon = sectionIcon[key];
+                      return <Link key={key} href={`/house?section=${key}`} className="flex items-center gap-3 rounded-xl border p-3 hover:border-primary/50" data-testid={`house-section-${key}`}>
+                        <Icon className="h-5 w-5 text-muted-foreground shrink-0" />
+                        <div className="min-w-0"><p className="text-sm font-medium">{sections[key].title}</p><p className="text-xs text-muted-foreground line-clamp-1">{sections[key].description}</p></div>
+                        <ChevronRight className="h-4 w-4 ml-auto shrink-0 text-muted-foreground" />
+                      </Link>;
+                    })}
+                  </div>
+                </section>
                 <section className="space-y-3" data-testid="house-systems-preview">
                   <div className="flex items-center justify-between">
                     <div><h2 className="font-heading font-semibold text-lg">Systems & appliances</h2><p className="text-xs text-muted-foreground">{systems.length} known systems</p></div>
@@ -186,7 +233,7 @@ export default function MyHouse() {
                 <section className="space-y-3">
                   <h2 className="font-heading font-semibold text-lg">More about your house</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {(["coverage", "services", "history", "tools"] as HouseSection[]).map(key => {
+                    {(["details", "coverage", "services", "history", "tools"] as HouseSection[]).map(key => {
                       const Icon = sectionIcon[key];
                       return <Link key={key} href={`/house?section=${key}`} className="flex items-center gap-3 rounded-lg border px-3 py-3 hover:border-primary/50" data-testid={`house-section-${key}`}>
                         <Icon className="h-5 w-5 text-muted-foreground shrink-0"/>
@@ -202,6 +249,9 @@ export default function MyHouse() {
           </>
         )}
       </div>
+      {home && electricalSystem && (
+        <CircuitMapDialog homeId={home.id} systemId={electricalSystem.id} isOpen={showCircuitMap} onClose={() => setShowCircuitMap(false)} />
+      )}
     </Layout>
   );
 }
