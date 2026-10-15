@@ -184,4 +184,13 @@ async function main() {
   }
 }
 
-main();
+// The migration CLI must terminate once its DB pool is drained. Transitive
+// imports may keep Node handles open; without an explicit exit Railway never
+// reaches the web server in 'npm run db:migrate && node dist/index.cjs'.
+main().then(
+  () => process.exit(0),
+  (err) => {
+    console.error("[migrate] Unhandled failure:", err);
+    process.exit(1);
+  },
+);
