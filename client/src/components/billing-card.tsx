@@ -15,7 +15,7 @@ import { usePlan } from "@/hooks/use-plan";
 import { useToast } from "@/hooks/use-toast";
 
 export function BillingCard() {
-  const { data, planName, isPaid, isLoading } = usePlan();
+  const { data, planName, isLoading } = usePlan();
   const { toast } = useToast();
 
   const portalMutation = useMutation({
@@ -35,7 +35,7 @@ export function BillingCard() {
 
   // Existing subscribers must retain a route to cancel/manage ongoing
   // charges. Free users see donations in Settings, never paid upgrades.
-  if (isLoading || !isPaid) return null;
+  if (isLoading || !data?.hasStripeCustomer) return null;
 
   return (
     <Card data-testid="billing-card">
@@ -47,11 +47,11 @@ export function BillingCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          Home Buddy no longer offers paid upgrades. Your existing {planName}
-          subscription remains under your control until you cancel it.
+          Home Buddy no longer offers paid upgrades. If you have an existing
+          subscription, you can manage or cancel it in Stripe.
         </p>
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium">{planName} — ${data?.priceMonthly}/mo</span>
+          <span className="text-sm font-medium">Current billing status: {data?.planStatus}</span>
           {data?.planStatus === "past_due" && <Badge variant="destructive">Past due</Badge>}
           {data?.planStatus === "canceled" && <Badge variant="outline">Canceled</Badge>}
         </div>
