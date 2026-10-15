@@ -54,11 +54,43 @@ describe.skipIf(!enabled)("quick onboarding starter tasks and donation-only bill
       method: "POST", headers: { ...headers, "Idempotency-Key": key },
       body: JSON.stringify({ name: "Heating & Cooling", category: "HVAC", source: "onboarding-quickpick" }),
     });
-    expect(replay.status).toBe(201);
+    expect(replay.status).toBe(200);
     const afterReplay = await fetch(`${base}/v2/homes/${homeId}/tasks`, {
       headers: { "x-test-user-id": uid },
     });
     expect((await afterReplay.json()).length).toBe(templates.length);
+  });
+
+  it("deduplicates a home and four quick-pick systems even with new request keys", async () => {
+    const newHomeId = homeId;
+    const retryHome = await fetch(`${base}/v2/homes`, {
+      method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ zipCode: "99201", type: "Single Family Home" }),
+    });
+    expect(retryHome.status).toBe(200);
+    expect((await retryHome.json()).id).toBe(newHomeId);
+    const categories = ["HVAC", "Roof", "Electrical", "Plumbing"];
+    for (const category of categories) {
+      const response = await fetch(`${base}/v2/homes/${newHomeId}/systems`, {
+        method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ name: category, category, source: "onboarding-quickpick" }),
+      });
+      expect([200, 201]).toContain(response.status);
+    }
+    const systems = await fetch(`${base}/v2/homes/${newHomeId}/systems`, {
+      headers: { "x-test-user-id": uid },
+    });
+    expect(systems.status).toBe(200);
+    expect((await systems.json()).length).toBe(4);
+
+    const tasks = await fetch(`${base}/v2/homes/${newHomeId}/tasks`, {
+      headers: { "x-test-user-id": uid },
+    });
+    const records = await tasks.json() as Array<{ id: string; title: string; category: string }>;
+    expect(records).toHaveLength(15);
+    expect(new Set(records.map(t => t.id)).size).toBe(15);
+    expect(records.filter(t => t.category === "Electrical")).toHaveLength(3);
+    expect(records.filter(t => t.category === "Plumbing")).toHaveLength(4);
   });
 
   it("restores tasks for an older quick-onboarding system with no task projection", async () => {
