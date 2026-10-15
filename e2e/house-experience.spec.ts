@@ -10,6 +10,10 @@ const system = {
   id: "heat-pump-uuid", legacyId: 7, homeId: "house-uuid",
   category: "HVAC", name: "Heat Pump", condition: "Good", make: "Carrier",
 };
+const electricalSystem = {
+  id: "electrical-uuid", legacyId: 8, homeId: "house-uuid",
+  category: "Electrical", name: "Main Electrical Panel", condition: "Good",
+};
 let files = [{
   id: 9, homeId: 41, systemId: null as number | null, name: "Insurance Policy.pdf",
   fileType: "application/pdf", fileSize: 7500, objectPath: "/objects/known-file",
@@ -24,8 +28,9 @@ async function mockAuthenticatedHome(page: Page) {
   }));
   await page.route("**/v2/home", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(home) }));
   await page.route("**/api/home", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: 41, ...home }) }));
-  await page.route("**/v2/homes/house-uuid/systems", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([system]) }));
+  await page.route("**/v2/homes/house-uuid/systems", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([system, electricalSystem]) }));
   await page.route("**/v2/homes/house-uuid/tasks", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) }));
+  await page.route("**/v2/homes/house-uuid/circuit-maps", r => r.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.route("**/api/home/41/documents", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(files) }));
   // Plan and system profiles use additional authenticated endpoints. Intercept
   // them individually so a real 401 from the unseeded CI backend cannot cause
@@ -45,6 +50,47 @@ async function mockAuthenticatedHome(page: Page) {
     await r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(files[0]) });
   });
 }
+
+
+test("mobile Overview prioritizes the maintenance plan instead of permanent reference data", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockAuthenticatedHome(page);
+  await page.goto("/dashboard");
+  await expect(page.getByText("Maintenance Plan")).toBeVisible();
+  await expect(page.getByTestId("overview-property-link")).toBeVisible();
+  await expect(page.getByText("Emergency Shutoffs")).toHaveCount(0);
+  await expect(page.getByText("Circuit Panel Map")).toHaveCount(0);
+  await expect(page.getByText("Home Information")).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("shutoff locations are editable in My House, not the dashboard", async ({ page }) => {
+  await mockAuthenticatedHome(page);
+  let savedGasLocation: string | null = null;
+  await page.route("**/v2/homes/house-uuid", async route => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    const body = route.request().postDataJSON() as { gasShutoffLocation?: string };
+    savedGasLocation = body.gasShutoffLocation ?? null;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...home, ...body }) });
+  });
+  await page.goto("/house");
+  await page.getByTestId("house-section-emergency").click();
+  await expect(page.getByTestId("text-house-section")).toHaveText("Emergency & utilities");
+  await expect(page.getByTestId("house-emergency-shutoffs")).toContainText("Garage");
+  await page.getByRole("button", { name: "Edit Gas Meter location" }).click();
+  await page.getByPlaceholder("Where is the gas meter?").fill("East side of the house");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => savedGasLocation).toBe("East side of the house");
+});
+
+test("the electrical circuit panel map stays one tap away from My House reference", async ({ page }) => {
+  await mockAuthenticatedHome(page);
+  await page.goto("/house");
+  await page.getByTestId("house-section-electrical").click();
+  await expect(page.getByTestId("text-house-section")).toHaveText("Electrical & circuits");
+  await page.getByTestId("button-open-circuit-map-house").click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+});
 
 test("authenticated homeowner has three primary destinations and a global AI action", async ({ page }) => {
   await mockAuthenticatedHome(page);

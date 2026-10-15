@@ -1,7 +1,5 @@
 import { Layout } from "@/components/layout";
-import { EmergencyShutoffs } from "@/components/emergency-shutoffs";
 import { HomeHealth } from "@/components/home-health";
-import { HomeInfoCard } from "@/components/home-info-card";
 import { MaintenanceCard } from "@/components/maintenance-card";
 import { SwipeableTask } from "@/components/swipeable-task";
 import { AddSystemWizard } from "@/components/add-system-wizard";
@@ -749,69 +747,24 @@ export default function Dashboard() {
           </Link>
         </header>
 
-        {/* At a Glance */}
-        <section className="space-y-4" data-tour="home-status">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <HomeHealth 
-              score={computedHealthScore} 
-              systemsCount={systems.length}
-              tasksCount={activeTasks.length}
-              urgentTasksCount={urgentTasksCount}
-              overdueTasksCount={overdueTasksCount}
-              poorSystemsCount={poorSystemsCount}
-            />
-            <HomeInfoCard home={home} systems={systems} />
-          </div>
-          {home && <EmergencyShutoffs home={home} />}
-
-        </section>
-
-        {/* Systems to watch — the part of Home Intelligence worth seeing
-            without going looking for it. Only rendered when something
-            actually needs attention, so a healthy home stays quiet. */}
-        {watchSystems.length > 0 && (
-          <section className="space-y-3" data-testid="section-systems-to-watch">
-            <h2 className="text-lg font-heading font-semibold">Systems to watch</h2>
-            <div className="space-y-3">
-              {watchSystems.map((s) => (
-                <RiskCard key={s.systemId} insight={s} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        <section className="text-sm text-muted-foreground" data-testid="overview-property-link">
-          <Link href="/house" className="inline-flex items-center gap-1 text-primary font-medium hover:underline">
+        {/* Overview answers what needs attention; reference information lives in My House. */}
+        <section className="space-y-3" data-tour="home-status">
+          <HomeHealth
+            score={computedHealthScore}
+            systemsCount={systems.length}
+            tasksCount={activeTasks.length}
+            urgentTasksCount={urgentTasksCount}
+            overdueTasksCount={overdueTasksCount}
+            poorSystemsCount={poorSystemsCount}
+          />
+          <Link href="/house" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline" data-testid="overview-property-link">
             Explore your home's operating record <ArrowRight className="h-4 w-4" />
           </Link>
         </section>
 
-        {/* What we still need to know to make the above sharper. */}
-        {(intelligence?.insight?.missingCriticalData?.length ?? 0) > 0 && (
-          <section data-testid="section-missing-data">
-            <MissingDataPrompts items={intelligence!.insight.missingCriticalData} />
-          </section>
-        )}
-
-        {/* Add System Wizard */}
-        <AddSystemWizard 
-          isOpen={showAddSystem} 
-          onClose={() => setShowAddSystem(false)} 
-          homeId={home.id}
-          existingSystems={systems}
-        />
-
-        {/* Quick Add Task Dialog */}
-        <QuickAddTaskDialog
-          isOpen={showAddTask}
-          onClose={() => setShowAddTask(false)}
-          homeId={home.id}
-        />
-
-
         {/* Tasks Section */}
         <section className="space-y-6" data-tour="maintenance-plan">
-          <div className="flex justify-between items-baseline">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-lg font-heading font-semibold">Maintenance Plan</h2>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="sm" onClick={() => setShowAddTask(true)} data-testid="button-add-task">
@@ -847,6 +800,43 @@ export default function Dashboard() {
             </div>
           )}
         </section>
+
+        {/* Systems to watch — the part of Home Intelligence worth seeing
+            without going looking for it. Only rendered when something
+            actually needs attention, so a healthy home stays quiet. */}
+        {watchSystems.length > 0 && (
+          <section className="space-y-3" data-testid="section-systems-to-watch">
+            <h2 className="text-lg font-heading font-semibold">Systems to watch</h2>
+            <div className="space-y-3">
+              {watchSystems.map((s) => (
+                <RiskCard key={s.systemId} insight={s} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* What we still need to know to make the above sharper. */}
+        {(intelligence?.insight?.missingCriticalData?.length ?? 0) > 0 && (
+          <section data-testid="section-missing-data">
+            <MissingDataPrompts items={intelligence!.insight.missingCriticalData} />
+          </section>
+        )}
+
+        {/* Add System Wizard */}
+        <AddSystemWizard 
+          isOpen={showAddSystem} 
+          onClose={() => setShowAddSystem(false)} 
+          homeId={home.id}
+          existingSystems={systems}
+        />
+
+        {/* Quick Add Task Dialog */}
+        <QuickAddTaskDialog
+          isOpen={showAddTask}
+          onClose={() => setShowAddTask(false)}
+          homeId={home.id}
+        />
+
 
         {recentActivity.length > 0 && (
           <section className="space-y-3" data-testid="overview-recent-activity">
