@@ -26,7 +26,7 @@ export function categorizeTasks(tasks: V2Task[], now = new Date()) {
     }
 
     const parsedDate = task.dueDate
-      ? (/^\\d{4}-\\d{2}-\\d{2}$/.test(task.dueDate) ? parseISO(task.dueDate) : new Date(task.dueDate))
+      ? (task.dueDate.length === 10 ? parseISO(task.dueDate) : new Date(task.dueDate))
       : null;
     const dueDate = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : null;
 
