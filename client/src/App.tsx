@@ -42,7 +42,7 @@ import Chat from "@/pages/chat";
 import TransferKit from "@/pages/transfer-kit";
 
 // Lazy-loaded — marketing/billing pages
-const Pricing = lazy(() => import("@/pages/pricing"));
+const Support = lazy(() => import("@/pages/support"));
 
 // Lazy-loaded — guide/article pages (code splitting for SEO content)
 const MonthlyChecklist = lazy(() => import("@/pages/guides/monthly-checklist"));
@@ -165,7 +165,8 @@ function Router() {
             <Route path="/signup" component={Signup} />
             <Route path="/forgot-password" component={ForgotPassword} />
             <Route path="/reset-password" component={ResetPassword} />
-            <Route path="/pricing" component={Pricing} />
+            <Route path="/support" component={Support} />
+            <Route path="/pricing"><Redirect to="/support" /></Route>
             <Route path="/terms" component={PublicTermsPage} />
             <Route path="/contact" component={Contact} />
             <Route path="/guides/home-maintenance-checklist-by-month" component={MonthlyChecklist} />
@@ -213,7 +214,8 @@ function Router() {
             <Route path="/calendar" component={CalendarPage} />
             <Route path="/chat" component={Chat} />
             <Route path="/transfer-kit" component={TransferKit} />
-            <Route path="/pricing" component={Pricing} />
+            <Route path="/support" component={Support} />
+            <Route path="/pricing"><Redirect to="/support" /></Route>
 
             {/* Public guides — accessible to authenticated users too */}
             <Route path="/guides/home-maintenance-checklist-by-month" component={MonthlyChecklist} />

@@ -83,7 +83,7 @@ export function registerBillingRoutes(app: Express): void {
   // Public — plan metadata for pricing page
   app.get("/api/billing/plans", (_req, res) => {
     const plansPublic = Object.values(PLANS)
-      .filter((p) => (p as any).listed !== false)
+      .filter((p) => p.id === "free")
       .map((p) => ({
         id: p.id,
         name: p.name,
@@ -95,70 +95,40 @@ export function registerBillingRoutes(app: Express): void {
     res.json(plansPublic);
   });
 
-  app.post("/api/billing/create-checkout-session", isAuthenticated, async (req: Request, res: Response) => {
+  // Subscriptions are discontinued. No new recurring checkout sessions.
+  // Keep the existing billing portal so current subscribers can manage/cancel.
+  app.post("/api/billing/create-checkout-session", isAuthenticated, (_req, res) => {
+    res.status(410).json({ error: "Paid plan upgrades are discontinued. Home Buddy is supported by voluntary donations." });
+  });
+
+  // Voluntary ONE-TIME contribution. Never creates a subscription or
+  // grants different feature entitlements; a payment is not a paid plan.
+  app.post("/api/donations/checkout", async (req: Request, res: Response) => {
+    const amount = Number(req.body?.amount);
+    if (![5, 10, 25, 50].includes(amount)) {
+      return res.status(400).json({ error: "Choose a supported donation amount." });
+    }
     try {
-      const { plan } = req.body as { plan: "plus" | "premium" };
-      const user = (req as any).user;
-
-      // Closed while Premium is unlisted — see the note on PLANS.premium.
-      if (plan === "premium") {
-        return res.status(400).json({ error: "The Premium plan is not currently available." });
-      }
-
-      const config = plan === "plus" ? PLANS.plus : null;
-      if (!config || !config.priceId) {
-        return res.status(400).json({ error: "Invalid plan or pricing not configured. Set STRIPE_PRICE_PLUS / STRIPE_PRICE_PREMIUM env vars." });
-      }
-      // Pull priceId into a local so TS keeps the narrowing through the
-      // stripeBreaker arrow function below (property narrows are lost
-      // across closure boundaries).
-      const priceId: string = config.priceId;
-
       const stripe = await getUncachableStripeClient();
-
-      // Look up or create Stripe customer
-      let customerId: string | null = null;
-      const existing = await db.execute(sql`
-        SELECT stripe_customer_id FROM users WHERE id = ${user.id} LIMIT 1
-      `);
-      customerId = (existing.rows[0] as any)?.stripe_customer_id || null;
-
-      if (!customerId && user.email) {
-        const customer = await stripeBreaker.execute(() => stripe.customers.create({
-          email: user.email,
-          name: [user.firstName, user.lastName].filter(Boolean).join(" ") || undefined,
-          metadata: { userId: user.id },
-        }));
-        customerId = customer.id;
-
-        // Persist best-effort (tolerate schema missing the column)
-        try {
-          await db.execute(sql`
-            UPDATE users SET stripe_customer_id = ${customerId} WHERE id = ${user.id}
-          `);
-        } catch (err: any) {
-          logger.warn({ err: err?.message }, "users.stripe_customer_id not persisted (column may not exist yet)");
-        }
-      }
-
       const session = await stripeBreaker.execute(() => stripe.checkout.sessions.create({
-        mode: "subscription",
+        mode: "payment",
         payment_method_types: ["card"],
-        customer: customerId || undefined,
-        customer_email: customerId ? undefined : user.email,
-        line_items: [{ price: priceId, quantity: 1 }],
-        success_url: `${appUrl()}/profile?checkout=success&plan=${plan}`,
-        cancel_url: `${appUrl()}/pricing?checkout=canceled`,
-        allow_promotion_codes: true,
-        subscription_data: {
-          metadata: { userId: user.id, plan },
-        },
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            unit_amount: amount * 100,
+            product_data: { name: "Support Home Buddy", description: "Optional, one-time contribution. No subscription or additional features." },
+          },
+          quantity: 1,
+        }],
+        success_url: `${appUrl()}/support?donation=success`,
+        cancel_url: `${appUrl()}/support?donation=canceled`,
+        metadata: { purpose: "donation" },
       }));
-
-      res.json({ url: session.url, sessionId: session.id });
+      res.json({ url: session.url });
     } catch (err: any) {
-      logger.error({ err: err?.message }, "Failed to create checkout session");
-      res.status(500).json({ error: "Unable to start checkout" });
+      logger.error({ err: err?.message }, "Failed to create donation checkout");
+      res.status(503).json({ error: "Donations are temporarily unavailable. Please try again later." });
     }
   });
 

@@ -15,6 +15,7 @@ import { append, readStream, readFromSeq, getCurrentVersion } from "./eventing/e
 import { requireIdempotencyKey } from "./eventing/idempotency";
 import { applyEvent } from "./projections/applyEvent";
 import { EventTypes, type Actor } from "./eventing/types";
+import { getTemplatesForCategory } from "./services/maintenance-templates";
 import { validateTransition, TransitionError } from "./domain/stateMachine";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { logError as logErrorV2 } from "./lib/logger";
@@ -575,46 +576,61 @@ v2Router.post("/homes/:homeId/systems", async (req: Request, res: Response) => {
 
     const systemId = crypto.randomUUID();
     const attrs = req.body.attrs ?? req.body;
-    const result = await db.transaction(async (tx) =>
-      appendAndApply(tx, {
+    const category = attrs.category || req.body.systemType || "Other";
+    const templates = getTemplatesForCategory(category);
+
+    // Create system AND its starter tasks as one event-sourced transaction.
+    // The former implementation depended on a missing legacy system ID and
+    // silently skipped task generation for newly onboarded V2 systems.
+    const result = await db.transaction(async (tx) => {
+      const systemResult = await appendAndApply(tx, {
         aggregateType: "system",
         aggregateId: systemId,
         expectedVersion: 0,
         eventType: EventTypes.SystemAttributesUpserted,
-        data: { homeId, systemType: attrs.category || req.body.systemType, attrs },
+        data: { homeId, systemType: category, attrs },
         meta: {},
         actor,
         idempotencyKey: req.idempotencyKey!,
-      }),
-    );
+      });
 
-    // Auto-generate best-practice maintenance tasks for the new system
-    const category = attrs.category || req.body.systemType || "Other";
-    const systemName = attrs.name || category;
-    try {
-      const { generateTasksForSystem } = await import("./services/maintenance-templates");
-      // Resolve legacy homeId for task insertion
-      const legacyHomeId = await resolveHomeId(homeId);
-      if (!isNaN(legacyHomeId)) {
-        // Get the legacy system ID from projection
-        const projRow = await db.execute(sql`
-          SELECT (attrs->>'legacyId')::int as legacy_id FROM projection_system WHERE system_id = ${systemId}
-        `);
-        const legacySystemId = (projRow.rows[0] as any)?.legacy_id;
-        if (legacySystemId) {
-          const tasks = generateTasksForSystem(legacyHomeId, legacySystemId, category, systemName);
-          for (const task of tasks) {
-            await db.execute(sql`
-              INSERT INTO maintenance_tasks (home_id, related_system_id, title, description, category, urgency, diy_level, estimated_cost, safety_warning, is_recurring, recurrence_cadence, created_from, due_date)
-              VALUES (${task.homeId}, ${task.relatedSystemId}, ${task.title}, ${task.description}, ${task.category}, ${task.urgency}, ${task.diyLevel}, ${task.estimatedCost}, ${task.safetyWarning}, ${task.isRecurring}, ${task.recurrenceCadence}, ${task.createdFrom}, ${task.dueDate})
-            `);
-          }
+      // If an idempotency-key retry already created the system, never seed
+      // a second set of tasks. Task events are committed in the same txn.
+      if (!systemResult.deduped) {
+        const now = new Date();
+        for (const [index, template] of templates.entries()) {
+          const due = new Date(now);
+          due.setMonth(due.getMonth() + template.monthsUntilDue);
+          await appendAndApply(tx, {
+            aggregateType: "task",
+            aggregateId: crypto.randomUUID(),
+            expectedVersion: 0,
+            eventType: EventTypes.TaskCreated,
+            data: {
+              homeId,
+              systemId,
+              title: template.title,
+              dueAt: due.toISOString(),
+              estimates: {
+                description: template.description,
+                category,
+                urgency: template.urgency,
+                diyLevel: template.diyLevel,
+                estimatedCost: template.estimatedCost,
+                safetyWarning: template.safetyWarning,
+                isRecurring: true,
+                recurrenceCadence: template.cadence,
+                createdFrom: "best-practice",
+              },
+            },
+            meta: {},
+            actor,
+            idempotencyKey: `${req.idempotencyKey!}:starter:${index}`,
+          });
         }
       }
-    } catch (taskErr) {
-      // Non-fatal: system was created even if task generation fails
-      logErrorV2("v2.autoTaskGeneration", taskErr);
-    }
+      return systemResult;
+    });
 
     const flatAttrs = snakeToCamel(attrs);
     res.status(201).json({ id: systemId, homeId, ...flatAttrs, ...result });
