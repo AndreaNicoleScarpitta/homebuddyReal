@@ -378,6 +378,37 @@ export default function Profile() {
     },
   });
 
+  const [accountConfirmText, setAccountConfirmText] = useState("");
+  const [accountConfirmPassword, setAccountConfirmPassword] = useState("");
+  const [accountDeleteOpen, setAccountDeleteOpen] = useState(false);
+  const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
+
+  const accountDeleteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/user/account", {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirmation: accountConfirmText,
+          password: accountConfirmPassword,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || body.message || "Account closure could not be completed.");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.clear();
+      window.location.assign("/login?account_deleted=1");
+    },
+    onError: (error: Error) => {
+      setAccountDeleteError(error.message);
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/user/data", {
@@ -539,7 +570,7 @@ export default function Profile() {
                     Delete all data
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Permanently remove all your home data including systems, maintenance tasks, chat history, budget information, inspection reports, and event history. Your login account will remain active but all stored data will be gone. This cannot be undone.
+                    Permanently remove all your home data including systems, maintenance tasks, chat history, budget information, inspection reports, and event history. Your login account will remain active but your home records will be gone. This cannot be undone.
                   </p>
                 </div>
                 <AlertDialog onOpenChange={(open) => { if (open) trackModalOpen(MODAL_SLUGS.deleteAccount); }}>
@@ -574,6 +605,77 @@ export default function Profile() {
                   </AlertDialogContent>
                 </AlertDialog>
               </div>
+
+              <div className="border-t pt-4 space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-sm font-medium text-destructive">Close my account</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Permanently close your login account, revoke all signed-in sessions and
+                    delete your stored home records and uploads. This cannot be undone.
+                    Legally required payment transaction records may be retained by payment providers.
+                  </p>
+                </div>
+                <AlertDialog
+                  open={accountDeleteOpen}
+                  onOpenChange={(open) => {
+                    if (accountDeleteMutation.isPending) return;
+                    setAccountDeleteOpen(open);
+                    if (open) trackModalOpen(MODAL_SLUGS.deleteAccount);
+                    if (!open) {
+                      setAccountConfirmText("");
+                      setAccountConfirmPassword("");
+                      setAccountDeleteError(null);
+                    }
+                  }}
+                >
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm" disabled={accountDeleteMutation.isPending}
+                      data-testid="button-delete-account">
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete My Account
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete your HomeBuddy account?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Your home, maintenance history, uploads, saved data and login will be
+                        permanently deleted, and all devices will be signed out.
+                        This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="space-y-3 py-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="account-delete-confirm">Type DELETE to confirm</Label>
+                        <Input id="account-delete-confirm" autoComplete="off"
+                          value={accountConfirmText} onChange={(event) => setAccountConfirmText(event.target.value)}
+                          data-testid="input-confirm-delete-account" />
+                      </div>
+                      {user?.provider === "local" && (
+                        <div className="space-y-1">
+                          <Label htmlFor="account-delete-password">Current password</Label>
+                          <Input id="account-delete-password" type="password" autoComplete="current-password"
+                            value={accountConfirmPassword} onChange={(event) => setAccountConfirmPassword(event.target.value)}
+                            data-testid="input-delete-account-password" />
+                        </div>
+                      )}
+                      {accountDeleteError && <p role="alert" className="text-sm text-destructive">{accountDeleteError}</p>}
+                    </div>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={accountDeleteMutation.isPending}
+                        data-testid="button-cancel-delete-account">Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        disabled={accountDeleteMutation.isPending || accountConfirmText !== "DELETE" ||
+                          (user?.provider === "local" && !accountConfirmPassword)}
+                        onClick={(event) => { event.preventDefault(); setAccountDeleteError(null); accountDeleteMutation.mutate(); }}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        data-testid="button-confirm-delete-account">
+                        {accountDeleteMutation.isPending ? "Deleting account…" : "Permanently delete account"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+</div>
             </CardContent>
           </Card>
         </section>
