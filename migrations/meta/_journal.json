@@ -29,6 +29,13 @@
       "when": 1783005657057,
       "tag": "0003_add_missing_fk_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792098000000,
+      "tag": "0004_restore_home_system_columns",
+      "breakpoints": true
     }
   ]
 }
