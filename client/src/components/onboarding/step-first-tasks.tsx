@@ -1,10 +1,9 @@
 /**
  * Step 3 — the magic moment.
  *
- * After the user picks their systems in step 2, the orchestrator in
- * `onboarding.tsx` has created the home + systems, which caused the
- * server's `generateTasksForSystem` templates to fire and populate
- * `maintenance_tasks`. Here we just read that list back and show it:
+ * After the user picks systems in step 2, the server commits system
+ * and starter task events atomically to the V2 projections. Here we
+ * read the resulting tasks back and display them:
  * "Look what we already built for you."
  *
  * Goal: "first useful output in under 2 minutes." This is the moment

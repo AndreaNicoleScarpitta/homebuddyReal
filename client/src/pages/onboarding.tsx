@@ -10,22 +10,20 @@
  *
  *   1. house-basics       ZIP + optional year/sqft. Creates the home row.
  *   2. systems-quickpick  Tap-to-add system chips. Each selection POSTs a
- *                         system, which causes the server to generate
- *                         starter maintenance tasks via templates.
+ *                         system and atomically commits starter maintenance
+ *                         task events in the V2 model.
  *   3. first-tasks        The magic moment — we read back the generated
  *                         tasks so the user sees immediate value.
  *   4. inspection-alt     Optional fork for "power users" who want to
  *                         upload an inspection PDF. Otherwise skip to
  *                         the dashboard.
  *
- * The orchestration is intentionally state-only (no server draft). If the
- * user bails mid-flow, nothing is persisted until step 2 submits.
+ * The orchestrator waits until all selected systems are saved before
+ * showing starter tasks. Failed categories remain retryable.
  *
  * Error recovery: step 2 is where things can fail (CSRF, network, 500).
- * We keep the user on the step with a retry button rather than failing
- * silently. If the systems POST fails but the home POST succeeded, we
- * still let the user continue — the home exists, they can add systems
- * later from the dashboard.
+ * We keep the user on the step with an explicit error and retry the
+ * failed categories rather than falsely reporting plan creation.
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";

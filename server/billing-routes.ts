@@ -32,7 +32,9 @@ function appUrl(): string {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
   if (process.env.REPLIT_DEPLOYMENT_URL) return process.env.REPLIT_DEPLOYMENT_URL;
   if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}`;
-  return "http://localhost:5000";
+  return process.env.NODE_ENV === "production"
+    ? "https://www.homebuddy.space"
+    : "http://localhost:5000";
 }
 
 export function registerBillingRoutes(app: Express): void {
