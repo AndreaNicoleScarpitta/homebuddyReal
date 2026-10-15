@@ -52,6 +52,7 @@ import { systemConditions } from "@shared/schema";
 import { CircuitMapDialog } from "@/components/circuit-map";
 import { ComponentList } from "@/components/home-graph/component-list";
 import { WarrantySection } from "@/components/home-graph/warranty-card";
+import { DocumentsSection } from "@/pages/documents";
 import { RecommendationCard } from "@/components/home-graph/recommendation-card";
 import { getRepairs, getRecommendations, getSystemInsight, type V2Repair, type V2Recommendation, type SystemInsightResponse } from "@/lib/api";
 
@@ -311,7 +312,7 @@ export default function SystemDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["systems"] });
       toast({ title: "System deleted", description: "The system has been removed." });
-      navigate("/systems");
+      navigate("/house/systems");
     },
     onError: () => {
       toast({ title: "Error", description: "Could not delete system.", variant: "destructive" });
@@ -391,7 +392,7 @@ export default function SystemDetail() {
     return (
       <Layout>
         <div className="space-y-4">
-          <Link href="/systems">
+          <Link href="/house/systems">
             <Button variant="ghost" size="sm" data-testid="button-back-systems">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Systems
@@ -966,13 +967,14 @@ export default function SystemDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground" data-testid="text-no-documents">
-              No documents linked to this system yet. Upload documents from the{" "}
-              <Link href="/records" className="text-primary hover:underline" data-testid="link-documents">
-                Documents
-              </Link>{" "}
-              page.
-            </p>
+            {system.legacyId && home?.legacyId ? (
+              <DocumentsSection systemId={system.legacyId} />
+            ) : (
+              <p className="text-sm text-muted-foreground" data-testid="text-no-documents">
+                Files for systems without a legacy identifier can be viewed in{" "}
+                <Link href="/house?section=files" className="text-primary hover:underline" data-testid="link-documents">House files</Link>.
+              </p>
+            )}
           </CardContent>
         </Card>
 

@@ -189,8 +189,8 @@ function Router() {
             <Route path="/disclaimer" component={Disclaimer} />
 
             <Route path="/maintenance-log" component={MaintenanceLog} />
-            <Route path="/house" component={MyHouse} />
             <Route path="/house/systems" component={Systems} />
+            <Route path="/house" component={MyHouse} />
             <Route path="/systems/:id" component={SystemDetail} />
             <Route path="/systems"><LegacyHouseRedirect section="systems" /></Route>
             <Route path="/records"><LegacyHouseRedirect fromRecords /></Route>

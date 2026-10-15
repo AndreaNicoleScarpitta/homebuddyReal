@@ -304,6 +304,7 @@ export type Expense = typeof expenses.$inferSelect;
 export const homeDocuments = pgTable("home_documents", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   homeId: integer("home_id").notNull().references(() => homes.id, { onDelete: "cascade" }),
+  systemId: integer("system_id").references(() => systems.id, { onDelete: "set null" }),
   name: varchar("name", { length: 255 }).notNull(),
   fileType: varchar("file_type", { length: 100 }),
   fileSize: integer("file_size"),
@@ -314,6 +315,7 @@ export const homeDocuments = pgTable("home_documents", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("home_documents_home_id_idx").on(table.homeId),
+  index("home_documents_system_id_idx").on(table.systemId),
 ]);
 
 // @ts-expect-error drizzle-zod omit type inference
