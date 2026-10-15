@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from "react";
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useSearch } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { AnimatePresence } from "framer-motion";
@@ -33,12 +33,10 @@ import Contact from "@/pages/contact";
 import Terms from "@/pages/terms";
 import MaintenanceLog from "@/pages/maintenance-log";
 import Profile from "@/pages/profile";
-import Records from "@/pages/records";
+import MyHouse from "@/pages/house";
 import Systems from "@/pages/systems";
 import SystemDetail from "@/pages/system-detail";
 import Disclaimer from "@/pages/disclaimer";
-import Timeline from "@/pages/timeline";
-import Intelligence from "@/pages/intelligence";
 import CalendarPage from "@/pages/calendar";
 import Chat from "@/pages/chat";
 import TransferKit from "@/pages/transfer-kit";
@@ -88,6 +86,19 @@ function PublicTermsPage() {
       </div>
     </div>
   );
+}
+
+/** Map historical bookmarks to the new property context. */
+function LegacyHouseRedirect({ section = "files", fromRecords = false }: { section?: string; fromRecords?: boolean }) {
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  const allowed = ["files", "coverage", "services", "history", "tools", "systems"];
+  const recordType = params.get("type");
+  const destination = fromRecords
+    ? ({ documents: "files", warranties: "coverage", insurance: "coverage", utilities: "services" } as Record<string, string>)[recordType || ""] || "files"
+    : section;
+  const extra = destination === "systems" && params.get("type") ? `&type=${encodeURIComponent(params.get("type")!)}` : "";
+  return <Redirect to={`/house?section=${allowed.includes(destination) ? destination : "files"}${extra}`} />;
 }
 
 function Router() {
@@ -178,22 +189,22 @@ function Router() {
             <Route path="/disclaimer" component={Disclaimer} />
 
             <Route path="/maintenance-log" component={MaintenanceLog} />
+            <Route path="/house" component={MyHouse} />
+            <Route path="/house/systems" component={Systems} />
             <Route path="/systems/:id" component={SystemDetail} />
-            <Route path="/systems" component={Systems} />
-            <Route path="/records" component={Records} />
-            {/* Records absorbed four separate pages. Redirect rather than 404 —
-                these URLs are bookmarked and live in installed PWA shortcuts. */}
-            <Route path="/documents"><Redirect to="/records" /></Route>
-            <Route path="/warranties"><Redirect to="/records?type=warranties" /></Route>
-            <Route path="/insurance"><Redirect to="/records?type=insurance" /></Route>
-            <Route path="/utilities"><Redirect to="/records?type=utilities" /></Route>
+            <Route path="/systems"><LegacyHouseRedirect section="systems" /></Route>
+            <Route path="/records"><LegacyHouseRedirect fromRecords /></Route>
+            <Route path="/documents"><LegacyHouseRedirect section="files" /></Route>
+            <Route path="/warranties"><LegacyHouseRedirect section="coverage" /></Route>
+            <Route path="/insurance"><LegacyHouseRedirect section="coverage" /></Route>
+            <Route path="/utilities"><LegacyHouseRedirect section="services" /></Route>
             <Route path="/profile" component={Profile} />
             <Route path="/forgot-password" component={ForgotPassword} />
             <Route path="/reset-password" component={ResetPassword} />
             <Route path="/contact" component={Contact} />
             <Route path="/terms" component={Terms} />
-            <Route path="/timeline" component={Timeline} />
-            <Route path="/intelligence" component={Intelligence} />
+            <Route path="/timeline"><LegacyHouseRedirect section="history" /></Route>
+            <Route path="/intelligence"><Redirect to="/dashboard" /></Route>
             <Route path="/calendar" component={CalendarPage} />
             <Route path="/chat" component={Chat} />
             <Route path="/transfer-kit" component={TransferKit} />

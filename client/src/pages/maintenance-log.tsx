@@ -574,10 +574,10 @@ export default function MaintenanceLog() {
         <header className="flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-heading font-bold" data-testid="text-heading">
-              Maintenance Log
+              Plan
             </h1>
             <p className="text-muted-foreground mt-1">
-              Track tasks and completed work on your home
+              Your next actions, upcoming work, and completed maintenance
             </p>
           </div>
           <div className="flex items-center gap-2">

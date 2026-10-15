@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, Clock, Settings, Menu, LogOut, HelpCircle, Layers, ClipboardList, Brain, FolderOpen, PackageOpen, MessageSquare } from "lucide-react";
+import { Home, Settings, Menu, LogOut, HelpCircle, Layers, ClipboardList, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState, useEffect } from "react";
@@ -12,39 +12,15 @@ import { PlanBadge } from "@/components/plan-badge";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { OfflineBanner } from "@/components/offline-banner";
 
-// Primary surfaces — what a homeowner actually comes here to do: see the
-// state of the house, work the plan, look up a system, find a record.
-// Document analysis is deliberately not a tab; it is an action on Home and
-// in onboarding, because it is something you do, not somewhere you live.
-const primaryNav = [
-  { href: "/dashboard", icon: Home, label: "Home", match: ["/dashboard", "/"] },
-  { href: "/maintenance-log", icon: ClipboardList, label: "Plan", match: ["/maintenance-log"] },
-  { href: "/systems", icon: Layers, label: "Systems", match: ["/systems"] },
-  {
-    href: "/records",
-    icon: FolderOpen,
-    label: "Records",
-    // The four pages Records absorbed still redirect here; keep them
-    // highlighting the tab while those URLs are in circulation.
-    match: ["/records", "/documents", "/warranties", "/insurance", "/utilities"],
-  },
+// A homeowner's three jobs: understand, recall, and act.
+// Supporting capabilities remain available in their property context.
+export const primaryNav = [
+  { href: "/dashboard", icon: Home, label: "Overview", match: ["/dashboard", "/"] },
+  { href: "/house", icon: Layers, label: "My House", match: ["/house", "/systems", "/records", "/documents", "/warranties", "/insurance", "/utilities", "/timeline", "/transfer-kit"] },
+  { href: "/maintenance-log", icon: ClipboardList, label: "Plan", match: ["/maintenance-log", "/calendar"] },
 ];
 
-// Secondary — reachable, but no longer competing for primary attention
-// while we work out whether they earn their place.
-const secondaryNav = [
-  { href: "/chat", icon: MessageSquare, label: "Ask AI" },
-  { href: "/intelligence", icon: Brain, label: "Insights" },
-  { href: "/timeline", icon: Clock, label: "Timeline" },
-  { href: "/transfer-kit", icon: PackageOpen, label: "Transfer Kit" },
-];
-
-const bottomNavItems = [
-  { href: "/dashboard", icon: Home, label: "Home" },
-  { href: "/maintenance-log", icon: ClipboardList, label: "Plan" },
-  { href: "/systems", icon: Layers, label: "Systems" },
-  { href: "/records", icon: FolderOpen, label: "Records" },
-];
+const bottomNavItems = primaryNav;
 
 function isNavActive(location: string, item: { href: string; match?: string[] }) {
   if (item.match) return item.match.some(m => location === m || location.startsWith(m + "/"));
@@ -76,6 +52,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
         <div className="flex items-center gap-2">
           <PlanBadge compact />
+          <Link href="/chat" aria-label="Ask Home Buddy" title="Ask Home Buddy" className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-primary hover:bg-muted" data-testid="button-ask-ai-mobile">
+            <MessageSquare className="h-5 w-5" />
+          </Link>
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Open menu" className="h-11 w-11" data-testid="button-menu">
@@ -119,24 +98,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
               <div className="my-2 mx-4 border-t" />
 
-              {secondaryNav.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => { trackEvent('navigate', 'sidebar', item.label.toLowerCase()); setIsOpen(false); }}
-                  className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
-                    location === item.href
-                      ? "bg-primary/8 text-foreground font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  }`}
-                >
-                  <item.icon className={`h-[18px] w-[18px] ${location === item.href ? "text-primary" : ""}`} />
-                  <span className="text-sm">{item.label}</span>
-                </Link>
-              ))}
-
-              <div className="my-2 mx-4 border-t" />
-
               <Link
                 href="/profile"
                 onClick={() => { setIsOpen(false); }}
@@ -171,7 +132,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Desktop Sidebar — calm, spacious, minimal */}
-      <aside className="hidden md:flex flex-col w-60 border-r bg-card h-screen sticky top-0">
+      <aside className="hidden md:flex flex-col w-52 border-r bg-card h-screen sticky top-0">
         {/* Logo */}
         <div className="px-6 pt-6 pb-4">
           <div className="flex items-center justify-between gap-2.5">
@@ -211,28 +172,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
             })}
           </div>
 
-          {/* Records — always visible */}
-          <div className="mt-4 pt-4 border-t">
-            <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">Records</p>
-            <div className="mt-1 space-y-0.5">
-              {secondaryNav.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => trackEvent('navigate', 'sidebar', item.label.toLowerCase())}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                    location === item.href
-                      ? "bg-primary/8 text-foreground font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  }`}
-                >
-                  <div className="flex items-center justify-center w-8 h-8">
-                    <item.icon className={`h-[18px] w-[18px] ${location === item.href ? "text-primary" : ""}`} />
-                  </div>
-                  <span className="text-sm">{item.label}</span>
-                </Link>
-              ))}
-            </div>
+          <div className="mt-5 px-1 pt-4 border-t">
+            <Link href="/chat" className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-primary hover:bg-primary/10" data-testid="button-ask-ai-desktop">
+              <MessageSquare className="h-[18px] w-[18px]" />
+              Ask Home Buddy
+            </Link>
           </div>
         </nav>
 
@@ -297,7 +241,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* PWA install banner — appears above bottom nav after 20 s */}
       <PwaInstallPrompt />
 
-      {/* Mobile Bottom Navigation — 5 items, clean */}
+      {/* Mobile Bottom Navigation — the same three jobs as desktop */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t z-50 safe-area-bottom">
         <div className="flex items-center justify-around h-14">
           {bottomNavItems.map((item) => {
