@@ -88,16 +88,21 @@ function PublicTermsPage() {
   );
 }
 
-/** Map historical bookmarks to the new property context. */
-function LegacyHouseRedirect({ section = "files", fromRecords = false }: { section?: string; fromRecords?: boolean }) {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const allowed = ["files", "coverage", "services", "history", "tools", "systems"];
+/** Map historical bookmarks to the new property context without losing filters. */
+function LegacyHouseRedirect({ section = "files", fromRecords = false, focus }: { section?: string; fromRecords?: boolean; focus?: string }) {
+  const params = new URLSearchParams(useSearch());
   const recordType = params.get("type");
   const destination = fromRecords
     ? ({ documents: "files", warranties: "coverage", insurance: "coverage", utilities: "services" } as Record<string, string>)[recordType || ""] || "files"
     : section;
-  const extra = destination === "systems" && params.get("type") ? `&type=${encodeURIComponent(params.get("type")!)}` : "";
+  if (destination === "systems") {
+    const type = params.get("type");
+    return <Redirect to={type ? `/house/systems?type=${encodeURIComponent(type)}` : "/house/systems"} />;
+  }
+  const allowed = ["files", "coverage", "services", "history", "tools"];
+  const category = focus || (fromRecords ? recordType : null);
+  const extra = destination === "coverage" && (category === "insurance" || category === "warranties")
+    ? `&focus=${category}` : "";
   return <Redirect to={`/house?section=${allowed.includes(destination) ? destination : "files"}${extra}`} />;
 }
 
@@ -195,8 +200,8 @@ function Router() {
             <Route path="/systems"><LegacyHouseRedirect section="systems" /></Route>
             <Route path="/records"><LegacyHouseRedirect fromRecords /></Route>
             <Route path="/documents"><LegacyHouseRedirect section="files" /></Route>
-            <Route path="/warranties"><LegacyHouseRedirect section="coverage" /></Route>
-            <Route path="/insurance"><LegacyHouseRedirect section="coverage" /></Route>
+            <Route path="/warranties"><LegacyHouseRedirect section="coverage" focus="warranties" /></Route>
+            <Route path="/insurance"><LegacyHouseRedirect section="coverage" focus="insurance" /></Route>
             <Route path="/utilities"><LegacyHouseRedirect section="services" /></Route>
             <Route path="/profile" component={Profile} />
             <Route path="/forgot-password" component={ForgotPassword} />

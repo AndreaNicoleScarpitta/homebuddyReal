@@ -42,11 +42,15 @@ App runs at http://localhost:5000. Login with test/password123.
 
 ## Product shape
 
-Four primary surfaces: **Home** (dashboard), **Plan** (maintenance log), **Systems**, **Records**.
-Records is one page with a `?type=` filter covering documents, warranties, insurance and utilities;
-the old `/documents`, `/warranties`, `/insurance` and `/utilities` URLs redirect into it.
-Document analysis is an action on Home, not a nav tab. Ask AI, Insights, Timeline and
-Transfer Kit sit in a secondary group pending a usage review.
+Three primary surfaces: **Overview** (dashboard), **My House** (the connected operating record), and **Plan** (maintenance). Only these appear in primary navigation.
+`/house` is the canonical property profile with systems, searchable House Files, coverage,
+services, history, and home tools; legacy record paths redirect to the appropriate context.
+`/house/systems` retains the complete system inventory; `/systems/:id` preserves deep links.
+Documents remain home-level and may be optionally linked to a legacy system via an additive
+`home_documents.system_id` field. Never bypass same-home ownership verification.
+Ask Home Buddy remains a global action and uses existing `/chat` history.
+Insights are distributed into Overview and system detail. Transfer Kit is available in Home Tools.
+See `docs/intelligent-home-architecture.md` for the rollout and workflow test plan.
 
 Monetization is a single subscription: Free and Plus. Premium is unlisted and its checkout
 is closed because it sells multiple homes, which the app does not support (`/v2/home`

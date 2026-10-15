@@ -29,6 +29,7 @@ export default function MyHouse() {
   const search = useSearch();
   const query = new URLSearchParams(search);
   const requested = query.get("section");
+  const focus = query.get("focus");
   const section = requested && sectionKeys.includes(requested as HouseSection) ? requested as HouseSection : null;
   const [term, setTerm] = useState("");
   useEffect(() => { trackSlugPageView(PAGE_SLUGS.myHouse); }, []);
@@ -103,11 +104,11 @@ export default function MyHouse() {
             {section === "files" && (!legacyAvailable
               ? <p className="text-sm text-muted-foreground">Home files become available once your home profile is fully saved.</p>
               : <DocumentsSection />)}
-            {section === "coverage" && <div className="space-y-8">
-              <section aria-label="Warranties">
+            {section === "coverage" && <div className="flex flex-col gap-8">
+              <section aria-label="Warranties" className={focus === "insurance" ? "order-2" : "order-1"}>
                 <WarrantySection homeId={legacyId ?? home.id} />
               </section>
-              <section className="border-t pt-6" aria-label="Insurance">
+              <section className={focus === "insurance" ? "order-1" : "order-2 border-t pt-6"} aria-label="Insurance">
                 <h2 className="font-heading font-semibold text-lg mb-4">Insurance</h2>
                 <InsuranceSection />
               </section>
@@ -160,7 +161,7 @@ export default function MyHouse() {
                   {matchedSystems.map(s => <Link key={s.id} href={`/systems/${s.id}`} className="flex items-center justify-between border-b py-2 text-sm hover:text-primary">{s.name} <ChevronRight className="h-4 w-4"/></Link>)}
                 </section>
                 <section className="space-y-2"><h2 className="font-heading font-semibold">Files ({matchedFiles.length})</h2>
-                  {matchedFiles.map(d => <Link key={d.id} href="/house?section=files" className="flex items-center justify-between border-b py-2 text-sm hover:text-primary">{d.name} <ChevronRight className="h-4 w-4"/></Link>)}
+                  {matchedFiles.map(d => <Link key={d.id} href={`/house?section=files&q=${encodeURIComponent(term)}`} className="flex items-center justify-between border-b py-2 text-sm hover:text-primary">{d.name} <ChevronRight className="h-4 w-4"/></Link>)}
                 </section>
                 {!matchedFiles.length && !matchedSystems.length && <p className="text-sm text-muted-foreground">No matching systems or files.</p>}
               </div>

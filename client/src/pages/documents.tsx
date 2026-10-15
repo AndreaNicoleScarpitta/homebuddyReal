@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -168,7 +169,8 @@ export function DocumentsSection({ systemId }: { systemId?: number }) {
   // filters the same underlying records; files are never duplicated.
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [uploadCategory, setUploadCategory] = useState<string>("General");
-  const [fileSearch, setFileSearch] = useState("");
+  const searchParams = new URLSearchParams(useSearch());
+  const [fileSearch, setFileSearch] = useState(searchParams.get("q") || "");
   const [previewDoc, setPreviewDoc] = useState<HomeDocument | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
