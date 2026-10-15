@@ -21,6 +21,7 @@ import { FieldTooltip } from "@/components/field-tooltip";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getHome, getTasks, getSystems, createTask, updateTask, deleteTask, completeTask, analyzeTask, getHomeIntelligence, getTimeline } from "@/lib/api";
+import { categorizeTasks, isTaskOpen } from "@/lib/task-buckets";
 import type { TaskAnalysis } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -604,7 +605,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!("setAppBadge" in navigator)) return;
     const urgent = tasks.filter(
-      (t) => t.urgency === "now" && t.status !== "completed"
+      (t) => t.urgency === "now" && isTaskOpen(t)
     ).length;
     if (urgent > 0) {
       (navigator as any).setAppBadge(urgent).catch(() => {});
@@ -648,13 +649,13 @@ export default function Dashboard() {
     return null;
   }
 
-  const activeTasks = tasks.filter(t => t.status === "pending" || t.status === "scheduled");
-  
-  const urgentTasksCount = tasks.filter(t => t.urgency === "now" && t.status !== "completed").length;
-  const overdueTasksCount = tasks.filter(t => {
-    if (!t.dueDate || t.status === "completed") return false;
-    return new Date(t.dueDate) < new Date();
-  }).length;
+  // Reuse Plan's mutually exclusive task buckets. Urgent items belong to the
+  // open-task total, but never masquerade as upcoming work simply because
+  // they have no due date.
+  const taskBuckets = categorizeTasks(tasks);
+  const activeTasks = tasks.filter(isTaskOpen);
+  const urgentTasksCount = activeTasks.filter(t => t.urgency === "now").length;
+  const overdueTasksCount = taskBuckets.past_due.length;
   const poorSystemsCount = systems.filter(s => s.condition === "Poor").length;
 
   // Highest-risk first, capped — the dashboard shows what needs attention,
@@ -734,8 +735,8 @@ export default function Dashboard() {
             </h1>
             <p className="text-muted-foreground mt-1">
               {activeTasks.length > 0
-                ? `${activeTasks.length} task${activeTasks.length > 1 ? 's' : ''} need${activeTasks.length === 1 ? 's' : ''} attention`
-                : "Everything looks good"
+                ? `${activeTasks.length} open maintenance task${activeTasks.length === 1 ? "" : "s"}`
+                : "No open maintenance tasks"
               }
             </p>
           </div>
