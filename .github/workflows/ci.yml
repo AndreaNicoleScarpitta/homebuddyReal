@@ -92,6 +92,12 @@ jobs:
           npx wait-on http://localhost:5000/api/health --timeout 30000
           npx playwright test
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: intelligent-home-review-screenshots
+          path: test-results/my-house-*.png
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-report

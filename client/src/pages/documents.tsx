@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { ObjectUploader } from "@/components/ObjectUploader";
-import { getHome, getDocuments, createDocument, deleteDocument } from "@/lib/api";
+import { getHome, getDocuments, createDocument, deleteDocument, getSystems, updateDocumentSystem } from "@/lib/api";
 import {
   FolderOpen,
   Upload,
@@ -163,9 +164,13 @@ function DocumentRow({
   );
 }
 
-export function DocumentsSection() {
+export function DocumentsSection({ systemId }: { systemId?: number }) {
+  // An omitted systemId means the house-wide library. A provided systemId
+  // filters the same underlying records; files are never duplicated.
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [uploadCategory, setUploadCategory] = useState<string>("General");
+  const searchParams = new URLSearchParams(useSearch());
+  const [fileSearch, setFileSearch] = useState(searchParams.get("q") || "");
   const [previewDoc, setPreviewDoc] = useState<HomeDocument | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -175,13 +180,22 @@ export function DocumentsSection() {
     queryFn: getHome,
   });
 
-  const homeId = (home as any)?.legacyId ?? (home as any)?.id;
+  const homeId = home?.legacyId ?? null;
+  const { data: systems = [] } = useQuery({
+    queryKey: ["systems", home?.id],
+    queryFn: () => getSystems(home!.id),
+    enabled: !!home?.id && systemId === undefined,
+  });
+  const associableSystems = systems.filter(s => typeof s.legacyId === "number");
+
 
   const { data: documents = [], isLoading: docsLoading } = useQuery({
     queryKey: ["documents", homeId],
-    queryFn: () => getDocuments(homeId),
-    enabled: !!homeId,
+    queryFn: () => getDocuments(homeId!),
+    enabled: typeof homeId === "number",
   });
+  const visibleDocuments = documents.filter(doc => (systemId === undefined || doc.systemId === systemId) &&
+    [doc.name, doc.category, doc.notes].some(v => v?.toLowerCase().includes(fileSearch.toLowerCase().trim())));
 
   const deleteMutation = useMutation({
     mutationFn: deleteDocument,
@@ -199,6 +213,15 @@ export function DocumentsSection() {
     },
   });
 
+  const associateMutation = useMutation({
+    mutationFn: ({ id, target }: { id: number; target: number | null }) => updateDocumentSystem(id, target),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      toast({ title: "File association updated" });
+    },
+    onError: (error: Error) => toast({ title: "Could not link file", description: error.message, variant: "destructive" }),
+  });
+
   const handleUploadComplete = async (result: any) => {
     if (!homeId || !result.successful?.[0]) return;
 
@@ -211,6 +234,7 @@ export function DocumentsSection() {
         fileSize: file.size || 0,
         objectPath,
         category: uploadCategory.toLowerCase(),
+        systemId: systemId ?? null,
       });
       queryClient.invalidateQueries({ queryKey: ["documents"] });
       trackEvent("upload", "documents", "document_uploaded");
@@ -251,7 +275,7 @@ export function DocumentsSection() {
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
           <div>
             <p className="text-muted-foreground">
-              Store and organize your important home files
+              Keep your files findable and connected to your house
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -287,13 +311,22 @@ export function DocumentsSection() {
           </div>
         </header>
 
-        {documents.length === 0 ? (
+        <input
+          type="search"
+          aria-label="Search house files"
+          placeholder="Search files by name or category"
+          value={fileSearch}
+          onChange={e => setFileSearch(e.target.value)}
+          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+          data-testid="input-files-search"
+        />
+        {visibleDocuments.length === 0 ? (
           <div className="py-16 text-center" data-testid="empty-state">
             <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
               <FolderOpen className="h-8 w-8 text-primary" />
             </div>
             <h2 className="text-xl font-semibold text-foreground">
-              No documents yet
+              {fileSearch ? "No files match that search" : systemId !== undefined ? "No files linked to this system yet" : "No files yet"}
             </h2>
             <p className="text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
               Upload insurance policies, warranties, permits, contracts, and
@@ -306,13 +339,30 @@ export function DocumentsSection() {
           </div>
         ) : (
           <div className="space-y-3" data-testid="document-list">
-            {documents.map((doc) => (
-              <DocumentRow
-                key={doc.id}
-                doc={doc}
-                onDelete={(id) => setDeleteConfirmId(id)}
-                onView={(d) => setPreviewDoc(d)}
-              />
+            {visibleDocuments.map((doc) => (
+              <div key={doc.id} className="space-y-1">
+                <DocumentRow
+                  doc={doc}
+                  onDelete={(id) => setDeleteConfirmId(id)}
+                  onView={(d) => setPreviewDoc(d)}
+                />
+                {systemId === undefined && associableSystems.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 px-3 pb-1">
+                    <label htmlFor={`file-system-${doc.id}`} className="text-xs text-muted-foreground">Associated system</label>
+                    <select
+                      id={`file-system-${doc.id}`}
+                      className="rounded-md border bg-background px-2 py-1 text-xs max-w-[220px]"
+                      value={doc.systemId ?? ""}
+                      disabled={associateMutation.isPending}
+                      onChange={e => associateMutation.mutate({ id: doc.id, target: e.target.value ? Number(e.target.value) : null })}
+                      data-testid={`select-file-system-${doc.id}`}
+                    >
+                      <option value="">Whole house / unassigned</option>
+                      {associableSystems.map(s => <option key={s.id} value={s.legacyId!}>{s.name}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}

@@ -1,5 +1,6 @@
 import { Layout } from "@/components/layout";
 import { SwipeableTask } from "@/components/swipeable-task";
+import { ContractorSection } from "@/components/contractor-section";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -574,10 +575,10 @@ export default function MaintenanceLog() {
         <header className="flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-heading font-bold" data-testid="text-heading">
-              Maintenance Log
+              Plan
             </h1>
             <p className="text-muted-foreground mt-1">
-              Track tasks and completed work on your home
+              Your next actions, upcoming work, and completed maintenance
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -683,6 +684,11 @@ export default function MaintenanceLog() {
           })}
         </div>
 
+        {tasks.some(t => t.diyLevel === "Pro-Only" && t.status !== "completed") && home && (
+          <section className="space-y-3" aria-label="Contractor assistance">
+            <ContractorSection homeId={home.id} pendingTasks={tasks.filter(t => t.status !== "completed")} zipCode={home.zipCode || undefined} />
+          </section>
+        )}
         <div data-testid="task-list">
           {filteredTasks.length === 0 ? (
             <div className="text-center py-16">

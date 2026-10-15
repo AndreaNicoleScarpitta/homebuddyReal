@@ -1,5 +1,6 @@
 export const PAGE_SLUGS = {
   dashboard: "dashboard",
+  myHouse: "my-house",
   onboarding: "onboarding",
   documentAnalysis: "document-analysis",
   disclaimer: "disclaimer",

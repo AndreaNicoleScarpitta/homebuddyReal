@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { and, eq } from "drizzle-orm";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { requireUnderLimit, requireUnderSystemsLimit } from "./lib/plans";
 import { logInfo, logError, logWarn } from "./lib/logger";
@@ -31,6 +33,8 @@ import {
   type InsertInspectionReport,
   insertHomeDocumentSchema,
   type InsertHomeDocument,
+  homeDocuments,
+  systems,
   insertContractorAppointmentSchema,
   type InsertContractorAppointment,
   insertNotificationPreferencesSchema,
@@ -776,6 +780,14 @@ Only return the JSON object, no other text.`;
     }
   });
   
+  // A document and linked system must belong to the SAME home. The caller must
+  // already have passed verifyHomeOwnership/verifyDocumentOwnership.
+  async function documentSystemBelongsToHome(homeId: number, systemId: number): Promise<boolean> {
+    const match = await db.select({ id: systems.id }).from(systems)
+      .where(and(eq(systems.id, systemId), eq(systems.homeId, homeId))).limit(1);
+    return match.length === 1;
+  }
+
   // Home Documents routes
   app.get("/api/home/:homeId/documents", isAuthenticated, async (req: any, res) => {
     try {
@@ -801,11 +813,36 @@ Only return the JSON object, no other text.`;
         return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
       }
       const docData = insertHomeDocumentSchema.parse({ ...req.body, homeId }) as unknown as InsertHomeDocument;
+      if (docData.systemId != null && !(await documentSystemBelongsToHome(homeId, docData.systemId))) {
+        return res.status(400).json({ message: "The selected system does not belong to this home", code: "VALIDATION_ERROR" });
+      }
       const doc = await storage.createDocument(docData);
       logInfo("documents.create", "Document created successfully", { docId: doc.id, homeId });
       res.json(doc);
     } catch (error) {
       return handleApiError(res, "documents.create", error);
+    }
+  });
+
+  // Optional legacy-system association. Does not move, copy or re-own the file.
+  app.patch("/api/documents/:id/system", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = validateIntParam(req.params.id);
+      if (id === null) return res.status(400).json({ message: "Invalid document ID", code: "VALIDATION_ERROR" });
+      if (!(await storage.verifyDocumentOwnership(id, req.user.id))) {
+        return res.status(403).json({ message: "Access denied", code: "FORBIDDEN" });
+      }
+      const { systemId } = z.object({ systemId: z.number().int().positive().nullable() }).strict().parse(req.body);
+      const doc = await storage.getDocument(id);
+      if (!doc) return res.status(404).json({ message: "Document not found" });
+      if (systemId !== null && !(await documentSystemBelongsToHome(doc.homeId, systemId))) {
+        return res.status(400).json({ message: "The selected system does not belong to this home", code: "VALIDATION_ERROR" });
+      }
+      const [updated] = await db.update(homeDocuments).set({ systemId })
+        .where(and(eq(homeDocuments.id, id), eq(homeDocuments.homeId, doc.homeId))).returning();
+      return res.json(updated);
+    } catch (error) {
+      return handleApiError(res, "documents.associate", error);
     }
   });
 

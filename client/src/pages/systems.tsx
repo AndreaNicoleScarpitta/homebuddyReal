@@ -408,11 +408,11 @@ export default function SystemsPage() {
   const handleTypeClick = (type: string) => {
     if (activeType === type) {
       setActiveType(null);
-      navigate("/systems", { replace: true });
+      navigate("/house/systems", { replace: true });
     } else {
       setActiveType(type);
       trackEvent("system_type_opened", "systems", type);
-      navigate(`/systems?type=${encodeURIComponent(type)}`, { replace: true });
+      navigate(`/house/systems?type=${encodeURIComponent(type)}`, { replace: true });
     }
   };
 
@@ -436,7 +436,7 @@ export default function SystemsPage() {
               className="text-2xl font-heading font-bold text-foreground"
               data-testid="text-systems-heading"
             >
-              Systems
+              Home systems
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
               {systems.length} system{systems.length !== 1 ? "s" : ""} tracked

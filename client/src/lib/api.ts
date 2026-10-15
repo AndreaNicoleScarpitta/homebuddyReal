@@ -680,11 +680,21 @@ export async function createDocument(homeId: number, data: {
   objectPath: string;
   category?: string;
   notes?: string;
+  systemId?: number | null;
 }): Promise<HomeDocument> {
   const response = await fetch(`/api/home/${homeId}/documents`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
+  });
+  return handleResponse<HomeDocument>(response);
+}
+
+export async function updateDocumentSystem(id: number, systemId: number | null): Promise<HomeDocument> {
+  const response = await fetch(`/api/documents/${id}/system`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ systemId }),
   });
   return handleResponse<HomeDocument>(response);
 }

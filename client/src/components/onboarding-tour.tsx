@@ -12,64 +12,17 @@ interface TourStep {
   placement?: "top" | "bottom" | "left" | "right";
 }
 
+// The tour only targets locations present in the reduced product shell.
 const desktopTourSteps: TourStep[] = [
-  {
-    target: "[data-tour='home-status']",
-    title: "Your Home Status",
-    content: "This shows your home's overall condition at a glance. As you add systems and track maintenance, we'll update this to help you stay on top of things.",
-    placement: "right",
-  },
-  {
-    target: "[data-tour='quick-stats']",
-    title: "Key Information",
-    content: "Track your home's age, upcoming maintenance, and active tasks. These cards give you a quick snapshot of what's happening.",
-    placement: "bottom",
-  },
-  {
-    target: "[data-tour='maintenance-plan']",
-    title: "Your Maintenance Plan",
-    content: "Tasks are organized by urgency: Fix Now, Plan Soon, and Address Later. This helps you prioritize without feeling overwhelmed.",
-    placement: "top",
-  },
-  {
-    target: "[data-tour='nav-file-upload']",
-    title: "Document Analysis",
-    content: "Upload inspection reports, warranties, or other home documents. Our AI reads them and creates maintenance tasks automatically.",
-    placement: "right",
-  },
-  {
-    target: "[data-tour='systems-section']",
-    title: "Ready to Start?",
-    content: "Add your first home system to begin building your maintenance plan. We'll help you track its condition and schedule upkeep.",
-    placement: "top",
-  },
+  { target: "[data-tour='home-status']", title: "Overview", content: "Understand the condition of your home and what matters now.", placement: "right" },
+  { target: "[data-tour='maintenance-plan']", title: "Next actions", content: "See the most important work here. Plan holds your full task list and history.", placement: "top" },
+  { target: "[data-tour='document-analysis']", title: "Teach Home Buddy about your house", content: "Analyze an inspection report to discover systems and recommended work.", placement: "bottom" },
+  { target: "[data-tour='nav-house']", title: "Your home's operating record", content: "My House is where systems, warranties, files, contacts, and history live together.", placement: "right" },
 ];
-
 const mobileTourSteps: TourStep[] = [
-  {
-    target: "[data-tour='home-status']",
-    title: "Your Home Status",
-    content: "This shows your home's overall condition at a glance. As you add systems and track maintenance, we'll update this to help you stay on top of things.",
-    placement: "bottom",
-  },
-  {
-    target: "[data-tour='quick-stats']",
-    title: "Key Information",
-    content: "Track your home's age, upcoming maintenance, and active tasks. These cards give you a quick snapshot of what's happening.",
-    placement: "bottom",
-  },
-  {
-    target: "[data-tour='maintenance-plan']",
-    title: "Your Maintenance Plan",
-    content: "Tasks are organized by urgency: Fix Now, Plan Soon, and Address Later. This helps you prioritize without feeling overwhelmed.",
-    placement: "top",
-  },
-  {
-    target: "[data-tour='systems-section']",
-    title: "Ready to Start?",
-    content: "Add your first home system to begin building your maintenance plan. We'll help you track its condition and schedule upkeep.",
-    placement: "top",
-  },
+  { target: "[data-tour='home-status']", title: "Overview", content: "See what matters most about your home.", placement: "bottom" },
+  { target: "[data-tour='maintenance-plan']", title: "Next actions", content: "Your full maintenance plan and completed work are always in Plan.", placement: "top" },
+  { target: "[data-tour='nav-house-mobile']", title: "My House", content: "Find the systems, files, coverage, and history Home Buddy remembers.", placement: "top" },
 ];
 
 interface OnboardingTourProps {
@@ -298,7 +251,7 @@ export function OnboardingTour({ onComplete, onSkip, isOpen }: OnboardingTourPro
                 onClick={handleNext}
                 data-testid="button-next-step"
               >
-                {isLastStep ? "Add First System" : "Next"}
+                {isLastStep ? "Explore My House" : "Next"}
                 {!isLastStep && <ChevronRight className="h-4 w-4 ml-1" />}
               </Button>
             </div>
