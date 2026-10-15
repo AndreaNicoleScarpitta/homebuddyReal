@@ -34,6 +34,11 @@ import { registerObjectStorageRoutes } from "../../server/replit_integrations/ob
 function app() {
   const a = express();
   a.use(express.json());
+  // Simulate a session established by setupAuth for GET object requests.
+  a.use((req: any, _res, next) => {
+    if (req.headers["x-test-identity"]) req.session = { userId: req.headers["x-test-identity"] };
+    next();
+  });
   registerObjectStorageRoutes(a);
   return a;
 }
