@@ -49,7 +49,7 @@ export async function eraseUserData(userId: string, mode: ErasureMode): Promise<
 
   // R2 is outside the DB transaction. Failure leaves DB references intact and
   // retryable; the deletion operation itself is idempotent.
-  for (const key of keys) {
+  for (const key of Array.from(keys)) {
     await files.deleteObject(key);
     if (await files.objectExists(key)) throw new Error("Storage did not confirm deletion.");
   }
