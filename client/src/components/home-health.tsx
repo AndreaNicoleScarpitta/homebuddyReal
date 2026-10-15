@@ -128,8 +128,8 @@ export function HomeHealth({
   const styles = getTierStyles(tier);
   const TierIcon = styles.icon;
 
-  return (
-    <Card className={`h-full border shadow-none ${styles.bgColor} ${styles.borderColor}`}>
+  const card = (
+    <Card className={`h-full border shadow-none ${styles.bgColor} ${styles.borderColor} ${tier === "needs-attention" ? "transition-shadow group-hover:shadow-sm" : ""}`}>
       <CardContent className="p-5 space-y-3">
         <div className="flex items-center gap-3">
           <div className={`h-12 w-12 rounded-full ${styles.bgColor} border-2 ${styles.borderColor} flex items-center justify-center shrink-0`}>
@@ -158,7 +158,7 @@ export function HomeHealth({
             {actionParts.length > 0 && (
               <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
                 {actionParts.map((part, i) =>
-                  part.link ? (
+                  part.link && tier !== "needs-attention" ? (
                     <Link
                       key={i}
                       href={part.link}
@@ -186,18 +186,34 @@ export function HomeHealth({
           <p className="text-xs text-muted-foreground">
             {systemsCount > 0 && `${systemsCount} system${systemsCount > 1 ? 's' : ''} tracked`}
             {systemsCount > 0 && tasksCount > 0 && ' · '}
-            {tasksCount > 0 && (
+            {tasksCount > 0 && (tier === "needs-attention" ? (
+              <span data-testid="text-health-open-tasks">
+                {tasksCount} total open task{tasksCount > 1 ? "s" : ""} (including urgent)
+              </span>
+            ) : (
               <Link
                 href="/maintenance-log"
                 className="hover:text-foreground transition-colors underline underline-offset-2"
                 data-testid="link-health-tasks"
               >
-                {tasksCount} active task{tasksCount > 1 ? 's' : ''}
+                {tasksCount} open task{tasksCount > 1 ? "s" : ""}
               </Link>
-            )}
+            ))}
           </p>
         )}
       </CardContent>
     </Card>
   );
+
+  // One semantic link keeps the entire status card keyboard and touch accessible.
+  return tier === "needs-attention" ? (
+    <Link
+      href="/maintenance-log"
+      className="group block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+      aria-label="View maintenance tasks in Plan"
+      data-testid="link-needs-attention-card"
+    >
+      {card}
+    </Link>
+  ) : card;
 }

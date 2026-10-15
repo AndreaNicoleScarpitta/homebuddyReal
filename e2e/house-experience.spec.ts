@@ -30,6 +30,10 @@ async function mockAuthenticatedHome(page: Page) {
   await page.route("**/api/home", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: 41, ...home }) }));
   await page.route("**/v2/homes/house-uuid/systems", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([system, electricalSystem]) }));
   await page.route("**/v2/homes/house-uuid/tasks", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) }));
+  await page.route("**/v2/homes/house-uuid/intelligence", r => r.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ insight: { overallHealthScore: 82, missingCriticalData: [] }, systems: [] }),
+  }));
   await page.route("**/v2/homes/house-uuid/circuit-maps", r => r.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.route("**/api/home/41/documents", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(files) }));
   // Plan and system profiles use additional authenticated endpoints. Intercept
@@ -62,6 +66,37 @@ test("mobile Overview prioritizes the maintenance plan instead of permanent refe
   await expect(page.getByText("Circuit Panel Map")).toHaveCount(0);
   await expect(page.getByText("Home Information")).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("entire Needs Attention card opens Plan and urgent tasks are excluded from Upcoming", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockAuthenticatedHome(page);
+  const tasks = [
+    ...Array.from({ length: 2 }, (_, i) => ({
+      id: `urgent-${i}`, homeId: "house-uuid", title: `Urgent ${i + 1}`,
+      status: "pending", state: "pending", urgency: "now", dueDate: null,
+    })),
+    ...Array.from({ length: 13 }, (_, i) => ({
+      id: `future-${i}`, homeId: "house-uuid", title: `Upcoming ${i + 1}`,
+      status: "pending", state: "pending", urgency: "later", dueDate: null,
+    })),
+  ];
+  await page.route("**/v2/homes/house-uuid/tasks", r =>
+    r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(tasks) })
+  );
+  await page.goto("/dashboard");
+
+  const attentionCard = page.getByTestId("link-needs-attention-card");
+  await expect(attentionCard).toBeVisible();
+  await expect(attentionCard).toContainText("2 urgent tasks");
+  await expect(attentionCard).toContainText("15 total open tasks (including urgent)");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await attentionCard.getByText("Needs Attention", { exact: true }).click();
+  await expect(page).toHaveURL(/maintenance-log/);
+  await expect(page.getByTestId("text-due-count")).toHaveText("2");
+  await expect(page.getByTestId("text-upcoming-count")).toHaveText("13");
+  await expect(page.getByTestId("filter-due")).toHaveClass(/bg-background/);
+  await expect(page.getByText("Urgent 1")).toBeVisible();
 });
 
 test("shutoff locations are editable in My House, not the dashboard", async ({ page }) => {
