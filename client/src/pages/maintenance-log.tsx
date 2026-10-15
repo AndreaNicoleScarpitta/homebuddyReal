@@ -40,20 +40,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getHome, getTasks, getSystems, getLogEntries, createLogEntry, updateTask, deleteTask, repairStarterTasks } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { format, formatDistanceToNow, isPast, isToday, isFuture, differenceInDays } from "date-fns";
+import { format, formatDistanceToNow, isPast, isToday } from "date-fns";
+import { categorizeTasks } from "@/lib/task-buckets";
 import type { V2Task, V2System } from "@/lib/api";
 import type { MaintenanceLogEntry } from "@shared/schema";
 import { trackEvent, trackSlugPageView, trackModalOpen } from "@/lib/analytics";
 import { MODAL_SLUGS, PAGE_SLUGS } from "@/lib/slug-registry";
 
-/**
- * Filter categories for the Maintenance Log task list.
- * Tasks are categorized by their due date relative to today:
- * - upcoming: due date > 7 days out or no due date
- * - due: due today or within the next 7 days
- * - past_due: due date is in the past
- * - completed: task status is "completed"
- */
+/** A task belongs to only one of these Plan buckets. Urgent tasks without
+ * dates appear in Due rather than Upcoming. */
 type FilterTab = "upcoming" | "due" | "past_due" | "completed";
 
 const filterTabs: { key: FilterTab; label: string; icon: React.ElementType }[] = [
@@ -62,60 +57,6 @@ const filterTabs: { key: FilterTab; label: string; icon: React.ElementType }[] =
   { key: "past_due", label: "Past Due", icon: CalendarX },
   { key: "completed", label: "Completed", icon: CheckCircle2 },
 ];
-
-/**
- * Sorts tasks into four buckets based on due date and completion status.
- * Each bucket is sorted by due date (earliest first, except completed which is newest first).
- * Tasks without a due date are placed in "upcoming" by default.
- */
-function categorizeTasks(tasks: V2Task[]) {
-  const now = new Date();
-  const upcoming: V2Task[] = [];
-  const due: V2Task[] = [];
-  const pastDue: V2Task[] = [];
-  const completed: V2Task[] = [];
-
-  for (const task of tasks) {
-    if (task.status === "completed" || task.state === "completed") {
-      completed.push(task);
-      continue;
-    }
-
-    const dueDate = task.dueDate ? new Date(task.dueDate) : null;
-
-    if (!dueDate) {
-      upcoming.push(task);
-      continue;
-    }
-
-    if (isPast(dueDate) && !isToday(dueDate)) {
-      pastDue.push(task);
-    } else if (isToday(dueDate) || (isFuture(dueDate) && differenceInDays(dueDate, now) <= 7)) {
-      due.push(task);
-    } else {
-      upcoming.push(task);
-    }
-  }
-
-  pastDue.sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
-  due.sort((a, b) => {
-    const aDate = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
-    const bDate = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
-    return aDate - bDate;
-  });
-  upcoming.sort((a, b) => {
-    const aDate = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
-    const bDate = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
-    return aDate - bDate;
-  });
-  completed.sort((a, b) => {
-    const aDate = a.dueDate ? new Date(a.dueDate).getTime() : 0;
-    const bDate = b.dueDate ? new Date(b.dueDate).getTime() : 0;
-    return bDate - aDate;
-  });
-
-  return { upcoming, due, past_due: pastDue, completed };
-}
 
 function MaintenanceLogSkeleton() {
   return (
@@ -646,7 +587,7 @@ export default function MaintenanceLog() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold" data-testid="text-due-count">{counts.due}</p>
-                  <p className="text-xs text-muted-foreground">Due Now</p>
+                  <p className="text-xs text-muted-foreground">Due / Urgent</p>
                 </div>
               </div>
             </CardContent>
@@ -734,7 +675,7 @@ export default function MaintenanceLog() {
               </h3>
               <p className="text-muted-foreground text-sm max-w-md mx-auto">
                 {activeFilter === "upcoming" && "Tasks scheduled for the future will appear here."}
-                {activeFilter === "due" && "Tasks due today or within the next 7 days will appear here."}
+                {activeFilter === "due" && "Tasks due within 7 days or marked urgent will appear here."}
                 {activeFilter === "past_due" && "Great job staying on top of your maintenance!"}
                 {activeFilter === "completed" && "Complete your first task to start building your maintenance history."}
               </p>
