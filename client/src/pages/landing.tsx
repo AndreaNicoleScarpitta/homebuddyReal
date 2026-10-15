@@ -43,24 +43,24 @@ export default function Landing() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-orange-50 via-background to-background dark:from-orange-950/20 dark:via-background dark:to-background">
+    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-gradient-to-b from-orange-50 via-background to-background dark:from-orange-950/20 dark:via-background dark:to-background">
       <header className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-md border-b border-border/40" role="banner">
-        <nav className="container mx-auto px-6 h-16 flex justify-between items-center" aria-label="Main navigation">
-          <Link href="/" className="flex items-center gap-2 no-underline" aria-label="Home Buddy - Home">
+        <nav className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-2 px-3 sm:h-16 sm:px-6" aria-label="Main navigation">
+          <Link href="/" className="flex min-w-0 items-center gap-2 no-underline" aria-label="Home Buddy - Home">
             <img
               src="/images/home-buddy-icon.webp"
               alt="Home Buddy logo"
-              className="h-8 w-8 rounded-lg object-cover"
+              className="h-8 w-8 shrink-0 rounded-lg object-cover"
               width="32"
               height="32"
             />
-            <span className="text-xl font-heading font-bold text-foreground">Home Buddy</span>
+            <span className="whitespace-nowrap text-[clamp(1rem,4.3vw,1.25rem)] font-heading font-bold text-foreground sm:text-xl">Home Buddy</span>
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-3">
             <Link
               href="/login"
               onClick={() => trackEvent('click', 'landing', 'sign_in_header')}
-              className="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground no-underline transition-colors"
+              className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md px-2 py-2 text-xs font-medium text-muted-foreground hover:text-foreground no-underline transition-colors sm:px-4 sm:text-sm"
               data-testid="button-login"
             >
               Sign In
@@ -68,7 +68,7 @@ export default function Landing() {
             <Link
               href="/signup"
               onClick={() => trackEvent('click', 'landing', 'sign_up_header')}
-              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 no-underline transition-colors"
+              className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 no-underline transition-colors sm:px-4 sm:text-sm"
               data-testid="button-signup-header"
             >
               Sign Up
@@ -77,40 +77,40 @@ export default function Landing() {
         </nav>
       </header>
 
-      <main className="pt-16">
-        <section className="min-h-[90vh] flex items-center relative overflow-hidden" aria-label="Hero - AI Home Maintenance Planner">
+      <main className="pt-14 sm:pt-16">
+        <section className="relative flex min-h-[calc(100svh-3.5rem)] items-center overflow-hidden sm:min-h-[calc(100svh-4rem)] lg:min-h-[90vh]" aria-label="Hero - AI Home Maintenance Planner">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
           <div className="absolute top-1/4 right-0 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl" />
           <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] bg-primary/3 rounded-full blur-3xl" />
 
-          <div className="container mx-auto px-6 py-20">
-            <div className="grid lg:grid-cols-2 gap-16 items-center">
+          <div className="container relative mx-auto w-full min-w-0 px-4 py-10 sm:px-6 sm:py-16 lg:py-20">
+            <div className="grid min-w-0 items-center gap-8 lg:grid-cols-2 lg:gap-16">
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.5 }}
-                className="space-y-8"
+                className="min-w-0 space-y-5 sm:space-y-8"
               >
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                  <Sparkles className="h-4 w-4" />
+                <div className="inline-flex max-w-full items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium leading-tight text-primary sm:px-4 sm:py-2 sm:text-sm">
+                  <Sparkles className="h-4 w-4 shrink-0" />
                   AI-powered home maintenance
                 </div>
 
-                <h1 className="text-5xl md:text-7xl font-heading font-bold text-foreground leading-[1.08] tracking-tight">
+                <h1 className="text-[clamp(2rem,9.2vw,2.5rem)] font-heading font-bold leading-[1.12] tracking-tight text-foreground sm:text-5xl md:text-7xl">
                   Stop guessing.<br />
                   <span className="text-primary">Start maintaining.</span>
                 </h1>
 
-                <p className="text-xl text-muted-foreground max-w-xl leading-relaxed">
+                <p className="max-w-xl text-base leading-7 text-muted-foreground sm:text-lg md:text-xl md:leading-relaxed">
                   Home Buddy builds a personalized maintenance schedule for your home, tells you what's safe to DIY, and catches problems before they become expensive emergencies.
                 </p>
 
-                <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
                   <a
                     href="/api/login"
                     target="_top"
                     onClick={() => trackEvent('click', 'landing', 'cta_hero')}
-                    className="inline-flex items-center justify-center h-14 px-8 text-lg font-medium rounded-md bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 no-underline transition-all hover:shadow-primary/35 hover:shadow-xl"
+                    className="inline-flex h-12 w-full items-center justify-center rounded-md bg-primary px-6 text-base font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/35 no-underline sm:h-14 sm:w-auto sm:px-8 sm:text-lg"
                     data-testid="button-cta-hero"
                   >
                     Get Started
@@ -132,7 +132,7 @@ export default function Landing() {
         </section>
 
         <section className="py-12 border-y border-border/40 bg-card/50" aria-label="Key metrics">
-          <div className="container mx-auto px-6">
+          <div className="container mx-auto px-4 sm:px-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
               {stats.map((stat, i) => (
                 <motion.div
@@ -151,8 +151,8 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="py-24">
-          <div className="container mx-auto px-6">
+        <section className="py-12 sm:py-24">
+          <div className="container mx-auto px-4 sm:px-6">
             <motion.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
@@ -160,7 +160,7 @@ export default function Landing() {
               className="max-w-2xl mb-16"
             >
               <p className="text-sm font-medium text-primary mb-3 tracking-wide uppercase">Document Analysis</p>
-              <h2 className="text-4xl font-heading font-bold text-foreground mb-4">
+              <h2 className="text-2xl sm:text-4xl font-heading font-bold text-foreground mb-4">
                 Upload an inspection report.<br />
                 Get an action plan in seconds.
               </h2>
@@ -205,8 +205,8 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="py-24 bg-secondary/30">
-          <div className="container mx-auto px-6">
+        <section className="py-12 sm:py-24 bg-secondary/30">
+          <div className="container mx-auto px-4 sm:px-6">
             <motion.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
@@ -214,7 +214,7 @@ export default function Landing() {
               className="max-w-2xl mb-16"
             >
               <p className="text-sm font-medium text-primary mb-3 tracking-wide uppercase">Recurring Maintenance</p>
-              <h2 className="text-4xl font-heading font-bold text-foreground mb-4">
+              <h2 className="text-2xl sm:text-4xl font-heading font-bold text-foreground mb-4">
                 Every system gets a schedule.<br />
                 You just check things off.
               </h2>
@@ -261,8 +261,8 @@ export default function Landing() {
         </section>
 
         {/* ── Calendar Sync section ────────────────────────────────────────── */}
-        <section className="py-24">
-          <div className="container mx-auto px-6">
+        <section className="py-12 sm:py-24">
+          <div className="container mx-auto px-4 sm:px-6">
             <motion.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
@@ -270,7 +270,7 @@ export default function Landing() {
               className="max-w-2xl mb-16"
             >
               <p className="text-sm font-medium text-primary mb-3 tracking-wide uppercase">Calendar Integration</p>
-              <h2 className="text-4xl font-heading font-bold text-foreground mb-4">
+              <h2 className="text-2xl sm:text-4xl font-heading font-bold text-foreground mb-4">
                 Your maintenance schedule,<br />
                 inside your calendar.
               </h2>
@@ -336,7 +336,7 @@ export default function Landing() {
                 <div className="pt-3 border-t">
                   <p className="text-xs text-muted-foreground mb-2 font-medium">Or copy the URL for any other app</p>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs bg-muted px-3 py-2 rounded-lg truncate font-mono text-muted-foreground">
+                    <code className="min-w-0 flex-1 truncate rounded-lg bg-muted px-3 py-2 font-mono text-xs text-muted-foreground">
                       https://homebuddy.space/api/calendar/…
                     </code>
                     <div className="shrink-0 px-3 py-2 rounded-md border text-xs font-medium text-muted-foreground">
@@ -350,15 +350,15 @@ export default function Landing() {
         </section>
 
         {/* ── "More than a to-do list" ─────────────────────────────────────── */}
-        <section className="py-24">
-          <div className="container mx-auto px-6">
+        <section className="py-12 sm:py-24">
+          <div className="container mx-auto px-4 sm:px-6">
             <motion.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               className="text-center mb-16"
             >
-              <h2 className="text-4xl font-heading font-bold text-foreground mb-4">
+              <h2 className="text-2xl sm:text-4xl font-heading font-bold text-foreground mb-4">
                 More than a to-do list
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -408,15 +408,15 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="py-24 bg-secondary/30">
-          <div className="container mx-auto px-6">
+        <section className="py-12 sm:py-24 bg-secondary/30">
+          <div className="container mx-auto px-4 sm:px-6">
             <motion.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               className="text-center mb-16"
             >
-              <h2 className="text-4xl font-heading font-bold text-foreground mb-4">
+              <h2 className="text-2xl sm:text-4xl font-heading font-bold text-foreground mb-4">
                 How it works
               </h2>
               <p className="text-lg text-muted-foreground">
@@ -447,15 +447,15 @@ export default function Landing() {
         </section>
 
         {/* Homeowner Guides / Articles Section */}
-        <section className="py-24 bg-muted/20">
-          <div className="container mx-auto px-6">
+        <section className="py-12 sm:py-24 bg-muted/20">
+          <div className="container mx-auto px-4 sm:px-6">
             <motion.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               className="text-center mb-12"
             >
-              <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
                 Homeowner Guides
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -524,7 +524,7 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="py-24 relative overflow-hidden">
+        <section className="py-12 sm:py-24 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-t from-primary/5 to-transparent" />
           <div className="container mx-auto px-6 relative">
             <motion.div
@@ -545,7 +545,7 @@ export default function Landing() {
       </main>
 
       <footer className="border-t border-border/40 py-12" role="contentinfo">
-        <div className="container mx-auto px-6">
+        <div className="container mx-auto px-4 sm:px-6">
           <div className="grid sm:grid-cols-3 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-3">
