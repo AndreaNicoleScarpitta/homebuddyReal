@@ -180,7 +180,23 @@ async function main() {
     console.error("[migrate] FAILED:", err);
     process.exit(1);
   } finally {
-    await pool.end();
+    // Drizzle can retain a checked-out client after migrations have committed.
+    // A one-off migration CLI must not block the application's start command
+    // indefinitely while waiting for a leaked handle to return to the pool.
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        pool.end(),
+        new Promise<void>((resolve) => {
+          timeout = setTimeout(() => {
+            console.warn("[migrate] pool shutdown timed out; exiting completed migration CLI");
+            resolve();
+          }, 5_000);
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   }
 }
 
