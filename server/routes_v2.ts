@@ -15,6 +15,7 @@ import { append, readStream, readFromSeq, getCurrentVersion } from "./eventing/e
 import { requireIdempotencyKey } from "./eventing/idempotency";
 import { applyEvent } from "./projections/applyEvent";
 import { EventTypes, type Actor } from "./eventing/types";
+import { getTemplatesForCategory } from "./services/maintenance-templates";
 import { validateTransition, TransitionError } from "./domain/stateMachine";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { logError as logErrorV2 } from "./lib/logger";
@@ -229,6 +230,49 @@ async function appendAndApply(
     });
   }
   return result;
+}
+
+/** Append deterministic maintenance templates into the V2 task projection.
+ * Must be invoked inside the same transaction as creation/repair.
+ */
+async function seedStarterTasks(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  actor: Actor,
+  homeId: string,
+  systemId: string,
+  category: string,
+  keyPrefix: string,
+): Promise<number> {
+  const templates = getTemplatesForCategory(category);
+  const now = new Date();
+  for (let index = 0; index < templates.length; index++) {
+    const template = templates[index];
+    const due = new Date(now);
+    due.setMonth(due.getMonth() + template.monthsUntilDue);
+    await appendAndApply(tx, {
+      aggregateType: "task",
+      aggregateId: crypto.randomUUID(),
+      expectedVersion: 0,
+      eventType: EventTypes.TaskCreated,
+      data: {
+        homeId, systemId, title: template.title, dueAt: due.toISOString(),
+        estimates: {
+          description: template.description,
+          category,
+          urgency: template.urgency,
+          diyLevel: template.diyLevel,
+          estimatedCost: template.estimatedCost,
+          safetyWarning: template.safetyWarning,
+          isRecurring: true,
+          recurrenceCadence: template.cadence,
+          createdFrom: "best-practice",
+        },
+      },
+      meta: {}, actor,
+      idempotencyKey: `${keyPrefix}:starter:${index}`,
+    });
+  }
+  return templates.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -575,46 +619,29 @@ v2Router.post("/homes/:homeId/systems", async (req: Request, res: Response) => {
 
     const systemId = crypto.randomUUID();
     const attrs = req.body.attrs ?? req.body;
-    const result = await db.transaction(async (tx) =>
-      appendAndApply(tx, {
+    const category = attrs.category || req.body.systemType || "Other";
+
+    // Create system AND its starter tasks as one event-sourced transaction.
+    // The former implementation depended on a missing legacy system ID and
+    // silently skipped task generation for newly onboarded V2 systems.
+    const result = await db.transaction(async (tx) => {
+      const systemResult = await appendAndApply(tx, {
         aggregateType: "system",
         aggregateId: systemId,
         expectedVersion: 0,
         eventType: EventTypes.SystemAttributesUpserted,
-        data: { homeId, systemType: attrs.category || req.body.systemType, attrs },
+        data: { homeId, systemType: category, attrs },
         meta: {},
         actor,
         idempotencyKey: req.idempotencyKey!,
-      }),
-    );
+      });
 
-    // Auto-generate best-practice maintenance tasks for the new system
-    const category = attrs.category || req.body.systemType || "Other";
-    const systemName = attrs.name || category;
-    try {
-      const { generateTasksForSystem } = await import("./services/maintenance-templates");
-      // Resolve legacy homeId for task insertion
-      const legacyHomeId = await resolveHomeId(homeId);
-      if (!isNaN(legacyHomeId)) {
-        // Get the legacy system ID from projection
-        const projRow = await db.execute(sql`
-          SELECT (attrs->>'legacyId')::int as legacy_id FROM projection_system WHERE system_id = ${systemId}
-        `);
-        const legacySystemId = (projRow.rows[0] as any)?.legacy_id;
-        if (legacySystemId) {
-          const tasks = generateTasksForSystem(legacyHomeId, legacySystemId, category, systemName);
-          for (const task of tasks) {
-            await db.execute(sql`
-              INSERT INTO maintenance_tasks (home_id, related_system_id, title, description, category, urgency, diy_level, estimated_cost, safety_warning, is_recurring, recurrence_cadence, created_from, due_date)
-              VALUES (${task.homeId}, ${task.relatedSystemId}, ${task.title}, ${task.description}, ${task.category}, ${task.urgency}, ${task.diyLevel}, ${task.estimatedCost}, ${task.safetyWarning}, ${task.isRecurring}, ${task.recurrenceCadence}, ${task.createdFrom}, ${task.dueDate})
-            `);
-          }
-        }
+      // Idempotency replay must never add another batch of starter tasks.
+      if (!systemResult.deduped) {
+        await seedStarterTasks(tx, actor, homeId, systemId, category, req.idempotencyKey!);
       }
-    } catch (taskErr) {
-      // Non-fatal: system was created even if task generation fails
-      logErrorV2("v2.autoTaskGeneration", taskErr);
-    }
+      return systemResult;
+    });
 
     const flatAttrs = snakeToCamel(attrs);
     res.status(201).json({ id: systemId, homeId, ...flatAttrs, ...result });
@@ -710,6 +737,38 @@ v2Router.post("/systems/:systemId/override-health", async (req: Request, res: Re
 // ===========================================================================
 // TASK READ + WRITE ENDPOINTS
 // ===========================================================================
+
+// Explicit recovery for homes onboarded before V2 starter-task seeding worked.
+// Never silently recreate deleted tasks on a GET or duplicate an existing plan.
+v2Router.post("/homes/:homeId/starter-tasks/repair", async (req: Request, res: Response) => {
+  try {
+    const homeId = req.params.homeId;
+    const userId = getUserId(req);
+    if (!(await verifyHomeOwnershipStrict(homeId, userId))) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const actor = getActor(req);
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${homeId}))`);
+      const existing = await tx.execute(sql`SELECT 1 FROM projection_task WHERE home_id = ${homeId} LIMIT 1`);
+      if (existing.rows.length) return { created: 0, skipped: true };
+      const systems = await tx.execute(sql`
+        SELECT system_id, system_type, attrs FROM projection_system
+        WHERE home_id = ${homeId} AND attrs->>'source' = 'onboarding-quickpick'
+      `);
+      let created = 0;
+      for (const row of systems.rows as Array<{ system_id: string; system_type: string | null; attrs: { category?: string } }>) {
+        const category = row.attrs?.category || row.system_type || "Other";
+        created += await seedStarterTasks(tx, actor, homeId, row.system_id, category,
+          `repair:${homeId}:${row.system_id}`);
+      }
+      return { created, skipped: false };
+    });
+    return res.json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
 
 v2Router.get("/homes/:homeId/tasks", async (req: Request, res: Response) => {
   try {

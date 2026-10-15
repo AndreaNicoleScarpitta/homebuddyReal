@@ -281,6 +281,15 @@ export async function getTasks(homeId: string | number): Promise<V2Task[]> {
   return handleResponse<V2Task[]>(response);
 }
 
+/** Explicitly repair a missing onboarding plan; never modifies existing tasks. */
+export async function repairStarterTasks(homeId: string | number): Promise<{ created: number; skipped: boolean }> {
+  const response = await fetch(`/v2/homes/${homeId}/starter-tasks/repair`, {
+    method: "POST",
+    headers: v2Headers(),
+  });
+  return handleResponse<{ created: number; skipped: boolean }>(response);
+}
+
 export async function createTask(homeId: string | number, data: Partial<V2Task>): Promise<V2Task> {
   const response = await fetch(`/v2/tasks`, {
     method: "POST",

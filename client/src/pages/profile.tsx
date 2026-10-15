@@ -1,6 +1,8 @@
 import { Layout } from "@/components/layout";
 import { NotificationSettings } from "@/components/notification-settings";
 import { BillingCard } from "@/components/billing-card";
+import { Link } from "wouter";
+import { HeartHandshake } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -489,6 +491,13 @@ export default function Profile() {
             </CardContent>
           </Card>
 
+          <div className="rounded-xl border bg-card p-5 flex flex-wrap items-center justify-between gap-3" data-testid="donation-settings">
+            <div>
+              <h2 className="font-heading font-semibold flex gap-2 items-center"><HeartHandshake className="h-5 w-5 text-primary" /> Support Home Buddy</h2>
+              <p className="text-sm text-muted-foreground mt-1">Home Buddy is free to use. Donations are optional and never unlock different features.</p>
+            </div>
+            <Link href="/support"><Button variant="outline" data-testid="button-support-home-buddy">Donate</Button></Link>
+          </div>
           <BillingCard />
 
           <NotificationSettings />

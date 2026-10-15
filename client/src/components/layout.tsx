@@ -8,7 +8,7 @@ import { useDefinitions } from "@/hooks/use-definitions";
 import logoImage from "@assets/generated_images/orange_house_logo_with_grey_gear..png";
 import { trackEvent, trackModalOpen } from "@/lib/analytics";
 import { MODAL_SLUGS } from "@/lib/slug-registry";
-import { PlanBadge } from "@/components/plan-badge";
+import { HeartHandshake } from "lucide-react";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { OfflineBanner } from "@/components/offline-banner";
 
@@ -51,7 +51,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <span className="font-heading font-semibold text-base tracking-tight">Home Buddy</span>
         </div>
         <div className="flex items-center gap-2">
-          <PlanBadge compact />
+          <Link href="/support" aria-label="Support Home Buddy" title="Donate" className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:text-primary" data-testid="link-donate-mobile">
+            <HeartHandshake className="h-5 w-5" />
+          </Link>
           <Link href="/chat" aria-label="Ask Home Buddy" title="Ask Home Buddy" className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-primary hover:bg-muted" data-testid="button-ask-ai-mobile">
             <MessageSquare className="h-5 w-5" />
           </Link>
@@ -140,7 +142,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <img src={logoImage} alt="Home Buddy" className="w-8 h-8 rounded-lg" loading="lazy" width="32" height="32" />
               <span className="font-heading font-semibold text-lg tracking-tight">Home Buddy</span>
             </div>
-            <PlanBadge compact />
+            <Link href="/support" aria-label="Support Home Buddy" title="Donate" data-testid="link-donate-desktop"><HeartHandshake className="h-5 w-5 text-muted-foreground hover:text-primary" /></Link>
           </div>
         </div>
 

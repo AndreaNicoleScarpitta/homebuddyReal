@@ -10,25 +10,23 @@
  *
  *   1. house-basics       ZIP + optional year/sqft. Creates the home row.
  *   2. systems-quickpick  Tap-to-add system chips. Each selection POSTs a
- *                         system, which causes the server to generate
- *                         starter maintenance tasks via templates.
+ *                         system and atomically commits starter maintenance
+ *                         task events in the V2 model.
  *   3. first-tasks        The magic moment — we read back the generated
  *                         tasks so the user sees immediate value.
  *   4. inspection-alt     Optional fork for "power users" who want to
  *                         upload an inspection PDF. Otherwise skip to
  *                         the dashboard.
  *
- * The orchestration is intentionally state-only (no server draft). If the
- * user bails mid-flow, nothing is persisted until step 2 submits.
+ * The orchestrator waits until all selected systems are saved before
+ * showing starter tasks. Failed categories remain retryable.
  *
  * Error recovery: step 2 is where things can fail (CSRF, network, 500).
- * We keep the user on the step with a retry button rather than failing
- * silently. If the systems POST fails but the home POST succeeded, we
- * still let the user continue — the home exists, they can add systems
- * later from the dashboard.
+ * We keep the user on the step with an explicit error and retry the
+ * failed categories rather than falsely reporting plan creation.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Home } from "lucide-react";
@@ -58,6 +56,9 @@ export default function Onboarding() {
   const [basics, setBasics] = useState<HouseBasics>({ zipCode: "", builtYear: "", sqFt: "" });
   const [selectedSystems, setSelectedSystems] = useState<Set<string>>(new Set(DEFAULT_SELECTED));
   const [createdHome, setCreatedHome] = useState<V2Home | null>(null);
+  const createdCategories = useRef(new Set<string>());
+  const [systemError, setSystemError] = useState<string | null>(null);
+  const [createdSystemsCount, setCreatedSystemsCount] = useState(0);
 
   useEffect(() => {
     trackSlugPageView(PAGE_SLUGS.onboarding);
@@ -90,36 +91,28 @@ export default function Onboarding() {
 
   const createSystemsMutation = useMutation({
     mutationFn: async ({ homeId, categories }: { homeId: string; categories: string[] }) => {
-      // Create systems sequentially — the server uses an idempotency key
-      // per request, and running them in parallel would make it hard to
-      // tell which failed if one does. The category list is ~4-6 items,
-      // so the wall time is dominated by network latency, not CPU.
-      const results = [];
+      const failed: string[] = [];
       for (const category of categories) {
+        if (createdCategories.current.has(category)) continue;
         const choice = SYSTEM_CHOICES.find((c) => c.category === category);
         if (!choice) continue;
         try {
-          const created = await createSystem(homeId, {
+          await createSystem(homeId, {
             name: choice.name,
             category: choice.category,
             source: "onboarding-quickpick",
           });
-          results.push(created);
+          createdCategories.current.add(category);
         } catch (err: any) {
-          // eslint-disable-next-line no-console
           console.error(`[onboarding] createSystem(${category}) failed:`, err);
-          // Keep going — partial success is better than total failure.
+          failed.push(choice.name);
         }
       }
-      return results;
+      return { failed, saved: createdCategories.current.size };
     },
-    onSuccess: () => {
-      // Tasks are generated server-side as systems are written, so the
-      // next `getTasks` call will pick them up.
-      if (createdHome) {
-        queryClient.invalidateQueries({ queryKey: ["systems", createdHome.id] });
-        queryClient.invalidateQueries({ queryKey: ["tasks", createdHome.id] });
-      }
+    onSuccess: (_result, { homeId }) => {
+      queryClient.invalidateQueries({ queryKey: ["systems", homeId] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", homeId] });
     },
   });
 
@@ -144,15 +137,9 @@ export default function Onboarding() {
     queryKey: ["tasks", createdHome?.id],
     queryFn: () => getTasks(createdHome!.id),
     enabled: Boolean(createdHome?.id) && step === "first-tasks",
-    // Task generation is fire-and-write on the server — give it a moment
-    // to finish before we poll a second time, but don't spam the DB.
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (!data) return 800;
-      if (data.length === 0) return 1500;
-      return false;
-    },
+    // Task creation is atomic with system creation, so polling is unnecessary.
     staleTime: 0,
+    retry: 1,
   });
 
   // ---------------------------------------------------------------------
@@ -203,15 +190,24 @@ export default function Onboarding() {
       return;
     }
 
-    // Fire systems creation (non-blocking for the UI transition).
-    // The first-tasks step polls for tasks, so it will show generated
-    // results as they land.
-    createSystemsMutation.mutate({
-      homeId: home.id,
-      categories: Array.from(selectedSystems),
-    });
-
-    setStep("first-tasks");
+    // Wait for the server to commit systems AND their starter tasks before
+    // displaying the results. Failed requests must never look successful.
+    setSystemError(null);
+    try {
+      const result = await createSystemsMutation.mutateAsync({
+        homeId: home.id,
+        categories: Array.from(selectedSystems),
+      });
+      setCreatedSystemsCount(result.saved);
+      if (result.failed.length) {
+        setSystemError(`Couldn't save: ${result.failed.join(", ")}. Try again to finish setup.`);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["tasks", home.id] });
+      setStep("first-tasks");
+    } catch (err) {
+      setSystemError(err instanceof Error ? err.message : "Unable to create your systems. Please try again.");
+    }
   }, [createdHome, basics, selectedSystems, createHomeMutation, createSystemsMutation, toast]);
 
   const handleUploadInspectionFork = useCallback(() => {
@@ -222,8 +218,8 @@ export default function Onboarding() {
   const handleGoToDashboard = useCallback(() => {
     trackEvent("onboarding_step", "onboarding", "done_to_dashboard");
     toast({
-      title: "You're all set!",
-      description: "Your maintenance plan is ready.",
+      title: "Home setup complete",
+      description: "Your systems and available maintenance tasks are saved.",
     });
     setLocation("/dashboard");
   }, [setLocation, toast]);
@@ -305,8 +301,9 @@ export default function Onboarding() {
                 onToggle={handleSystemsToggle}
                 onNext={handleSystemsNext}
                 onBack={() => setStep("house-basics")}
-                isSubmitting={createHomeMutation.isPending}
+                isSubmitting={createHomeMutation.isPending || createSystemsMutation.isPending}
               />
+              {systemError && <p role="alert" data-testid="onboarding-systems-error" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{systemError}</p>}
               {createHomeMutation.isError && (
                 <div
                   className="mt-4 flex gap-3 items-start p-3 rounded-lg border border-destructive/30 bg-destructive/5 text-sm"
@@ -352,11 +349,10 @@ export default function Onboarding() {
           {step === "first-tasks" && (
             <StepFirstTasks
               tasks={tasksQuery.data ?? []}
-              systemsCount={selectedSystems.size}
+              hasError={tasksQuery.isError}
+              systemsCount={createdSystemsCount}
               isLoading={
-                createSystemsMutation.isPending ||
-                tasksQuery.isLoading ||
-                (tasksQuery.data?.length === 0 && createSystemsMutation.isPending)
+                createSystemsMutation.isPending || tasksQuery.isLoading
               }
               onNext={handleGoToDashboard}
               onBack={() => setStep("systems-quickpick")}

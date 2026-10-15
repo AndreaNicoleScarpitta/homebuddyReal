@@ -156,8 +156,10 @@ function defaultPlan(): UserPlanInfo {
 }
 
 /** Returns the plan's limits. */
-export function getLimitsFor(plan: PlanId): PlanLimits {
-  return PLANS[plan]?.limits || PLANS.free.limits;
+export function getLimitsFor(_plan: PlanId): PlanLimits {
+  // Donation-supported product: no paid-feature walls. The existing
+  // one-home limit remains until multiple-home navigation is implemented.
+  return { ...PLANS.premium.limits, maxHomes: 1, maxActiveTasks: null, maxDocAnalysesPerMonth: null };
 }
 
 /** True if the given plan is at least as high as the minimum required. */
@@ -256,7 +258,7 @@ export async function checkLimit(userId: string, feature: LimitKey): Promise<Lim
     feature,
     message: allowed
       ? undefined
-      : `You've hit your ${planInfo.plan} plan limit (${current}/${limit}) for ${featureLabel(feature)}. Upgrade to continue.`,
+      : `The current product limit has been reached (${current}/${limit}) for ${featureLabel(feature)}.`,
   };
 }
 
@@ -280,10 +282,9 @@ export function requirePlan(min: PlanId) {
     const { plan } = await getUserPlan(user.id);
     if (!hasMinPlan(plan, min)) {
       return res.status(402).json({
-        error: "Upgrade required",
+        error: "Feature is unavailable",
         currentPlan: plan,
         requiredPlan: min,
-        upgradeUrl: "/pricing",
       });
     }
     next();
@@ -301,7 +302,6 @@ export function requireFeature(flag: keyof PlanLimits) {
       return res.status(402).json({
         error: `Feature '${flag}' not available on the ${plan} plan`,
         currentPlan: plan,
-        upgradeUrl: "/pricing",
       });
     }
     next();
@@ -321,7 +321,6 @@ export function requireUnderLimit(feature: LimitKey) {
         current: check.current,
         limit: check.limit,
         currentPlan: check.plan,
-        upgradeUrl: "/pricing",
       });
     }
     next();
@@ -359,7 +358,7 @@ export async function checkSystemsLimit(userId: string, homeId: number | string)
     feature: "homes", // reuse shape
     message: allowed
       ? undefined
-      : `You've hit your ${planInfo.plan} plan limit (${current}/${limit}) for systems in this home. Upgrade to track unlimited systems.`,
+      : `The current system limit has been reached (${current}/${limit}).`,
   };
 }
 
@@ -381,7 +380,6 @@ export function requireUnderSystemsLimit() {
         current: check.current,
         limit: check.limit,
         currentPlan: check.plan,
-        upgradeUrl: "/pricing",
       });
     }
     next();

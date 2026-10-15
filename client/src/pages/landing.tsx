@@ -589,6 +589,9 @@ export default function Landing() {
                   <Link href="/login" className="text-muted-foreground hover:text-foreground no-underline transition-colors">Sign In</Link>
                 </li>
                 <li>
+                  <Link href="/support" className="text-muted-foreground hover:text-foreground no-underline transition-colors">Donate to Home Buddy</Link>
+                </li>
+                <li>
                   <Link href="/terms" onClick={() => trackEvent('click', 'landing', 'footer_terms')} className="text-muted-foreground hover:text-foreground no-underline transition-colors" data-testid="link-footer-terms">Terms & Conditions</Link>
                 </li>
                 <li>

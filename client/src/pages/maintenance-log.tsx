@@ -37,7 +37,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getHome, getTasks, getSystems, getLogEntries, createLogEntry, updateTask, deleteTask } from "@/lib/api";
+import { getHome, getTasks, getSystems, getLogEntries, createLogEntry, updateTask, deleteTask, repairStarterTasks } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { format, formatDistanceToNow, isPast, isToday, isFuture, differenceInDays } from "date-fns";
@@ -449,6 +449,20 @@ export default function MaintenanceLog() {
     enabled: !!home?.id && !!home?.legacyId,
   });
 
+  const repairPlanMutation = useMutation({
+    mutationFn: () => repairStarterTasks(home!.id),
+    onSuccess: async ({ created, skipped }) => {
+      await queryClient.invalidateQueries({ queryKey: ["tasks", home?.id] });
+      toast({
+        title: created > 0 ? "Starter tasks restored" : "Nothing to restore",
+        description: created > 0
+          ? `Added ${created} maintenance tasks to Plan.`
+          : skipped ? "Your current plan was preserved." : "No starter templates were available for these systems.",
+      });
+    },
+    onError: (error: Error) => toast({ title: "Could not restore starter tasks", description: error.message, variant: "destructive" }),
+  });
+
   const categorized = useMemo(() => categorizeTasks(tasks), [tasks]);
 
   const counts = useMemo(() => ({
@@ -688,6 +702,17 @@ export default function MaintenanceLog() {
           <section className="space-y-3" aria-label="Contractor assistance">
             <ContractorSection homeId={home.id} pendingTasks={tasks.filter(t => t.status !== "completed")} zipCode={home.zipCode || undefined} />
           </section>
+        )}
+        {tasks.length === 0 && systems.length > 0 && !tasksLoading && (
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3" data-testid="starter-tasks-repair">
+            <div>
+              <p className="font-medium text-sm">No maintenance tasks yet</p>
+              <p className="text-xs text-muted-foreground mt-1">If you added systems during quick setup, restore their recommended starter tasks.</p>
+            </div>
+            <Button variant="outline" onClick={() => repairPlanMutation.mutate()} disabled={repairPlanMutation.isPending} data-testid="button-repair-starter-tasks">
+              {repairPlanMutation.isPending ? "Restoring…" : "Create starter plan"}
+            </Button>
+          </div>
         )}
         <div data-testid="task-list">
           {filteredTasks.length === 0 ? (
