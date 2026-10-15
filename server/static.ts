@@ -25,7 +25,8 @@ export function serveStatic(app: Express) {
       maxAge: "1d",
       setHeaders(res, filePath) {
         // Always refetch the app manifest and service-worker control files.
-        if (/(?:\\/sw\\.js|\\/manifest\\.json|\\/offline\\.html|\\/offline\\.css|\\/index\\.html)$/.test(filePath)) {
+        if (["/sw.js", "/pwa-register.js", "/manifest.json", "/offline.html", "/offline.css", "/index.html"]
+          .some(name => filePath.endsWith(name))) {
           res.setHeader("Cache-Control", "no-store, must-revalidate");
           return;
         }
