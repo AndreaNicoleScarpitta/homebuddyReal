@@ -113,30 +113,6 @@
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // Offline support uses an informational fallback, never cached app code.
-      if ("serviceWorker" in navigator && (window.isSecureContext || location.hostname === "localhost")) {
-        window.addEventListener("load", () => {
-          const previouslyControlled = Boolean(navigator.serviceWorker.controller);
-          let refreshed = false;
-          navigator.serviceWorker.addEventListener("controllerchange", () => {
-            if (previouslyControlled && !refreshed) {
-              refreshed = true;
-              location.reload();
-            }
-          });
-          navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" })
-            .then(registration => {
-              registration.update().catch(() => {});
-              const updateWhenVisible = () => {
-                if (document.visibilityState === "visible") registration.update().catch(() => {});
-              };
-              document.addEventListener("visibilitychange", updateWhenVisible);
-              window.addEventListener("focus", updateWhenVisible);
-            })
-            .catch(error => console.warn("[pwa] Registration unavailable", error));
-        });
-      }
-    </script>
+    <script defer src="/pwa-register.js"></script>
   </body>
 </html>
