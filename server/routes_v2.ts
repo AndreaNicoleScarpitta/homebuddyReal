@@ -232,6 +232,49 @@ async function appendAndApply(
   return result;
 }
 
+/** Append deterministic maintenance templates into the V2 task projection.
+ * Must be invoked inside the same transaction as creation/repair.
+ */
+async function seedStarterTasks(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  actor: Actor,
+  homeId: string,
+  systemId: string,
+  category: string,
+  keyPrefix: string,
+): Promise<number> {
+  const templates = getTemplatesForCategory(category);
+  const now = new Date();
+  for (let index = 0; index < templates.length; index++) {
+    const template = templates[index];
+    const due = new Date(now);
+    due.setMonth(due.getMonth() + template.monthsUntilDue);
+    await appendAndApply(tx, {
+      aggregateType: "task",
+      aggregateId: crypto.randomUUID(),
+      expectedVersion: 0,
+      eventType: EventTypes.TaskCreated,
+      data: {
+        homeId, systemId, title: template.title, dueAt: due.toISOString(),
+        estimates: {
+          description: template.description,
+          category,
+          urgency: template.urgency,
+          diyLevel: template.diyLevel,
+          estimatedCost: template.estimatedCost,
+          safetyWarning: template.safetyWarning,
+          isRecurring: true,
+          recurrenceCadence: template.cadence,
+          createdFrom: "best-practice",
+        },
+      },
+      meta: {}, actor,
+      idempotencyKey: `${keyPrefix}:starter:${index}`,
+    });
+  }
+  return templates.length;
+}
+
 // ---------------------------------------------------------------------------
 // Helper: snake_case attrs → camelCase for frontend compatibility
 // ---------------------------------------------------------------------------
@@ -577,7 +620,6 @@ v2Router.post("/homes/:homeId/systems", async (req: Request, res: Response) => {
     const systemId = crypto.randomUUID();
     const attrs = req.body.attrs ?? req.body;
     const category = attrs.category || req.body.systemType || "Other";
-    const templates = getTemplatesForCategory(category);
 
     // Create system AND its starter tasks as one event-sourced transaction.
     // The former implementation depended on a missing legacy system ID and
@@ -594,41 +636,9 @@ v2Router.post("/homes/:homeId/systems", async (req: Request, res: Response) => {
         idempotencyKey: req.idempotencyKey!,
       });
 
-      // If an idempotency-key retry already created the system, never seed
-      // a second set of tasks. Task events are committed in the same txn.
+      // Idempotency replay must never add another batch of starter tasks.
       if (!systemResult.deduped) {
-        const now = new Date();
-        for (let index = 0; index < templates.length; index++) {
-          const template = templates[index];
-          const due = new Date(now);
-          due.setMonth(due.getMonth() + template.monthsUntilDue);
-          await appendAndApply(tx, {
-            aggregateType: "task",
-            aggregateId: crypto.randomUUID(),
-            expectedVersion: 0,
-            eventType: EventTypes.TaskCreated,
-            data: {
-              homeId,
-              systemId,
-              title: template.title,
-              dueAt: due.toISOString(),
-              estimates: {
-                description: template.description,
-                category,
-                urgency: template.urgency,
-                diyLevel: template.diyLevel,
-                estimatedCost: template.estimatedCost,
-                safetyWarning: template.safetyWarning,
-                isRecurring: true,
-                recurrenceCadence: template.cadence,
-                createdFrom: "best-practice",
-              },
-            },
-            meta: {},
-            actor,
-            idempotencyKey: `${req.idempotencyKey!}:starter:${index}`,
-          });
-        }
+        await seedStarterTasks(tx, actor, homeId, systemId, category, req.idempotencyKey!);
       }
       return systemResult;
     });
@@ -727,6 +737,38 @@ v2Router.post("/systems/:systemId/override-health", async (req: Request, res: Re
 // ===========================================================================
 // TASK READ + WRITE ENDPOINTS
 // ===========================================================================
+
+// Explicit recovery for homes onboarded before V2 starter-task seeding worked.
+// Never silently recreate deleted tasks on a GET or duplicate an existing plan.
+v2Router.post("/homes/:homeId/starter-tasks/repair", async (req: Request, res: Response) => {
+  try {
+    const homeId = req.params.homeId;
+    const userId = getUserId(req);
+    if (!(await verifyHomeOwnershipStrict(homeId, userId))) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const actor = getActor(req);
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${homeId}))`);
+      const existing = await tx.execute(sql`SELECT 1 FROM projection_task WHERE home_id = ${homeId} LIMIT 1`);
+      if (existing.rows.length) return { created: 0, skipped: true };
+      const systems = await tx.execute(sql`
+        SELECT system_id, system_type, attrs FROM projection_system
+        WHERE home_id = ${homeId} AND attrs->>'source' = 'onboarding-quickpick'
+      `);
+      let created = 0;
+      for (const row of systems.rows as Array<{ system_id: string; system_type: string | null; attrs: { category?: string } }>) {
+        const category = row.attrs?.category || row.system_type || "Other";
+        created += await seedStarterTasks(tx, actor, homeId, row.system_id, category,
+          `repair:${homeId}:${row.system_id}`);
+      }
+      return { created, skipped: false };
+    });
+    return res.json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
 
 v2Router.get("/homes/:homeId/tasks", async (req: Request, res: Response) => {
   try {
