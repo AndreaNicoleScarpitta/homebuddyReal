@@ -30,6 +30,10 @@ async function mockAuthenticatedHome(page: Page) {
   await page.route("**/api/home", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: 41, ...home }) }));
   await page.route("**/v2/homes/house-uuid/systems", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([system, electricalSystem]) }));
   await page.route("**/v2/homes/house-uuid/tasks", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) }));
+  await page.route("**/v2/homes/house-uuid/intelligence", r => r.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ insight: { overallHealthScore: 82, missingCriticalData: [] }, systems: [] }),
+  }));
   await page.route("**/v2/homes/house-uuid/circuit-maps", r => r.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.route("**/api/home/41/documents", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(files) }));
   // Plan and system profiles use additional authenticated endpoints. Intercept
