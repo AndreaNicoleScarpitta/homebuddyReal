@@ -6,13 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Home, MapPin, Calendar, Maximize, Bed, Bath, ExternalLink, Pencil, Ruler, DollarSign, Zap, Loader2 } from "lucide-react";
+import { Home, MapPin, Calendar, Maximize, Bed, Bath, ExternalLink, Pencil, Ruler, DollarSign, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateHome, fetchZillowData } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import type { V2Home, V2System } from "@/lib/api";
-import { CircuitMapDialog } from "@/components/circuit-map";
 
 type HomeType = V2Home;
 type System = V2System;
@@ -167,8 +166,6 @@ export function HomeInfoCard({ home, systems }: HomeInfoCardProps) {
   const location = home.city && home.state ? `${home.city}, ${home.state}` : home.address?.split(",").slice(-2).join(",").trim() || "Location not set";
 
   const systemTags = systems.slice(0, 3).map(s => s.category || s.name);
-  const electricalSystem = systems.find(s => s.category === "Electrical");
-  const [showCircuitMap, setShowCircuitMap] = useState(false);
 
   return (
     <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
@@ -422,19 +419,6 @@ export function HomeInfoCard({ home, systems }: HomeInfoCardProps) {
           </div>
         )}
 
-        {electricalSystem && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowCircuitMap(true)}
-            className="w-full justify-start text-sm gap-2"
-            data-testid="button-open-circuit-map"
-          >
-            <Zap className="h-4 w-4 text-primary" />
-            Circuit Panel Map
-          </Button>
-        )}
-
         {home.zillowUrl && (
           <a
             href={home.zillowUrl}
@@ -448,14 +432,6 @@ export function HomeInfoCard({ home, systems }: HomeInfoCardProps) {
         )}
       </CardContent>
 
-      {electricalSystem && (
-        <CircuitMapDialog
-          homeId={home.id}
-          systemId={electricalSystem.id}
-          isOpen={showCircuitMap}
-          onClose={() => setShowCircuitMap(false)}
-        />
-      )}
     </Card>
   );
 }
