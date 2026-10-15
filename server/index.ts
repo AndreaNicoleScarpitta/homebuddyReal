@@ -123,23 +123,10 @@ export function log(message: string, source = "express") {
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
   res.on("finish", () => {
-    const duration = Date.now() - start;
     if (path.startsWith("/api") || path.startsWith("/v2")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
+      // Never emit response bodies: they can contain personal data or tokens.
+      log(`${req.method} ${path} ${res.statusCode} in ${Date.now() - start}ms`);
     }
   });
 
@@ -230,6 +217,19 @@ app.use((req, res, next) => {
   // Setup auth BEFORE registering other routes
   await setupAuth(app);
   registerAuthRoutes(app);
+  // Cross-site POSTs to authentication endpoints must never modify a session.
+  app.use("/api/auth", (req, res, next) => {
+    if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return next();
+    const fetchSite = req.get("sec-fetch-site");
+    if (fetchSite === "cross-site") return res.status(403).json({ error: "Cross-site authentication request blocked" });
+    const origin = req.get("origin");
+    if (origin) {
+      const configured = process.env.OAUTH_BASE_URL || process.env.APP_URL || process.env.REPLIT_DEPLOYMENT_URL;
+      const allowedOrigin = configured ? new URL(configured).origin : `${req.protocol}://${req.get("host")}`;
+      if (origin !== allowedOrigin) return res.status(403).json({ error: "Untrusted request origin" });
+    }
+    next();
+  });
   registerLocalAuthRoutes(app);
   registerCsrfRoute(app);
   registerOpenApiRoute(app);
