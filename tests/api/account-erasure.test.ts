@@ -86,7 +86,7 @@ describe.skipIf(!enabled)("account closure: real endpoints and persistence", () 
     expect(Number((residual.rows[0] as any).n)).toBe(0);
     expect((await db.execute(sql`SELECT id FROM users WHERE id = ${b}`)).rows).toHaveLength(1);
     expect((await db.execute(sql`SELECT home_id FROM projection_home WHERE home_id = ${homeB}`)).rows).toHaveLength(1);
-    expect((await db.execute(sql`SELECT sid FROM sessions WHERE sess->>'userId' = ${b}`)).rows).toHaveLength(1);
+    expect((await db.execute(sql`SELECT sid FROM sessions WHERE sid = ${b + "-one"}`)).rows).toHaveLength(1);
   });
 
   it("rejects deleted identity login and protected API access", async () => {
@@ -101,7 +101,7 @@ describe.skipIf(!enabled)("account closure: real endpoints and persistence", () 
     const response = await mutate("DELETE", "/api/user/data", b);
     expect(response.status).toBe(200);
     expect((await db.execute(sql`SELECT id FROM users WHERE id = ${b}`)).rows).toHaveLength(1);
-    expect((await db.execute(sql`SELECT sid FROM sessions WHERE sess->>'userId' = ${b}`)).rows).toHaveLength(1);
+    expect((await db.execute(sql`SELECT sid FROM sessions WHERE sid = ${b + "-one"}`)).rows).toHaveLength(1);
     const remaining = await db.execute(sql`
       SELECT (SELECT count(*) FROM projection_home WHERE home_id = ${homeB}) +
              (SELECT count(*) FROM projection_task WHERE home_id = ${homeB}) AS n`);
