@@ -598,7 +598,8 @@ v2Router.post("/homes/:homeId/systems", async (req: Request, res: Response) => {
       // a second set of tasks. Task events are committed in the same txn.
       if (!systemResult.deduped) {
         const now = new Date();
-        for (const [index, template] of templates.entries()) {
+        for (let index = 0; index < templates.length; index++) {
+          const template = templates[index];
           const due = new Date(now);
           due.setMonth(due.getMonth() + template.monthsUntilDue);
           await appendAndApply(tx, {
