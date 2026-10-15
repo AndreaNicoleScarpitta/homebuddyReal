@@ -94,8 +94,12 @@ describe.skipIf(!enabled)("quick onboarding starter tasks and donation-only bill
   });
 
   it("restores tasks for an older quick-onboarding system with no task projection", async () => {
+    const repairUid = `onboarding-repair-${crypto.randomUUID()}`;
+    await db.insert(users).values({ id: repairUid, email: `${repairUid}@example.test` });
+    try {
+    const repairHeaders = { ...headers, "x-test-user-id": repairUid };
     const homeResponse = await fetch(`${base}/v2/homes`, {
-      method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
+      method: "POST", headers: { ...repairHeaders, "Idempotency-Key": crypto.randomUUID() },
       body: JSON.stringify({ zipCode: "99202", type: "Single Family Home" }),
     });
     expect(homeResponse.status).toBe(201);
@@ -110,13 +114,13 @@ describe.skipIf(!enabled)("quick onboarding starter tasks and donation-only bill
         ${JSON.stringify({ name: "Roof", category: "Roof", source: "onboarding-quickpick" })}::jsonb)
     `);
     const repair = await fetch(`${base}/v2/homes/${oldHomeId}/starter-tasks/repair`, {
-      method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
+      method: "POST", headers: { ...repairHeaders, "Idempotency-Key": crypto.randomUUID() },
     });
     expect(repair.status).toBe(200);
     expect(await repair.json()).toEqual({ created: getTemplatesForCategory("Roof").length, skipped: false });
 
     const loaded = await fetch(`${base}/v2/homes/${oldHomeId}/tasks`, {
-      headers: { "x-test-user-id": uid },
+      headers: { "x-test-user-id": repairUid },
     });
     expect(loaded.status).toBe(200);
     const tasks = await loaded.json() as Array<{ relatedSystemId: string }>;
@@ -124,10 +128,13 @@ describe.skipIf(!enabled)("quick onboarding starter tasks and donation-only bill
     expect(tasks.every(t => t.relatedSystemId === oldSystemId)).toBe(true);
 
     const again = await fetch(`${base}/v2/homes/${oldHomeId}/starter-tasks/repair`, {
-      method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
+      method: "POST", headers: { ...repairHeaders, "Idempotency-Key": crypto.randomUUID() },
     });
     expect(again.status).toBe(200);
     expect(await again.json()).toEqual({ created: 0, skipped: true });
+    } finally {
+      await db.delete(users).where(eq(users.id, repairUid));
+    }
   });
 
   it("does not recreate tasks when repairing an already populated plan", async () => {
