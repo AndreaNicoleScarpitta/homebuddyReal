@@ -50,6 +50,7 @@ test("authenticated homeowner has three primary destinations and a global AI act
   await expect(page.locator("aside nav").getByText("Records")).toHaveCount(0);
   await expect(page.getByTestId("button-ask-ai-desktop")).toBeVisible();
   await expect(page.getByText("Heat Pump").first()).toBeVisible();
+  await page.screenshot({ path: "test-results/my-house-desktop.png", fullPage: true });
 });
 
 test("home files remain findable, and a homeowner can associate a file with their system", async ({ page }) => {
@@ -82,4 +83,31 @@ test("mobile shows three destinations and global AI without a Records tab", asyn
   await expect(bottomNav.nth(1)).toContainText("My House");
   await expect(bottomNav.nth(2)).toContainText("Plan");
   await expect(page.getByTestId("button-ask-ai-mobile")).toBeVisible();
+  await page.screenshot({ path: "test-results/my-house-mobile.png", fullPage: true });
+});
+
+test("coverage, services, history, tools and plan remain reachable without Records", async ({ page }) => {
+  await mockAuthenticatedHome(page);
+  await page.goto("/house?section=coverage&focus=insurance");
+  await expect(page.getByTestId("text-house-section")).toHaveText("Coverage");
+  await expect(page.getByRole("heading", { name: "Insurance" })).toBeVisible();
+  await page.goto("/house?section=services");
+  await expect(page.getByTestId("text-house-section")).toHaveText("Services & contacts");
+  await expect(page.getByText("No utility accounts yet")).toBeVisible();
+  await page.goto("/house?section=history");
+  await expect(page.getByTestId("text-house-section")).toHaveText("Home history");
+  await page.goto("/house?section=tools");
+  await expect(page.getByText("Export home information")).toBeVisible();
+  await page.goto("/maintenance-log");
+  await expect(page.getByTestId("text-heading")).toHaveText("Plan");
+});
+
+test("a linked document is also discoverable from its system profile", async ({ page }) => {
+  await mockAuthenticatedHome(page);
+  await page.goto("/house?section=files");
+  await page.getByTestId("select-file-system-9").selectOption("7");
+  await expect.poll(() => files[0].systemId).toBe(7);
+  await page.goto("/systems/heat-pump-uuid");
+  await expect(page.getByTestId("text-system-name")).toContainText("Heat Pump");
+  await expect(page.getByTestId("card-document-9")).toBeVisible();
 });
