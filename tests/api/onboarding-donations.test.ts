@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import crypto from "node:crypto";
 import { db } from "../../server/db";
 import { users } from "../../shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getTemplatesForCategory } from "../../server/services/maintenance-templates";
 
 const enabled = process.env.NODE_ENV === "test" &&
@@ -59,6 +59,43 @@ describe.skipIf(!enabled)("quick onboarding starter tasks and donation-only bill
       headers: { "x-test-user-id": uid },
     });
     expect((await afterReplay.json()).length).toBe(templates.length);
+  });
+
+  it("restores tasks for an older quick-onboarding system with no task projection", async () => {
+    const homeResponse = await fetch(`${base}/v2/homes`, {
+      method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ zipCode: "99202", type: "Single Family Home" }),
+    });
+    expect(homeResponse.status).toBe(201);
+    const oldHomeId = (await homeResponse.json()).id as string;
+    const oldSystemId = crypto.randomUUID();
+
+    // Simulate the historical bug: an onboarding system exists in V2,
+    // but the old generator skipped its starter tasks.
+    await db.execute(sql`
+      INSERT INTO projection_system (system_id, home_id, system_type, attrs)
+      VALUES (${oldSystemId}, ${oldHomeId}, 'Roof',
+        ${JSON.stringify({ name: "Roof", category: "Roof", source: "onboarding-quickpick" })}::jsonb)
+    `);
+    const repair = await fetch(`${base}/v2/homes/${oldHomeId}/starter-tasks/repair`, {
+      method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
+    });
+    expect(repair.status).toBe(200);
+    expect(await repair.json()).toEqual({ created: getTemplatesForCategory("Roof").length, skipped: false });
+
+    const loaded = await fetch(`${base}/v2/homes/${oldHomeId}/tasks`, {
+      headers: { "x-test-user-id": uid },
+    });
+    expect(loaded.status).toBe(200);
+    const tasks = await loaded.json() as Array<{ relatedSystemId: string }>;
+    expect(tasks).toHaveLength(getTemplatesForCategory("Roof").length);
+    expect(tasks.every(t => t.relatedSystemId === oldSystemId)).toBe(true);
+
+    const again = await fetch(`${base}/v2/homes/${oldHomeId}/starter-tasks/repair`, {
+      method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
+    });
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({ created: 0, skipped: true });
   });
 
   it("does not recreate tasks when repairing an already populated plan", async () => {
