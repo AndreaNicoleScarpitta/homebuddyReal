@@ -303,7 +303,7 @@ export function requireFeature(flag: keyof PlanLimits) {
       return res.status(402).json({
         error: `Feature '${flag}' not available on the ${plan} plan`,
         currentPlan: plan,
-        upgradeUrl: "/pricing",
+        supportUrl: "/support",
       });
     }
     next();
@@ -323,7 +323,7 @@ export function requireUnderLimit(feature: LimitKey) {
         current: check.current,
         limit: check.limit,
         currentPlan: check.plan,
-        upgradeUrl: "/pricing",
+        supportUrl: "/support",
       });
     }
     next();
@@ -383,7 +383,7 @@ export function requireUnderSystemsLimit() {
         current: check.current,
         limit: check.limit,
         currentPlan: check.plan,
-        upgradeUrl: "/pricing",
+        supportUrl: "/support",
       });
     }
     next();

@@ -5,7 +5,8 @@
  *   STRIPE_PRICE_PLUS     — Stripe Price ID for the Plus tier ($5/mo)
  *   STRIPE_PRICE_PREMIUM  — Stripe Price ID for the Premium tier ($9/mo)
  *
- * POST /api/billing/create-checkout-session { plan: "plus" | "premium" }
+ * POST /api/billing/create-checkout-session — discontinued (410)
+ * POST /api/donations/checkout — one-time Stripe payment, no subscription
  * POST /api/billing/portal   — opens Stripe Customer Portal
  * GET  /api/billing/plans    — returns plan metadata (public)
  */
@@ -23,52 +24,7 @@ const PLANS = {
     name: "Free",
     priceMonthly: 0,
     priceId: null,
-    features: [
-      "1 home",
-      "Unlimited systems per home",
-      "Manual task tracking",
-      "Calendar subscription feed",
-      "Document analysis (5/mo)",
-      "Community support",
-    ],
-  },
-  plus: {
-    id: "plus",
-    name: "Plus",
-    priceMonthly: 5,
-    priceId: process.env.STRIPE_PRICE_PLUS || null,
-    features: [
-      "2 homes",
-      "Unlimited systems per home",
-      "AI task suggestions",
-      "Document analysis (10/mo)",
-      "Smart reminders",
-      "Email support",
-    ],
-    popular: true,
-  },
-  // Unlisted: Premium's headline promise is multiple homes, and the app
-  // cannot deliver it — /v2/home returns a single home per user and there is
-  // no way to switch between them in the UI. Selling it would be selling
-  // something that does not exist, so the tier is hidden and its checkout
-  // path is closed. Entitlements in lib/plans.ts are deliberately untouched,
-  // so anyone already subscribed keeps everything they are paying for.
-  // Relist once multi-home is actually built.
-  premium: {
-    id: "premium",
-    name: "Premium",
-    priceMonthly: 9,
-    listed: false,
-    priceId: process.env.STRIPE_PRICE_PREMIUM || null,
-    features: [
-      "4 homes",
-      "Unlimited systems per home",
-      "Unlimited document analysis",
-      "Unlimited AI home reports",
-      "Seasonal prep campaigns",
-      "Priority support",
-      "Early access to new features",
-    ],
+    features: ["Home operating record", "Maintenance tasks", "Document analysis", "AI assistance"],
   },
 };
 

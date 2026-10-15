@@ -28,6 +28,7 @@ interface StepFirstTasksProps {
   tasks: V2Task[];
   systemsCount: number;
   isLoading: boolean;
+  hasError?: boolean;
   onNext: () => void;
   onBack: () => void;
   onUploadInspection: () => void;
@@ -49,6 +50,7 @@ export function StepFirstTasks({
   tasks,
   systemsCount,
   isLoading,
+  hasError = false,
   onNext,
   onBack,
   onUploadInspection,
@@ -87,14 +89,14 @@ export function StepFirstTasks({
         </div>
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground" data-testid="text-magic-moment">
-            Your plan is ready.
+            {isLoading ? "Building your plan…" : tasks.length > 0 ? "Your starter plan is ready." : "Your home is saved."}
           </h1>
           <p className="text-muted-foreground mt-1" data-testid="text-plan-summary">
             {isLoading
               ? "Building your starter tasks…"
               : tasks.length > 0
               ? `We lined up ${tasks.length} task${tasks.length === 1 ? "" : "s"} across ${systemsCount} system${systemsCount === 1 ? "" : "s"} in your home.`
-              : `Covered ${systemsCount} system${systemsCount === 1 ? "" : "s"} in your home. We'll add tasks as you tell us more.`}
+              : hasError ? "We couldn't load your tasks. Open Plan to retry." : `Saved ${systemsCount} system${systemsCount === 1 ? "" : "s"}. No starter tasks were available; you can add tasks in Plan.`}
           </p>
         </div>
       </div>
@@ -123,8 +125,7 @@ export function StepFirstTasks({
           </div>
         ) : preview.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
-            No tasks generated — that's unusual. You can add them by hand on
-            the dashboard.
+            No starter tasks were generated. You can add maintenance tasks in Plan.
           </div>
         ) : (
           preview.map((task) => {
@@ -176,7 +177,7 @@ export function StepFirstTasks({
 
       {remaining > 0 && (
         <p className="text-xs text-center text-muted-foreground">
-          + {remaining} more waiting for you on the dashboard
+          + {remaining} more available in Plan
         </p>
       )}
 
@@ -186,7 +187,7 @@ export function StepFirstTasks({
           onClick={onNext}
           data-testid="button-go-to-dashboard"
         >
-          Take me to my dashboard
+          Open Overview
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
 
