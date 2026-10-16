@@ -22,7 +22,7 @@ const sections: Record<HouseSection, { title: string; description: string }> = {
   details: { title: "Property details", description: "The facts and specifications of your home" },
   emergency: { title: "Emergency & utilities", description: "Shutoffs, utility locations, and important access information" },
   electrical: { title: "Electrical & circuits", description: "Your electrical system and circuit panel map" },
-  files: { title: "House files", description: "Documents you can find again, whenever you need them" },
+  files: { title: "Documents", description: "Documents you can find again, whenever you need them" },
   coverage: { title: "Coverage", description: "Warranties and insurance for your home" },
   services: { title: "Services & contacts", description: "Providers and practical household information" },
   history: { title: "Home history", description: "What has changed and when" },
@@ -41,7 +41,7 @@ export default function MyHouse() {
   const [showCircuitMap, setShowCircuitMap] = useState(false);
   useEffect(() => { trackSlugPageView(PAGE_SLUGS.myHouse); }, []);
 
-  const { data: home, isLoading: homeLoading, isError: homeError } = useQuery({ queryKey: ["home"], queryFn: getHome });
+  const { data: home, isLoading: homeLoading, isError: homeError, refetch: retryHome } = useQuery({ queryKey: ["home"], queryFn: getHome });
   const legacyId = home?.legacyId;
   const { data: systems = [], isLoading: systemsLoading, isError: systemsError } = useQuery({
     queryKey: ["systems", home?.id], queryFn: () => getSystems(home!.id), enabled: !!home?.id,
@@ -144,7 +144,7 @@ export default function MyHouse() {
               </div>
             )}
             {section === "files" && (!legacyAvailable
-              ? <p className="text-sm text-muted-foreground">Home files become available once your home profile is fully saved.</p>
+              ? <div role="alert"><p className="text-sm text-muted-foreground">Documents are temporarily unavailable.</p><Button onClick={() => retryHome()}>Try again</Button></div>
               : <DocumentsSection />)}
             {section === "coverage" && <div className="flex flex-col gap-8">
               <section aria-label="Warranties" className={focus === "insurance" ? "order-2" : "order-1"}>
@@ -187,20 +187,23 @@ export default function MyHouse() {
             </header>
             <div className="relative">
               <Search className="h-4 w-4 absolute left-3 top-3 text-muted-foreground"/>
-              <Input className="pl-9" aria-label="Search house knowledge" placeholder="Find a system, appliance, or file" value={term} onChange={e => setTerm(e.target.value)} data-testid="input-house-search"/>
+              <Input className="pl-9" aria-label="Search house knowledge" placeholder="Find a system or document" value={term} onChange={e => setTerm(e.target.value)} data-testid="input-house-search"/>
             </div>
             {q ? (
               <div className="space-y-5" data-testid="house-search-results">
                 <section className="space-y-2"><h2 className="font-heading font-semibold">Systems ({matchedSystems.length})</h2>
                   {matchedSystems.map(s => <Link key={s.id} href={`/systems/${s.id}`} className="flex items-center justify-between border-b py-2 text-sm hover:text-primary">{s.name} <ChevronRight className="h-4 w-4"/></Link>)}
                 </section>
-                <section className="space-y-2"><h2 className="font-heading font-semibold">Files ({matchedFiles.length})</h2>
+                <section className="space-y-2"><h2 className="font-heading font-semibold">Documents ({matchedFiles.length})</h2>
                   {matchedFiles.map(d => <Link key={d.id} href={`/house?section=files&q=${encodeURIComponent(term)}`} className="flex items-center justify-between border-b py-2 text-sm hover:text-primary">{d.name} <ChevronRight className="h-4 w-4"/></Link>)}
                 </section>
-                {!matchedFiles.length && !matchedSystems.length && <p className="text-sm text-muted-foreground">No matching systems or files.</p>}
+                {!matchedFiles.length && !matchedSystems.length && <p className="text-sm text-muted-foreground">No matching systems or documents.</p>}
               </div>
             ) : (
               <>
+                <Link href="/house?section=files" className="flex items-center gap-3 rounded-xl border bg-card p-4 hover:border-primary/50 min-h-11" data-testid="house-files-preview">
+                  <FileText className="h-5 w-5 shrink-0"/><div className="min-w-0 flex-1"><h2 className="font-heading font-semibold text-lg">Documents</h2><p className="text-sm text-muted-foreground">Warranties, reports, receipts</p></div><ChevronRight className="h-5 w-5 shrink-0"/>
+                </Link>
                 <section className="space-y-3" data-testid="house-reference">
                   <h2 className="font-heading font-semibold text-lg">Home reference</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -223,12 +226,6 @@ export default function MyHouse() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{systems.slice(0,6).map(s => <Link href={`/systems/${s.id}`} key={s.id} className="flex items-center justify-between rounded-xl border p-3 hover:border-primary/50">
                       <div className="min-w-0"><p className="font-medium text-sm truncate">{s.name}</p><p className="text-xs text-muted-foreground">{s.category}{s.condition && s.condition !== "Unknown" ? ` · ${s.condition}` : ""}</p></div><ChevronRight className="h-4 w-4 text-muted-foreground shrink-0"/></Link>)}</div>
                   ) : <Link href="/house/systems" className="block rounded-lg border border-dashed p-5 text-sm text-muted-foreground hover:text-primary">Add your first system to start connecting information about your home.</Link>}
-                </section>
-                <section className="space-y-3" data-testid="house-files-preview">
-                  <div className="flex items-center justify-between"><h2 className="font-heading font-semibold text-lg">House files</h2><Link href="/house?section=files" className="text-sm text-primary hover:underline">View all</Link></div>
-                  {filesError ? <p role="alert" className="text-sm">Files couldn't be loaded.</p> : filesLoading ? <p className="text-sm text-muted-foreground">Loading files…</p> : documents.length ? (
-                    <div className="divide-y border-y">{documents.slice(0,3).map(d => <Link key={d.id} href="/house?section=files" className="py-3 flex items-center gap-3 text-sm hover:text-primary"><FileText className="h-4 w-4 text-muted-foreground"/><span className="truncate">{d.name}</span><ChevronRight className="h-4 w-4 ml-auto shrink-0"/></Link>)}</div>
-                  ) : <Link href="/house?section=files" className="block text-sm text-muted-foreground hover:text-primary">Upload a warranty, inspection report, or other useful house file.</Link>}
                 </section>
                 <section className="space-y-3">
                   <h2 className="font-heading font-semibold text-lg">More about your house</h2>

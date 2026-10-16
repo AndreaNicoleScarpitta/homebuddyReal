@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { eraseUserData, ErasureBlockedError } from "./services/account-erasure";
 import { db } from "./db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { requireUnderLimit, requireUnderSystemsLimit } from "./lib/plans";
 import { logInfo, logError, logWarn } from "./lib/logger";
@@ -850,7 +850,17 @@ Only return the JSON object, no other text.`;
       if (docData.systemId != null && !(await documentSystemBelongsToHome(homeId, docData.systemId))) {
         return res.status(400).json({ message: "The selected system does not belong to this home", code: "VALIDATION_ERROR" });
       }
-      const doc = await storage.createDocument(docData);
+      // Serialize retries for the same uploaded object, including concurrent
+      // retries after a lost response. Different documents do not block each other.
+      const doc = await db.transaction(async tx => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${homeId}:${docData.objectPath}`}, 0))`);
+        const [existing] = await tx.select().from(homeDocuments).where(and(
+          eq(homeDocuments.homeId, homeId), eq(homeDocuments.objectPath, docData.objectPath),
+        ));
+        if (existing) return existing;
+        const [created] = await tx.insert(homeDocuments).values(docData).returning();
+        return created;
+      });
       logInfo("documents.create", "Document created successfully", { docId: doc.id, homeId });
       res.json(doc);
     } catch (error) {

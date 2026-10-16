@@ -971,8 +971,8 @@ export default function SystemDetail() {
               <DocumentsSection systemId={system.legacyId} />
             ) : (
               <p className="text-sm text-muted-foreground" data-testid="text-no-documents">
-                Files for systems without a legacy identifier can be viewed in{" "}
-                <Link href="/house?section=files" className="text-primary hover:underline" data-testid="link-documents">House files</Link>.
+                Documents for systems without a legacy identifier can be viewed in{" "}
+                <Link href="/house?section=files" className="text-primary hover:underline" data-testid="link-documents">Documents</Link>.
               </p>
             )}
           </CardContent>

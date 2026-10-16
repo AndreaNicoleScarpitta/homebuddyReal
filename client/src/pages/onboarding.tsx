@@ -1,37 +1,14 @@
-/**
- * Onboarding — the "first useful output in under 2 minutes" flow.
- *
- * Phase 1 flip: we no longer block a new user behind a long address +
- * demographics form. The only required field is ZIP. Everything else is
- * deferred to "when you want a feature that needs it" (the profile page
- * gets a nudge for full address).
- *
- * Step choreography:
- *
- *   1. house-basics       ZIP + optional year/sqft. Creates the home row.
- *   2. systems-quickpick  Tap-to-add system chips. Each selection POSTs a
- *                         system and atomically commits starter maintenance
- *                         task events in the V2 model.
- *   3. first-tasks        The magic moment — we read back the generated
- *                         tasks so the user sees immediate value.
- *   4. inspection-alt     Optional fork for "power users" who want to
- *                         upload an inspection PDF. Otherwise skip to
- *                         the dashboard.
- *
- * The orchestrator waits until all selected systems are saved before
- * showing starter tasks. Failed categories remain retryable.
- *
- * Error recovery: step 2 is where things can fail (CSRF, network, 500).
- * We keep the user on the step with an explicit error and retry the
- * failed categories rather than falsely reporting plan creation.
+import React from "react";
+/** Required home setup: ZIP, optional system selection, then the real Plan.
+ * Database recovery and failed-category retries preserve completed writes.
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Home } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createHome, createSystem, getHome, getSystems, getTasks, repairStarterTasks } from "@/lib/api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createHome, createSystem, getHome, getSystems, getTasks } from "@/lib/api";
 import type { V2Home } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent, trackSlugPageView } from "@/lib/analytics";
@@ -42,12 +19,16 @@ import {
   SYSTEM_CHOICES,
   DEFAULT_SELECTED,
 } from "@/components/onboarding/step-systems-quickpick";
-import { StepFirstTasks } from "@/components/onboarding/step-first-tasks";
-import { StepInspectionAlt } from "@/components/onboarding/step-inspection-alt";
+import { useAuth } from "@/hooks/use-auth";
+import { saveGuidance } from "@/lib/guidance";
 
-type Step = "house-basics" | "systems-quickpick" | "first-tasks" | "inspection-alt";
+
+type Step = "house-basics" | "systems-quickpick";
 
 export default function Onboarding() {
+  const reducedMotion = useReducedMotion();
+  const { user } = useAuth();
+  const selectionKey = `homebuddy:onboarding-selection:${user?.id}`;
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -58,12 +39,13 @@ export default function Onboarding() {
   const [createdHome, setCreatedHome] = useState<V2Home | null>(null);
   const createdCategories = useRef(new Set<string>());
   const [systemError, setSystemError] = useState<string | null>(null);
-  const [createdSystemsCount, setCreatedSystemsCount] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
   const [resuming, setResuming] = useState(true);
   const submissionInFlight = useRef(false);
 
   useEffect(() => {
     trackSlugPageView(PAGE_SLUGS.onboarding);
+    trackEvent("setup_started", "onboarding", "v1");
   }, []);
 
   // Recover from refresh or a lost POST response using database state, not
@@ -75,6 +57,7 @@ export default function Onboarding() {
       try {
         const home = await getHome();
         if (!active || !home?.id) return;
+        if (!sessionStorage.getItem(selectionKey)) { setLocation("/maintenance-log"); return; }
         setCreatedHome(home);
         setBasics({
           zipCode: home.zipCode || "",
@@ -85,8 +68,8 @@ export default function Onboarding() {
         if (!active) return;
         const saved = systems.filter(system => system.source === "onboarding-quickpick");
         createdCategories.current = new Set(saved.map(system => system.category));
-        setCreatedSystemsCount(saved.length);
-        const selection = sessionStorage.getItem("homebuddy:onboarding-selection");
+
+        const selection = sessionStorage.getItem(selectionKey);
         if (selection) {
           try {
             const parsed = JSON.parse(selection);
@@ -108,7 +91,7 @@ export default function Onboarding() {
       }
     })();
     return () => { active = false; };
-  }, []);
+  }, [selectionKey]);
 
   // ---------------------------------------------------------------------
   // Mutations — createHome, then createSystem per selected category.
@@ -123,12 +106,13 @@ export default function Onboarding() {
       queryClient.setQueryData(["home"], newHome);
       queryClient.invalidateQueries({ queryKey: ["home"] });
       setCreatedHome(newHome);
+      trackEvent("minimum_home_saved", "onboarding", "confirmed");
     },
     onError: (error) => {
       // eslint-disable-next-line no-console
       console.error("[onboarding] createHome failed:", error);
       toast({
-        title: "Couldn't create your home profile",
+        title: "We could not save your home. Try again.",
         description: error.message || "Something went wrong.",
         variant: "destructive",
       });
@@ -174,48 +158,30 @@ export default function Onboarding() {
     createHomeMutation.reset();
   }, [createHomeMutation]);
 
-  // ---------------------------------------------------------------------
-  // Fetch the generated tasks after systems creation for step 3.
-  // Using useQuery rather than cramming it into the mutation because the
-  // dashboard will also read this and we want the cache populated here.
-  // ---------------------------------------------------------------------
-  const tasksQuery = useQuery({
-    queryKey: ["tasks", createdHome?.id],
-    queryFn: () => getTasks(createdHome!.id),
-    enabled: Boolean(createdHome?.id) && step === "first-tasks",
-    // Task creation is atomic with system creation, so polling is unnecessary.
-    staleTime: 0,
-    retry: 1,
-  });
-
-  // ---------------------------------------------------------------------
-  // Step transitions
-  // ---------------------------------------------------------------------
-
   const handleHouseBasicsNext = useCallback(() => {
     trackEvent("onboarding_step", "onboarding", "zip_completed");
+    sessionStorage.setItem(selectionKey, "[]");
     setStep("systems-quickpick");
-  }, []);
+  }, [selectionKey]);
 
   const handleSystemsToggle = useCallback((category: string) => {
     setSelectedSystems((prev) => {
       const next = new Set(prev);
       if (next.has(category)) next.delete(category);
       else next.add(category);
-      sessionStorage.setItem("homebuddy:onboarding-selection", JSON.stringify(Array.from(next)));
+      sessionStorage.setItem(selectionKey, JSON.stringify(Array.from(next)));
       return next;
     });
-  }, []);
+  }, [selectionKey]);
 
-  const handleSystemsNext = useCallback(async () => {
+  const handleSystemsNext = useCallback(async (skipSystems = false) => {
     if (submissionInFlight.current || resuming) return;
     submissionInFlight.current = true;
+    setIsSaving(true);
     try {
     trackEvent("onboarding_step", "onboarding", "systems_selected", selectedSystems.size);
 
-    // We create the home lazily here rather than on house-basics → systems
-    // so that if the user backs out, nothing is persisted. The tradeoff is
-    // one slightly longer wait when they hit "Show me my plan."
+    // Save the minimum home once; subsequent retries only add missing systems.
     let home = createdHome;
     if (!home) {
       try {
@@ -247,74 +213,49 @@ export default function Onboarding() {
     try {
       const result = await createSystemsMutation.mutateAsync({
         homeId: home.id,
-        categories: Array.from(selectedSystems),
+        categories: skipSystems ? [] : Array.from(selectedSystems),
       });
-      setCreatedSystemsCount(result.saved);
+
       if (result.failed.length) {
-        setSystemError(`Couldn't save: ${result.failed.join(", ")}. Try again to finish setup.`);
+        setSystemError(`Your home is saved. Some systems could not be added: ${result.failed.join(", ")}. Retry failed systems or continue to Plan.`);
         return;
       }
-      // Verify persisted systems AND their starter tasks before advertising
-      // success. Repair only missing templates, never overwrite user tasks.
-      await repairStarterTasks(home.id);
+      // Confirm system writes. Empty task results are valid; Plan owns task recovery.
       const [persistedSystems, persistedTasks] = await Promise.all([
-        getSystems(home.id), getTasks(home.id),
+        getSystems(home.id).catch(error => { if (skipSystems || !selectedSystems.size) return null; throw error; }), getTasks(home.id).catch(() => null),
       ]);
-      const found = persistedSystems.filter(system =>
+      const found = (persistedSystems ?? []).filter(system =>
         system.source === "onboarding-quickpick" && selectedSystems.has(system.category)
       );
-      const missing = Array.from(selectedSystems).filter(category =>
-        !found.some(system => system.category === category &&
-          persistedTasks.some(task => task.relatedSystemId === system.id &&
-            task.createdFrom === "best-practice"))
-      );
-      if (missing.length || !persistedTasks.length) {
-        setSystemError("Some maintenance tasks are missing. Please retry setup.");
+      const missing = Array.from(selectedSystems).filter(category => !found.some(system => system.category === category));
+      if (!skipSystems && missing.length) {
+        setSystemError("Your home is saved. Some systems could not be confirmed. Retry failed systems or continue to Plan.");
         return;
       }
       createdCategories.current = new Set(found.map(system => system.category));
-      setCreatedSystemsCount(found.length);
-      queryClient.setQueryData(["systems", home.id], persistedSystems);
-      queryClient.setQueryData(["tasks", home.id], persistedTasks);
+
+      if (persistedSystems) queryClient.setQueryData(["systems", home.id], persistedSystems);
+      if (persistedTasks) queryClient.setQueryData(["tasks", home.id], persistedTasks);
       await queryClient.invalidateQueries({ queryKey: ["tasks", home.id] });
-      setStep("first-tasks");
+      sessionStorage.removeItem(selectionKey);
+      sessionStorage.setItem(`homebuddy:plan-first-entry:${user?.id}`, "1");
+      await saveGuidance({ version: 1, status: "active", moment: 1 }, user?.id);
+      trackEvent("setup_finished", "onboarding", "confirmed", persistedTasks?.length);
+      setLocation("/maintenance-log?guide=new");
     } catch (err) {
       setSystemError(err instanceof Error ? err.message : "Unable to create your systems. Please try again.");
     }
     } finally {
       submissionInFlight.current = false;
+      setIsSaving(false);
     }
-  }, [createdHome, basics, selectedSystems, createHomeMutation, createSystemsMutation, toast, resuming, queryClient]);
+  }, [createdHome, basics, selectedSystems, createHomeMutation, createSystemsMutation, toast, resuming, queryClient, user?.id, selectionKey]);
 
-  const handleUploadInspectionFork = useCallback(() => {
-    trackEvent("onboarding_step", "onboarding", "inspection_fork_chosen");
-    setStep("inspection-alt");
-  }, []);
-
-  const handleGoToDashboard = useCallback(() => {
-    if (!tasksQuery.data?.length || tasksQuery.isError) {
-      setSystemError("Your maintenance plan is not ready. Return to systems and retry.");
-      setStep("systems-quickpick");
-      return;
-    }
-    sessionStorage.removeItem("homebuddy:onboarding-selection");
-    trackEvent("onboarding_step", "onboarding", "done_to_dashboard");
-    toast({
-      title: "Home setup complete",
-      description: "Your systems and available maintenance tasks are saved.",
-    });
-    setLocation("/dashboard");
-  }, [setLocation, toast, tasksQuery.data, tasksQuery.isError]);
-
-  const handleGoToInspectionsUpload = useCallback(() => {
-    trackEvent("onboarding_step", "onboarding", "inspection_upload_redirect");
-    setLocation("/document-analysis");
-  }, [setLocation]);
-
-  // Progress dots — one per step in the happy path. The inspection-alt
-  // fork is intentionally not counted — it's a branch, not a gate.
+  // Setup progress is separate from optional education.
   const progressIndex =
-    step === "house-basics" ? 0 : step === "systems-quickpick" ? 1 : 2;
+    step === "house-basics" ? 0 : 1;
+
+  if (!resuming && systemError && !createdHome && !basics.zipCode) return <div role="alert" className="p-8">We could not load your home. <button onClick={() => window.location.reload()}>Try again</button></div>;
 
   if (resuming) return <div className="min-h-screen flex items-center justify-center text-muted-foreground" role="status">Restoring your home setup…</div>;
 
@@ -333,7 +274,7 @@ export default function Onboarding() {
             maintenance plan waiting for you — no long forms.
           </p>
           <div className="flex gap-2 pt-4">
-            {[0, 1, 2].map((i) => (
+            {[0, 1].map((i) => (
               <div
                 key={i}
                 className={`h-2 w-12 rounded-full ${
@@ -348,7 +289,7 @@ export default function Onboarding() {
       <div className="flex-1 flex items-start md:items-center justify-center p-6 overflow-y-auto">
         <motion.div
           key={step}
-          initial={{ opacity: 0, x: 20 }}
+          initial={reducedMotion ? false : { opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           className="w-full max-w-md space-y-8 my-auto py-8"
         >
@@ -360,7 +301,7 @@ export default function Onboarding() {
           </div>
 
           <div className="lg:hidden flex gap-2 mb-6">
-            {[0, 1, 2].map((i) => (
+            {[0, 1].map((i) => (
               <div
                 key={i}
                 className={`h-1 flex-1 rounded-full ${
@@ -370,6 +311,8 @@ export default function Onboarding() {
             ))}
           </div>
 
+          <p className="text-sm font-medium uppercase tracking-wide">Home setup · {progressIndex + 1} of 2</p>
+          {isSaving && <p role="status">{createHomeMutation.isPending ? "Saving your home…" : "Creating your plan…"}</p>}
           {step === "house-basics" && (
             <StepHouseBasics
               value={basics}
@@ -383,10 +326,12 @@ export default function Onboarding() {
               <StepSystemsQuickpick
                 selected={selectedSystems}
                 onToggle={handleSystemsToggle}
-                onNext={handleSystemsNext}
+                onNext={() => handleSystemsNext()}
+                onSkip={() => handleSystemsNext(true)}
                 onBack={() => setStep("house-basics")}
-                isSubmitting={createHomeMutation.isPending || createSystemsMutation.isPending}
+                isSubmitting={isSaving}
               />
+              {systemError && createdHome && <button className="min-h-11 underline" disabled={isSaving} onClick={() => handleSystemsNext(true)}>Continue to Plan</button>}
               {systemError && <p role="alert" data-testid="onboarding-systems-error" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{systemError}</p>}
               {createHomeMutation.isError && (
                 <div
@@ -396,7 +341,7 @@ export default function Onboarding() {
                 >
                   <div className="flex-1 space-y-2">
                     <p className="font-medium text-destructive">
-                      Couldn't create your home profile
+                      We could not save your home. Try again.
                     </p>
                     <p className="text-muted-foreground break-words">
                       {errorMessage || "Unknown error"}
@@ -430,27 +375,7 @@ export default function Onboarding() {
             </>
           )}
 
-          {step === "first-tasks" && (
-            <StepFirstTasks
-              tasks={tasksQuery.data ?? []}
-              hasError={tasksQuery.isError}
-              systemsCount={createdSystemsCount}
-              isLoading={
-                createSystemsMutation.isPending || tasksQuery.isLoading
-              }
-              onNext={handleGoToDashboard}
-              onBack={() => setStep("systems-quickpick")}
-              onUploadInspection={handleUploadInspectionFork}
-            />
-          )}
 
-          {step === "inspection-alt" && (
-            <StepInspectionAlt
-              onUpload={handleGoToInspectionsUpload}
-              onSkip={handleGoToDashboard}
-              onBack={() => setStep("first-tasks")}
-            />
-          )}
         </motion.div>
       </div>
     </div>

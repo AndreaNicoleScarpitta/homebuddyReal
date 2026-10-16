@@ -1,20 +1,5 @@
-/**
- * Step 2 — tap-to-add the big-ticket systems in the user's home.
- *
- * This is the "minimum viable home model" step. Every house has HVAC,
- * plumbing, electrical, and a roof, so those four are pre-selected.
- * The user taps to add/remove, then Continues. Each selected category
- * becomes a System in the DB on submit, which triggers the server-side
- * `generateTasksForSystem` pipeline — that's what produces the task
- * preview on step 3. Do not gate this step on server writes — we let
- * the parent orchestrator do the create-home + create-systems sequence
- * as an await chain on "Continue" so the UI stays responsive.
- *
- * The category names here MUST match the keys in
- * `server/services/maintenance-templates.ts` — otherwise the task
- * generation falls back to a generic template and the magic moment is
- * less magical.
- */
+import React from "react";
+/** Optional system selection. Nothing is preselected or saved until submission. */
 
 import { Button } from "@/components/ui/button";
 import { ArrowRight, ArrowLeft, Check } from "lucide-react";
@@ -49,19 +34,15 @@ export const SYSTEM_CHOICES: SystemChoice[] = [
   { category: "Pest", name: "Pest Control", emoji: "🐜", hint: "Termite, rodent, ant" },
 ];
 
-/**
- * Default selections. Rationale: ~every home has these four, and having
- * something pre-selected means the Continue button is enabled on first
- * render — no empty-state fiddling. Users can un-tap anything they don't
- * have (e.g. renters with no roof).
- */
-export const DEFAULT_SELECTED = new Set<string>(["HVAC", "Plumbing", "Electrical", "Roof"]);
+/** Homeowners explicitly select the systems they know about. */
+export const DEFAULT_SELECTED = new Set<string>();
 
 interface StepSystemsQuickpickProps {
   selected: Set<string>;
   onToggle: (category: string) => void;
   onNext: () => void;
   onBack: () => void;
+  onSkip: () => void;
   isSubmitting?: boolean;
 }
 
@@ -70,6 +51,7 @@ export function StepSystemsQuickpick({
   onToggle,
   onNext,
   onBack,
+  onSkip,
   isSubmitting,
 }: StepSystemsQuickpickProps) {
   return (
@@ -77,6 +59,8 @@ export function StepSystemsQuickpick({
       <button
         type="button"
         onClick={onBack}
+        disabled={isSubmitting}
+        style={{ minHeight: 44 }}
         className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
         data-testid="button-back"
       >
@@ -102,6 +86,8 @@ export function StepSystemsQuickpick({
               key={choice.category}
               type="button"
               onClick={() => onToggle(choice.category)}
+              aria-pressed={isOn}
+              disabled={isSubmitting}
               data-testid={`chip-system-${choice.category.toLowerCase().replace(/[^a-z]+/g, "-")}`}
               className={[
                 "relative rounded-xl border px-3 py-3 text-left transition-all",
@@ -133,14 +119,15 @@ export function StepSystemsQuickpick({
       </p>
 
       <Button
-        className="w-full h-12 font-medium"
+        className="w-full h-12 font-medium text-stone-950 text-base"
         onClick={onNext}
-        disabled={selected.size === 0 || isSubmitting}
+        disabled={isSubmitting}
         data-testid="button-generate-plan"
       >
-        {isSubmitting ? "Building your plan…" : "Show me my maintenance plan"}
+        {isSubmitting ? "Creating your plan…" : "Create my plan"}
         {!isSubmitting && <ArrowRight className="ml-2 h-4 w-4" />}
       </Button>
+      <Button variant="ghost" className="w-full min-h-11" onClick={onSkip} disabled={isSubmitting}>Do this later</Button>
     </div>
   );
 }

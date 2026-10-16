@@ -450,6 +450,11 @@ export default function Profile() {
           </p>
         </header>
 
+        <section className="rounded-xl border p-4 space-y-2" aria-label="Help">
+          <h2 className="font-heading font-semibold">Help</h2><h3>Quick guide</h3>
+          <p className="text-muted-foreground">Review Plan, Home, and Documents. Your home setup will not change.</p>
+          <a href="/maintenance-log?guide=replay" className="inline-flex items-center min-h-11 underline">Start quick guide</a>
+        </section>
         <section className="space-y-6">
           <AddressCompletionNudge home={home} />
 
@@ -516,7 +521,7 @@ export default function Profile() {
                   data-testid="input-address"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Your address is set from your home profile on the Overview page
+                  Your address is set from your home profile in My House
                 </p>
               </div>
             </CardContent>

@@ -3559,3 +3559,25 @@ function handleError(res: Response, err: unknown): void {
   const message = status >= 500 ? "Internal server error" : error.message;
   res.status(status).json({ error: message });
 }
+
+// Education preferences are scoped exclusively to the authenticated account.
+v2Router.get("/guidance", async (req, res) => {
+  try {
+    const result = await db.execute(sql`SELECT version, status, moment FROM onboarding_guidance WHERE user_id = ${getUserId(req)}`);
+    res.json(result.rows[0] ?? null);
+  } catch { res.status(500).json({ message: "Could not load quick guide preferences" }); }
+});
+v2Router.put("/guidance", async (req, res) => {
+  const { version, status, moment, userId } = req.body ?? {};
+  if (userId && userId !== getUserId(req)) { res.status(403).json({ message: "Account changed; reload before saving preferences" }); return; }
+  if (version !== 1 || !["not_offered", "active", "suspended", "completed", "dismissed"].includes(status) || !Number.isInteger(moment) || moment < 1 || moment > 3) {
+    res.status(400).json({ message: "Invalid guidance state" }); return;
+  }
+  try {
+    await db.execute(sql`INSERT INTO onboarding_guidance (user_id, version, status, moment)
+      VALUES (${getUserId(req)}, ${version}, ${status}, ${moment})
+      ON CONFLICT (user_id) DO UPDATE SET version = EXCLUDED.version, status = EXCLUDED.status,
+      moment = EXCLUDED.moment, updated_at = now()`);
+    res.json({ version, status, moment });
+  } catch { res.status(500).json({ message: "Could not save quick guide preferences" }); }
+});

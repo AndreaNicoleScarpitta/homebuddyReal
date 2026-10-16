@@ -1116,3 +1116,11 @@ export const learningAdjustmentsRelations = relations(learningAdjustments, ({ on
     references: [homes.id],
   }),
 }));
+
+export const onboardingGuidance = pgTable("onboarding_guidance", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  status: varchar("status").notNull(),
+  moment: integer("moment").notNull().default(1),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
