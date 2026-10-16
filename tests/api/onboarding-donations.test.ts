@@ -65,7 +65,7 @@ describe.skipIf(!enabled)("quick onboarding starter tasks and donation-only bill
     const newHomeId = homeId;
     const retryHome = await fetch(`${base}/v2/homes`, {
       method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
-      body: JSON.stringify({ zipCode: "99201", type: "Single Family Home" }),
+      body: JSON.stringify({ zipCode: "99201", type: "Single Family Home", onboarding: true }),
     });
     expect(retryHome.status).toBe(200);
     expect((await retryHome.json()).id).toBe(newHomeId);
