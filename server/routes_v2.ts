@@ -456,9 +456,21 @@ v2Router.post("/homes", async (req: Request, res: Response) => {
       // Serialize this user's home creation. This prevents two simultaneous
       // taps (or a lost HTTP response followed by retry) creating two homes.
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${userId}))`);
-      const existing = await tx.execute(sql`
-        SELECT home_id, legacy_id, attrs FROM projection_home WHERE user_id = ${userId} LIMIT 1
-      `);
+      // Onboarding is a single-home bootstrap. Ordinary /homes calls must
+      // still support users deliberately creating additional homes.
+      const existing = req.body.onboarding === true
+        ? await tx.execute(sql`
+          SELECT home_id, legacy_id, attrs FROM projection_home
+          WHERE user_id = ${userId} AND attrs->>'onboardingSource' = 'quick-onboarding'
+          LIMIT 1
+        `)
+        : await tx.execute(sql`
+          SELECT ph.home_id, ph.legacy_id, ph.attrs FROM event_log e
+          JOIN projection_home ph ON ph.home_id = e.aggregate_id::text
+          WHERE e.actor_id = ${userId} AND e.aggregate_type = 'home'
+            AND e.idempotency_key = ${req.idempotencyKey!}
+          LIMIT 1
+        `);
       if (existing.rows.length) {
         const current = existing.rows[0] as { home_id: string; legacy_id: number; attrs: Record<string, unknown> };
         return { existing: true, id: current.home_id, legacyId: current.legacy_id,
@@ -495,6 +507,7 @@ v2Router.post("/homes", async (req: Request, res: Response) => {
             builtYear,
             sqFt,
             type: req.body.type,
+            ...(req.body.onboarding === true ? { onboardingSource: "quick-onboarding" } : {}),
           },
         },
         meta: { userId, legacyId },
