@@ -21,6 +21,24 @@ Only the repository ruleset/branch protection makes the check mandatory. The
 GitHub integration used to implement this change does not have permission to
 configure branch protections.
 
+## Railway Wait for CI — configure once
+
+Railway production currently deploys pushes to `main` automatically and has
+`source.checkSuites = false`. The Railway service setting **Wait for CI**
+must be enabled so a failed GitHub Actions workflow cannot deploy.
+
+In Railway: project `attractive-truth` → service `homebuddyReal` →
+**Settings → Source → Wait for CI → On**. This feature requires the
+Railway GitHub app's updated permissions and a GitHub Actions workflow with
+a `push: main` trigger (included in `.github/workflows/ci.yml`).
+See https://docs.railway.com/deployments/github-autodeploys#wait-for-ci.
+
+Railway evaluates **whole workflow results**; the `release-gate` job ensures
+our workflow cannot be green when build, API tests, E2E, or typechecking fail.
+
+The available Railway integration cannot change this source check-suite flag.
+Verify that the service reports `source.checkSuites: true` after enabling it.
+
 ## Release verification
 
 - Never deploy a feature PR until the `release-gate` check is green.
