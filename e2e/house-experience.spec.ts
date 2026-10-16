@@ -95,8 +95,20 @@ test("entire Needs Attention card opens Plan and urgent tasks are excluded from 
   await expect(page).toHaveURL(/maintenance-log/);
   await expect(page.getByTestId("text-due-count")).toHaveText("2");
   await expect(page.getByTestId("text-upcoming-count")).toHaveText("13");
-  await expect(page.getByTestId("filter-due")).toHaveClass(/bg-background/);
+  await expect(page.getByTestId("filter-due")).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("Urgent 1")).toBeVisible();
+  await expect(page.getByTestId("filter-tabs")).toHaveCount(0);
+  await page.getByTestId("filter-upcoming").click();
+  await expect(page.getByTestId("filter-upcoming")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("task-list").getByTestId(/^row-task-/)).toHaveCount(13);
+  await expect(page.getByText("Urgent 1", { exact: true })).toHaveCount(0);
+  await page.getByTestId("filter-completed").click();
+  await expect(page.getByText("No completed tasks yet")).toBeVisible();
+  await page.getByTestId("filter-past_due").click();
+  await expect(page.getByText("No overdue tasks")).toBeVisible();
+  await page.getByTestId("filter-due").click();
+  await expect(page.getByTestId("task-list").getByTestId(/^row-task-/)).toHaveCount(2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
 test("shutoff locations are editable in My House, not the dashboard", async ({ page }) => {

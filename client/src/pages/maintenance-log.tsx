@@ -51,12 +51,6 @@ import { MODAL_SLUGS, PAGE_SLUGS } from "@/lib/slug-registry";
  * dates appear in Due rather than Upcoming. */
 type FilterTab = "upcoming" | "due" | "past_due" | "completed";
 
-const filterTabs: { key: FilterTab; label: string; icon: React.ElementType }[] = [
-  { key: "upcoming", label: "Upcoming", icon: CalendarClock },
-  { key: "due", label: "Due", icon: CalendarCheck },
-  { key: "past_due", label: "Past Due", icon: CalendarX },
-  { key: "completed", label: "Completed", icon: CheckCircle2 },
-];
 
 function MaintenanceLogSkeleton() {
   return (
@@ -576,7 +570,15 @@ export default function MaintenanceLog() {
         </header>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card>
+          <button
+            type="button"
+            aria-label={`Completed: ${counts.completed} tasks`}
+            aria-pressed={activeFilter === "completed"}
+            aria-controls="plan-task-list"
+            onClick={() => { setActiveFilter("completed"); setExpandedTaskId(null); setExpandedLogEntryId(null); trackEvent('click', 'maintenance_log', 'filter_completed'); }}
+            className={`rounded-xl border bg-card text-card-foreground shadow text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeFilter === "completed" ? "ring-2 ring-primary border-primary bg-primary/5" : ""}`}
+            data-testid="filter-completed"
+          >
             <CardContent className="pt-4">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
@@ -588,8 +590,16 @@ export default function MaintenanceLog() {
                 </div>
               </div>
             </CardContent>
-          </Card>
-          <Card>
+          </button>
+          <button
+            type="button"
+            aria-label={`Past Due: ${counts.past_due} tasks`}
+            aria-pressed={activeFilter === "past_due"}
+            aria-controls="plan-task-list"
+            onClick={() => { setActiveFilter("past_due"); setExpandedTaskId(null); setExpandedLogEntryId(null); trackEvent('click', 'maintenance_log', 'filter_past_due'); }}
+            className={`rounded-xl border bg-card text-card-foreground shadow text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeFilter === "past_due" ? "ring-2 ring-primary border-primary bg-primary/5" : ""}`}
+            data-testid="filter-past_due"
+          >
             <CardContent className="pt-4">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-red-500/10 flex items-center justify-center">
@@ -601,8 +611,16 @@ export default function MaintenanceLog() {
                 </div>
               </div>
             </CardContent>
-          </Card>
-          <Card>
+          </button>
+          <button
+            type="button"
+            aria-label={`Due / Urgent: ${counts.due} tasks`}
+            aria-pressed={activeFilter === "due"}
+            aria-controls="plan-task-list"
+            onClick={() => { setActiveFilter("due"); setExpandedTaskId(null); setExpandedLogEntryId(null); trackEvent('click', 'maintenance_log', 'filter_due'); }}
+            className={`rounded-xl border bg-card text-card-foreground shadow text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeFilter === "due" ? "ring-2 ring-primary border-primary bg-primary/5" : ""}`}
+            data-testid="filter-due"
+          >
             <CardContent className="pt-4">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-orange-500/10 flex items-center justify-center">
@@ -614,8 +632,16 @@ export default function MaintenanceLog() {
                 </div>
               </div>
             </CardContent>
-          </Card>
-          <Card>
+          </button>
+          <button
+            type="button"
+            aria-label={`Upcoming: ${counts.upcoming} tasks`}
+            aria-pressed={activeFilter === "upcoming"}
+            aria-controls="plan-task-list"
+            onClick={() => { setActiveFilter("upcoming"); setExpandedTaskId(null); setExpandedLogEntryId(null); trackEvent('click', 'maintenance_log', 'filter_upcoming'); }}
+            className={`rounded-xl border bg-card text-card-foreground shadow text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeFilter === "upcoming" ? "ring-2 ring-primary border-primary bg-primary/5" : ""}`}
+            data-testid="filter-upcoming"
+          >
             <CardContent className="pt-4">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center">
@@ -627,39 +653,7 @@ export default function MaintenanceLog() {
                 </div>
               </div>
             </CardContent>
-          </Card>
-        </div>
-
-        <div className="flex gap-1 p-1 bg-muted/50 rounded-lg overflow-x-auto" data-testid="filter-tabs">
-          {filterTabs.map(({ key, label, icon: Icon }) => {
-            const count = counts[key];
-            const isActive = activeFilter === key;
-            return (
-              <button
-                key={key}
-                onClick={() => { setActiveFilter(key); setExpandedTaskId(null); setExpandedLogEntryId(null); trackEvent('click', 'maintenance_log', `filter_${key}`); }}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-                  isActive 
-                    ? "bg-background shadow-sm text-foreground" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-                }`}
-                data-testid={`filter-${key}`}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{label}</span>
-                {count > 0 && (
-                  <Badge 
-                    variant={isActive ? "default" : "secondary"} 
-                    className={`ml-1 h-5 min-w-[20px] flex items-center justify-center text-[10px] px-1.5 ${
-                      key === "past_due" && count > 0 ? "bg-red-500 text-white" : ""
-                    }`}
-                  >
-                    {count}
-                  </Badge>
-                )}
-              </button>
-            );
-          })}
+          </button>
         </div>
 
         {tasks.length === 0 && systems.length > 0 && !tasksLoading && (
@@ -673,7 +667,7 @@ export default function MaintenanceLog() {
             </Button>
           </div>
         )}
-        <div data-testid="task-list">
+        <div id="plan-task-list" data-testid="task-list">
           {filteredTasks.length === 0 ? (
             <div className="text-center py-16">
               <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
