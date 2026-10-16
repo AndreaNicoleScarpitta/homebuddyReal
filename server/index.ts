@@ -171,13 +171,25 @@ app.use((req, res, next) => {
   // Express processes middleware in registration order; a limiter added after a
   // matching route handler is never reached.
 
-  const authLimiter = rateLimit({
+  // Scope brute-force protection to sensitive authentication writes. In the
+  // previous release a single shared 20-request bucket was applied to ALL
+  // /api/auth traffic, including GET /api/auth/user and /providers. Those
+  // routine reads burned through the quota and caused valid sessions to appear
+  // logged out. Separate buckets also prevent a failed login from blocking an
+  // otherwise valid signup or recovery attempt on the same shared IP.
+  const credentialLimiter = (max: number) => rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 20,
+    max,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: "Too many login attempts, please try again later" },
+    skipSuccessfulRequests: true,
+    message: { error: "Too many authentication attempts. Please try again later." },
   });
+
+  const loginLimiter = credentialLimiter(12);
+  const signupLimiter = credentialLimiter(12);
+  const recoveryLimiter = credentialLimiter(6);
+  const testLoginLimiter = credentialLimiter(12);
 
   const contactLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -206,7 +218,11 @@ app.use((req, res, next) => {
   });
 
   // Apply limiters before routes so they are guaranteed to run
-  app.use("/api/auth", authLimiter);
+  app.post("/api/auth/login", loginLimiter);
+  app.post("/api/auth/signup", signupLimiter);
+  app.post("/api/auth/forgot-password", recoveryLimiter);
+  app.post("/api/auth/reset-password", recoveryLimiter);
+  app.post("/api/auth/test-login", testLoginLimiter);
   app.use("/api/contact", contactLimiter);
   app.use("/api", mutationLimiter);
   app.use("/api", readLimiter);
