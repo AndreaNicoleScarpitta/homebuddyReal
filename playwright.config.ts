@@ -7,7 +7,7 @@ export default defineConfig({
   // Release gating must expose flaky failures, not retry until a green run.
   retries: 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? "github" : "html",
+  reporter: process.env.CI ? [["line"], ["html", { open: "never" as const }]] : "html",
   timeout: 30_000,
 
   use: {
