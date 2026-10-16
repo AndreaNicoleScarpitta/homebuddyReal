@@ -88,7 +88,7 @@ describe("State Machine Guards — Unit Tests", () => {
   });
 
   it("validateTransition rejects invalid Task transitions", () => {
-    expect(() => validateTransition("task", "t1", "proposed", EventTypes.TaskCompleted)).toThrow(TransitionError);
+    expect(() => validateTransition("task", "t1", "rejected", EventTypes.TaskCompleted)).toThrow(TransitionError);
     expect(() => validateTransition("task", "t1", "done", EventTypes.TaskApproved)).toThrow(TransitionError);
     expect(() => validateTransition("task", "t1", "rejected", EventTypes.TaskStarted)).toThrow(TransitionError);
   });

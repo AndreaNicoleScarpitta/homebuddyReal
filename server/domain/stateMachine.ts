@@ -56,6 +56,8 @@ export type RecommendationState = (typeof RecommendationStates)[number];
 
 const taskTransitions: Record<string, Set<string>> = {
   proposed: new Set([
+    // Recording finished work also accepts a proposed maintenance task.
+    EventTypes.TaskCompleted,
     EventTypes.TaskApproved,
     EventTypes.TaskRejected,
     EventTypes.TaskSkipped,

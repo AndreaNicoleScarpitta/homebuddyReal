@@ -11,6 +11,7 @@
 import { Router, type Request, type Response } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
+import { storage } from "./storage";
 import { append, readStream, readFromSeq, getCurrentVersion } from "./eventing/eventStore";
 import { requireIdempotencyKey } from "./eventing/idempotency";
 import { applyEvent } from "./projections/applyEvent";
@@ -1247,15 +1248,27 @@ v2Router.post("/tasks/:taskId/complete", requireIdempotencyKey, async (req: Requ
     const actor = getActor(req);
     const userId = getUserId(req);
     const { taskId } = req.params;
-    const { legacyHomeId, title, cost, notes } = req.body as {
+    const { legacyHomeId, title, cost, notes, date, provider } = req.body as {
       legacyHomeId?: number | null;
       title?: string;
       cost?: number;
       notes?: string;
+      date?: string;
+      provider?: string;
     };
 
     if (!(await verifyTaskOwnership(taskId, userId))) {
       res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    if (legacyHomeId && !await storage.verifyHomeOwnership(legacyHomeId, userId)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const logDate = date ? new Date(date) : new Date();
+    if (isNaN(logDate.getTime()) || (cost !== undefined && (typeof cost !== "number" || !Number.isFinite(cost) || cost < 0))) {
+      res.status(400).json({ error: "Enter a valid date and non-negative cost." });
       return;
     }
 
@@ -1280,7 +1293,8 @@ v2Router.post("/tasks/:taskId/complete", requireIdempotencyKey, async (req: Requ
         await tx.insert(maintenanceLogEntries).values({
           homeId: legacyHomeId,
           title: title ?? "Task completed",
-          date: new Date(),
+          date: logDate,
+          provider: provider ?? null,
           cost: typeof cost === "number" && !isNaN(cost)
             ? Math.round(cost * 100)
             : null,

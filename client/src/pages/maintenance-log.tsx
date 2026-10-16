@@ -36,7 +36,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getHome, getTasks, getSystems, getLogEntries, createLogEntry, updateTask, deleteTask, repairStarterTasks } from "@/lib/api";
+import { getHome, getTasks, getSystems, getLogEntries, createLogEntry, completeTask, updateTask, deleteTask, repairStarterTasks } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { format, formatDistanceToNow, isPast, isToday } from "date-fns";
@@ -918,24 +918,24 @@ function AddLogEntryDialog({ isOpen, onClose, homeId, legacyHomeId, task, system
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      const date = new Date(data.date).toISOString();
+      const provider = data.completedBy === "contractor" ? (data.provider || "Contractor") : "DIY (Myself)";
       if (task) {
-        try {
-          await updateTask(task.id, { status: "completed" });
-        } catch (err: any) {
-          const msg = err?.message?.toLowerCase() || "";
-          const isAlreadyDone = msg.includes("transition") || msg.includes("invalid") || msg.includes("not allowed");
-          if (!isAlreadyDone) throw err;
-        }
-      }
-
-      if (legacyHomeId) {
-        const parsedDate = data.date ? new Date(data.date) : new Date();
-        const dateStr = isNaN(parsedDate.getTime()) ? new Date().toISOString() : parsedDate.toISOString();
+        await completeTask(task.id, {
+          legacyHomeId,
+          title: data.title.trim(),
+          date,
+          cost: data.cost ? Number(data.cost) : undefined,
+          provider,
+          notes: data.notes || undefined,
+        });
+      } else {
+        if (!legacyHomeId) throw new Error("Your home is not ready to save maintenance records. Please refresh and try again.");
         await createLogEntry(legacyHomeId, {
-          title: data.title,
-          date: dateStr,
-          cost: data.cost ? Math.round(parseFloat(data.cost) * 100) : undefined,
-          provider: data.completedBy === "contractor" ? (data.provider || "Contractor") : "DIY (Myself)",
+          title: data.title.trim(),
+          date,
+          cost: data.cost ? Math.round(Number(data.cost) * 100) : undefined,
+          provider,
           notes: data.notes || undefined,
         });
       }
@@ -955,8 +955,8 @@ function AddLogEntryDialog({ isOpen, onClose, homeId, legacyHomeId, task, system
         notes: "",
       });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Could not save log entry.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Could not save log entry", description: error.message, variant: "destructive" });
     },
   });
 
