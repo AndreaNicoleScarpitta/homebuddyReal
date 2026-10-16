@@ -43,6 +43,15 @@ test.describe("Smoke tests", () => {
     await expect(page.locator("body")).toBeVisible();
   });
 
+  test("session and auth discovery reads are never throttled by login attempt limits", async ({ request }) => {
+    for (let i = 0; i < 32; i++) {
+      const session = await request.get("/api/auth/user", { headers: { cookie: "" } });
+      expect(session.status(), "Session reads must never return 429").toBe(401);
+    }
+    const providers = await request.get("/api/auth/providers");
+    expect(providers.status()).toBe(200);
+  });
+
   test("unauthenticated API returns 401", async ({ request }) => {
     // Use a fresh context (no cookies)
     const resp = await request.get("/api/home", {
