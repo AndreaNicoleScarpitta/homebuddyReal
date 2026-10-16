@@ -332,6 +332,8 @@ export async function completeTask(
     title?: string;
     cost?: number;
     notes?: string;
+    date?: string;
+    provider?: string;
   } = {}
 ): Promise<V2Task> {
   const response = await fetch(`/v2/tasks/${taskId}/complete`, {
