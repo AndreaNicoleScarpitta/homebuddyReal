@@ -94,6 +94,12 @@ jobs:
         run: |
           NODE_ENV=production node dist/index.cjs &
           npx wait-on http://localhost:5000/api/health --timeout 30000
+          openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+            -keyout /tmp/homebuddy-ci.key -out /tmp/homebuddy-ci.crt \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null
+          node script/ci-https-proxy.mjs &
+          NODE_TLS_REJECT_UNAUTHORIZED=0 npx wait-on https://localhost:5443/api/health --timeout 30000
           npx playwright test
       - uses: actions/upload-artifact@v4
         if: always()
