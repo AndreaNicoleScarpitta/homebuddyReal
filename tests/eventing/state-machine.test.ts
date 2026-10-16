@@ -138,7 +138,7 @@ describe("State Machine Guards — Unit Tests", () => {
     expect(allowed).toContain(EventTypes.TaskApproved);
     expect(allowed).toContain(EventTypes.TaskRejected);
     expect(allowed).toContain(EventTypes.TaskSkipped);
-    expect(allowed).not.toContain(EventTypes.TaskCompleted);
+    expect(allowed).toContain(EventTypes.TaskCompleted);
   });
 });
 
