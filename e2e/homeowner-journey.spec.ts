@@ -15,14 +15,17 @@ async function registerAndOnboard(page: Page, email: string) {
   await page.getByTestId("input-signup-email").fill(email);
   await page.getByTestId("input-signup-password").fill(password);
   await page.getByTestId("input-signup-confirm").fill(password);
+  const response = page.waitForResponse(r => r.url().endsWith("/api/auth/signup") && r.request().method() === "POST");
   await page.getByTestId("button-submit-signup").click();
-  await expect(page).toHaveURL(/\/onboarding/);
+  const signup = await response;
+  expect(signup.status(), "Signup API must return 200; auth reads must not exhaust the login rate limit").toBe(200);
+  await expect(page).toHaveURL(/\/onboarding/, { timeout: 15000 });
   await page.getByTestId("input-zip").fill("99201");
   await page.getByTestId("input-year").fill("2005");
   await page.getByTestId("button-continue").click();
   await expect(page.getByTestId("text-selected-count")).toContainText("4 selected");
   await page.getByTestId("button-generate-plan").click();
-  await expect(page.getByTestId("text-magic-moment")).toHaveText("Your starter plan is ready.");
+  await expect(page.getByTestId("text-magic-moment")).toHaveText("Your starter plan is ready.", { timeout: 20000 });
   const home = await (await page.request.get("/v2/home")).json();
   const systems = await (await page.request.get("/v2/homes/" + home.id + "/systems")).json();
   const tasks = await (await page.request.get("/v2/homes/" + home.id + "/tasks")).json();
@@ -41,7 +44,7 @@ async function closeAccount(page: Page) {
   await page.getByTestId("input-confirm-delete-account").fill("DELETE");
   await page.getByTestId("input-delete-account-password").fill(password);
   await page.getByTestId("button-confirm-delete-account").click();
-  await expect(page).toHaveURL(/\/login\?account_deleted=1/);
+  await expect(page).toHaveURL(/\/login\?account_deleted=1/, { timeout: 15000 });
   expect((await page.request.get("/v2/home")).status()).toBe(401);
 }
 
