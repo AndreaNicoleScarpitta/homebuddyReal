@@ -25,6 +25,10 @@ import { csrfProtection, registerCsrfRoute } from "./lib/csrf";
 import { registerOpenApiRoute } from "./openapi";
 
 const app = express();
+// Railway terminates TLS at its reverse proxy. Trust the immediate hop (not
+// arbitrary X-Forwarded-For entries), otherwise every visitor is rate-limited
+// as one proxy IP and shared households can exhaust a common login quota.
+if (process.env.NODE_ENV === "production") app.set("trust proxy", 1);
 const httpServer = createServer(app);
 
 declare module "http" {
