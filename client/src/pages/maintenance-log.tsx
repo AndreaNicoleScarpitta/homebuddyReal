@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
-  Plus, 
+  Plus,
+  Copy,
   Wrench, 
   CheckCircle2,
   Clock,
@@ -104,6 +105,7 @@ function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand }: 
   isExpanded: boolean;
   onToggleExpand: () => void;
 }) {
+  const { toast } = useToast();
   const dueDate = task.dueDate ? new Date(task.dueDate) : null;
   const isOverdue = dueDate && isPast(dueDate) && !isToday(dueDate);
   const isDueToday = dueDate && isToday(dueDate);
@@ -235,6 +237,28 @@ function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand }: 
               }`}
               data-testid={`panel-task-details-${task.id}`}
             >
+              <div className="flex items-center gap-2 mb-3 min-w-0">
+                <span className="text-xs text-muted-foreground shrink-0">Task ID</span>
+                <code className="text-xs text-muted-foreground break-all select-all min-w-0" data-testid={`text-task-id-${task.id}`}>{task.id}</code>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 shrink-0"
+                  aria-label="Copy task ID"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(String(task.id));
+                      toast({ title: "Task ID copied" });
+                    } catch {
+                      toast({ title: "Could not copy", description: "Select the task ID and copy it manually.", variant: "destructive" });
+                    }
+                  }}
+                >
+                  <Copy className="h-3 w-3 mr-1" aria-hidden="true" />
+                  Copy
+                </Button>
+              </div>
               {task.description && (
                 <p className="text-sm text-muted-foreground mb-3">{task.description}</p>
               )}
