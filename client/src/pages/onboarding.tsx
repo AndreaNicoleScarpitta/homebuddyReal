@@ -220,6 +220,7 @@ export default function Onboarding() {
     if (!home) {
       try {
         home = await createHomeMutation.mutateAsync({
+          onboarding: true,
           zipCode: basics.zipCode.trim(),
           builtYear: basics.builtYear ? parseInt(basics.builtYear) : undefined,
           sqFt: basics.sqFt ? parseInt(basics.sqFt) : undefined,
