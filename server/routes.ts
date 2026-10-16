@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import bcrypt from "bcryptjs";
+import { eraseUserData, ErasureBlockedError } from "./services/account-erasure";
 import { db } from "./db";
 import { and, eq } from "drizzle-orm";
 import { isAuthenticated } from "./replit_integrations/auth";
@@ -133,12 +135,44 @@ export async function registerRoutes(
   app.delete("/api/user/data", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      logInfo("data.delete", "User requested deletion of all data", { userId });
-      await storage.deleteAllUserData(userId);
-      logInfo("data.delete", "All user data deleted", { userId });
-      res.json({ success: true, message: "All your data has been permanently deleted." });
+      await eraseUserData(userId, "data");
+      logInfo("data.delete", "Home data erased", { userId });
+      return res.json({ success: true, message: "Your HomeBuddy home data was deleted. Your login account remains active." });
     } catch (error) {
+      if (error instanceof ErasureBlockedError) return res.status(error.statusCode).json({ error: error.message });
       return handleApiError(res, "data.delete", error, 500);
+    }
+  });
+
+  // Account closure differs from home-data reset: revoke ALL sessions and
+  // remove the user identity. Never accept a userId from the request body.
+  app.delete("/api/user/account", isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.body?.confirmation !== "DELETE") {
+        return res.status(400).json({ error: 'Type DELETE to confirm account closure.' });
+      }
+      // Local passwords must be re-entered before this irreversible operation.
+      if (req.user.provider === "local") {
+        const password = req.body?.password;
+        if (typeof password !== "string" || !req.user.passwordHash ||
+          !(await bcrypt.compare(password, req.user.passwordHash))) {
+          return res.status(403).json({ error: "Your current password is required to delete your account." });
+        }
+      }
+      const userId = req.user.id;
+      await eraseUserData(userId, "account");
+      // The erasure transaction has removed every session row for this user.
+      // Destroy the in-memory session and clear the browser's session cookie.
+      req.session.destroy((err: Error | null) => {
+        if (err) console.error("Post-erasure session cleanup error:", err.message);
+      });
+      res.clearCookie("connect.sid", { path: "/" });
+      res.clearCookie("csrf-token", { path: "/" });
+      logInfo("account.delete", "Account closed and sessions revoked", { userId });
+      return res.json({ success: true, message: "Your HomeBuddy account was closed." });
+    } catch (error) {
+      if (error instanceof ErasureBlockedError) return res.status(error.statusCode).json({ error: error.message });
+      return handleApiError(res, "account.delete", error, 500);
     }
   });
 

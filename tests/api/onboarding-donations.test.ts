@@ -25,7 +25,7 @@ describe.skipIf(!enabled)("quick onboarding starter tasks and donation-only bill
   it("creates a system and visible starter tasks atomically for a new V2 home", async () => {
     const home = await fetch(`${base}/v2/homes`, {
       method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
-      body: JSON.stringify({ zipCode: "99201", type: "Single Family Home" }),
+      body: JSON.stringify({ zipCode: "99201", type: "Single Family Home", onboarding: true }),
     });
     expect(home.status).toBe(201);
     homeId = (await home.json()).id;
@@ -54,16 +54,52 @@ describe.skipIf(!enabled)("quick onboarding starter tasks and donation-only bill
       method: "POST", headers: { ...headers, "Idempotency-Key": key },
       body: JSON.stringify({ name: "Heating & Cooling", category: "HVAC", source: "onboarding-quickpick" }),
     });
-    expect(replay.status).toBe(201);
+    expect(replay.status).toBe(200);
     const afterReplay = await fetch(`${base}/v2/homes/${homeId}/tasks`, {
       headers: { "x-test-user-id": uid },
     });
     expect((await afterReplay.json()).length).toBe(templates.length);
   });
 
-  it("restores tasks for an older quick-onboarding system with no task projection", async () => {
-    const homeResponse = await fetch(`${base}/v2/homes`, {
+  it("deduplicates a home and four quick-pick systems even with new request keys", async () => {
+    const newHomeId = homeId;
+    const retryHome = await fetch(`${base}/v2/homes`, {
       method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ zipCode: "99201", type: "Single Family Home", onboarding: true }),
+    });
+    expect(retryHome.status).toBe(200);
+    expect((await retryHome.json()).id).toBe(newHomeId);
+    const categories = ["HVAC", "Roof", "Electrical", "Plumbing"];
+    for (const category of categories) {
+      const response = await fetch(`${base}/v2/homes/${newHomeId}/systems`, {
+        method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ name: category, category, source: "onboarding-quickpick" }),
+      });
+      expect([200, 201]).toContain(response.status);
+    }
+    const systems = await fetch(`${base}/v2/homes/${newHomeId}/systems`, {
+      headers: { "x-test-user-id": uid },
+    });
+    expect(systems.status).toBe(200);
+    expect((await systems.json()).length).toBe(4);
+
+    const tasks = await fetch(`${base}/v2/homes/${newHomeId}/tasks`, {
+      headers: { "x-test-user-id": uid },
+    });
+    const records = await tasks.json() as Array<{ id: string; title: string; category: string }>;
+    expect(records).toHaveLength(15);
+    expect(new Set(records.map(t => t.id)).size).toBe(15);
+    expect(records.filter(t => t.category === "Electrical")).toHaveLength(3);
+    expect(records.filter(t => t.category === "Plumbing")).toHaveLength(4);
+  });
+
+  it("restores tasks for an older quick-onboarding system with no task projection", async () => {
+    const repairUid = `onboarding-repair-${crypto.randomUUID()}`;
+    await db.insert(users).values({ id: repairUid, email: `${repairUid}@example.test` });
+    try {
+    const repairHeaders = { ...headers, "x-test-user-id": repairUid };
+    const homeResponse = await fetch(`${base}/v2/homes`, {
+      method: "POST", headers: { ...repairHeaders, "Idempotency-Key": crypto.randomUUID() },
       body: JSON.stringify({ zipCode: "99202", type: "Single Family Home" }),
     });
     expect(homeResponse.status).toBe(201);
@@ -78,24 +114,45 @@ describe.skipIf(!enabled)("quick onboarding starter tasks and donation-only bill
         ${JSON.stringify({ name: "Roof", category: "Roof", source: "onboarding-quickpick" })}::jsonb)
     `);
     const repair = await fetch(`${base}/v2/homes/${oldHomeId}/starter-tasks/repair`, {
-      method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
+      method: "POST", headers: { ...repairHeaders, "Idempotency-Key": crypto.randomUUID() },
     });
     expect(repair.status).toBe(200);
     expect(await repair.json()).toEqual({ created: getTemplatesForCategory("Roof").length, skipped: false });
 
     const loaded = await fetch(`${base}/v2/homes/${oldHomeId}/tasks`, {
-      headers: { "x-test-user-id": uid },
+      headers: { "x-test-user-id": repairUid },
     });
     expect(loaded.status).toBe(200);
     const tasks = await loaded.json() as Array<{ relatedSystemId: string }>;
     expect(tasks).toHaveLength(getTemplatesForCategory("Roof").length);
     expect(tasks.every(t => t.relatedSystemId === oldSystemId)).toBe(true);
 
+    // A second system is missing tasks while the first is already populated:
+    // repair must not skip the entire home just because SOME tasks exist.
+    const secondSystem = crypto.randomUUID();
+    await db.execute(sql`
+      INSERT INTO projection_system (system_id, home_id, system_type, attrs)
+      VALUES (${secondSystem}, ${oldHomeId}, 'Electrical',
+        ${JSON.stringify({ name: "Electrical", category: "Electrical", source: "onboarding-quickpick" })}::jsonb)
+    `);
+    const partial = await fetch(`${base}/v2/homes/${oldHomeId}/starter-tasks/repair`, {
+      method: "POST", headers: { ...repairHeaders, "Idempotency-Key": crypto.randomUUID() },
+    });
+    expect(partial.status).toBe(200);
+    expect(await partial.json()).toEqual({ created: getTemplatesForCategory("Electrical").length, skipped: false });
+    const both = await fetch(`${base}/v2/homes/${oldHomeId}/tasks`, {
+      headers: { "x-test-user-id": repairUid },
+    });
+    expect((await both.json()).length).toBe(7);
+
     const again = await fetch(`${base}/v2/homes/${oldHomeId}/starter-tasks/repair`, {
-      method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
+      method: "POST", headers: { ...repairHeaders, "Idempotency-Key": crypto.randomUUID() },
     });
     expect(again.status).toBe(200);
     expect(await again.json()).toEqual({ created: 0, skipped: true });
+    } finally {
+      await db.delete(users).where(eq(users.id, repairUid));
+    }
   });
 
   it("does not recreate tasks when repairing an already populated plan", async () => {

@@ -48,6 +48,7 @@ import {
   type InsertHomeDocument,
 } from "@shared/schema";
 import { db } from "./db";
+import { eraseUserData } from "./services/account-erasure";
 import { eq, and, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -472,105 +473,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAllUserData(userId: string): Promise<void> {
-    const uid = String(userId);
-    let spCounter = 0;
-    await db.transaction(async (tx) => {
-      const safeExec = async (fn: () => Promise<any>) => {
-        const spName = `sp_del_${++spCounter}`;
-        await tx.execute(sql.raw(`SAVEPOINT ${spName}`));
-        try {
-          await fn();
-          await tx.execute(sql.raw(`RELEASE SAVEPOINT ${spName}`));
-        } catch {
-          await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${spName}`));
-        }
-      };
-
-      const userHomes = await tx.select().from(homes).where(eq(homes.userId, uid));
-
-      for (const home of userHomes) {
-        await safeExec(() => tx.delete(chatMessages).where(eq(chatMessages.homeId, home.id)));
-        await safeExec(() => tx.delete(maintenanceTasks).where(eq(maintenanceTasks.homeId, home.id)));
-        await safeExec(() => tx.delete(maintenanceLogEntries).where(eq(maintenanceLogEntries.homeId, home.id)));
-        await safeExec(() => tx.delete(systems).where(eq(systems.homeId, home.id)));
-
-        let homeFunds: any[] = [];
-        const spf = `sp_del_${++spCounter}`;
-        await tx.execute(sql.raw(`SAVEPOINT ${spf}`));
-        try {
-          homeFunds = await tx.select().from(funds).where(eq(funds.homeId, home.id));
-          await tx.execute(sql.raw(`RELEASE SAVEPOINT ${spf}`));
-        } catch {
-          await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${spf}`));
-          homeFunds = [];
-        }
-        for (const fund of homeFunds) {
-          await safeExec(() => tx.delete(expenses).where(eq(expenses.fundId, fund.id)));
-          await safeExec(() => tx.delete(fundAllocations).where(eq(fundAllocations.fundId, fund.id)));
-        }
-        await safeExec(() => tx.delete(funds).where(eq(funds.homeId, home.id)));
-
-        await safeExec(() => tx.execute(sql`
-          DELETE FROM inspection_findings
-          WHERE report_id IN (SELECT id FROM inspection_reports WHERE home_id = ${home.id})
-        `));
-        await safeExec(() => tx.delete(inspectionReports).where(eq(inspectionReports.homeId, home.id)));
-        await safeExec(() => tx.delete(contractorAppointments).where(eq(contractorAppointments.homeId, home.id)));
-      }
-
-      let v2HomeIds: string[] = [];
-      const spv = `sp_del_${++spCounter}`;
-      await tx.execute(sql.raw(`SAVEPOINT ${spv}`));
-      try {
-        const v2HomeRows = await tx.execute(sql`
-          SELECT home_id FROM projection_home WHERE user_id = ${uid}
-        `);
-        v2HomeIds = v2HomeRows.rows.map((r: any) => r.home_id as string);
-        await tx.execute(sql.raw(`RELEASE SAVEPOINT ${spv}`));
-      } catch {
-        await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${spv}`));
-        v2HomeIds = [];
-      }
-
-      for (const homeId of v2HomeIds) {
-        await safeExec(() => tx.execute(sql`
-          DELETE FROM projection_chat_message
-          WHERE session_id IN (SELECT session_id FROM projection_chat_session WHERE home_id = ${homeId})
-        `));
-        await safeExec(() => tx.execute(sql`DELETE FROM projection_chat_session WHERE home_id = ${homeId}`));
-        await safeExec(() => tx.execute(sql`DELETE FROM projection_task WHERE home_id = ${homeId}`));
-        await safeExec(() => tx.execute(sql`
-          DELETE FROM projection_finding
-          WHERE report_id IN (SELECT report_id FROM projection_report WHERE home_id = ${homeId})
-        `));
-        await safeExec(() => tx.execute(sql`DELETE FROM projection_report WHERE home_id = ${homeId}`));
-        await safeExec(() => tx.execute(sql`DELETE FROM projection_system WHERE home_id = ${homeId}`));
-        await safeExec(() => tx.execute(sql`DELETE FROM projection_assistant_action WHERE home_id = ${homeId}`));
-        await safeExec(() => tx.execute(sql`DELETE FROM projection_notification_pref WHERE home_id = ${homeId}`));
-        await safeExec(() => tx.execute(sql`DELETE FROM projection_circuit_map WHERE home_id = ${homeId}`));
-        await safeExec(() => tx.execute(sql`DELETE FROM projection_home WHERE home_id = ${homeId}`));
-      }
-
-      await safeExec(() => tx.execute(sql`ALTER TABLE event_log DISABLE TRIGGER trg_event_log_immutable`));
-      await safeExec(() => tx.execute(sql`DELETE FROM event_log WHERE actor_id = ${uid}`));
-      for (const homeId of v2HomeIds) {
-        await safeExec(() => tx.execute(sql`DELETE FROM event_log WHERE aggregate_id = ${homeId}`));
-        await safeExec(() => tx.execute(sql`
-          DELETE FROM event_log WHERE aggregate_id IN (
-            SELECT DISTINCT aggregate_id FROM event_log
-            WHERE data->>'homeId' = ${homeId}
-          )
-        `));
-      }
-      await safeExec(() => tx.execute(sql`ALTER TABLE event_log ENABLE TRIGGER trg_event_log_immutable`));
-
-      for (const homeId of v2HomeIds) {
-        await safeExec(() => tx.execute(sql`DELETE FROM job_queue WHERE data->>'homeId' = ${homeId}`));
-      }
-
-      await tx.delete(homes).where(eq(homes.userId, uid));
-      await safeExec(() => tx.delete(notificationPreferences).where(eq(notificationPreferences.userId, uid)));
-    });
+    await eraseUserData(userId, "data");
   }
 
   // Warranties

@@ -31,7 +31,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Home } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createHome, createSystem, getTasks } from "@/lib/api";
+import { createHome, createSystem, getHome, getSystems, getTasks, repairStarterTasks } from "@/lib/api";
 import type { V2Home } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent, trackSlugPageView } from "@/lib/analytics";
@@ -59,9 +59,55 @@ export default function Onboarding() {
   const createdCategories = useRef(new Set<string>());
   const [systemError, setSystemError] = useState<string | null>(null);
   const [createdSystemsCount, setCreatedSystemsCount] = useState(0);
+  const [resuming, setResuming] = useState(true);
+  const submissionInFlight = useRef(false);
 
   useEffect(() => {
     trackSlugPageView(PAGE_SLUGS.onboarding);
+  }, []);
+
+  // Recover from refresh or a lost POST response using database state, not
+  // ephemeral React mutation state. Only the selected category IDs (never an
+  // address or credentials) are cached in this tab for interrupted onboarding.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const home = await getHome();
+        if (!active || !home?.id) return;
+        setCreatedHome(home);
+        setBasics({
+          zipCode: home.zipCode || "",
+          builtYear: home.builtYear ? String(home.builtYear) : "",
+          sqFt: home.sqFt ? String(home.sqFt) : "",
+        });
+        const systems = await getSystems(home.id);
+        if (!active) return;
+        const saved = systems.filter(system => system.source === "onboarding-quickpick");
+        createdCategories.current = new Set(saved.map(system => system.category));
+        setCreatedSystemsCount(saved.length);
+        const selection = sessionStorage.getItem("homebuddy:onboarding-selection");
+        if (selection) {
+          try {
+            const parsed = JSON.parse(selection);
+            if (Array.isArray(parsed)) {
+              setSelectedSystems(new Set(parsed.filter(
+                value => typeof value === "string" &&
+                  SYSTEM_CHOICES.some(choice => choice.category === value)
+              )));
+            }
+          } catch { /* Invalid stale selection: use persisted systems. */ }
+        } else if (saved.length) {
+          setSelectedSystems(new Set(saved.map(system => system.category)));
+        }
+        setStep("systems-quickpick");
+      } catch (err) {
+        if (active) setSystemError(err instanceof Error ? err.message : "Could not resume setup.");
+      } finally {
+        if (active) setResuming(false);
+      }
+    })();
+    return () => { active = false; };
   }, []);
 
   // ---------------------------------------------------------------------
@@ -156,11 +202,15 @@ export default function Onboarding() {
       const next = new Set(prev);
       if (next.has(category)) next.delete(category);
       else next.add(category);
+      sessionStorage.setItem("homebuddy:onboarding-selection", JSON.stringify(Array.from(next)));
       return next;
     });
   }, []);
 
   const handleSystemsNext = useCallback(async () => {
+    if (submissionInFlight.current || resuming) return;
+    submissionInFlight.current = true;
+    try {
     trackEvent("onboarding_step", "onboarding", "systems_selected", selectedSystems.size);
 
     // We create the home lazily here rather than on house-basics → systems
@@ -170,6 +220,7 @@ export default function Onboarding() {
     if (!home) {
       try {
         home = await createHomeMutation.mutateAsync({
+          onboarding: true,
           zipCode: basics.zipCode.trim(),
           builtYear: basics.builtYear ? parseInt(basics.builtYear) : undefined,
           sqFt: basics.sqFt ? parseInt(basics.sqFt) : undefined,
@@ -203,12 +254,37 @@ export default function Onboarding() {
         setSystemError(`Couldn't save: ${result.failed.join(", ")}. Try again to finish setup.`);
         return;
       }
+      // Verify persisted systems AND their starter tasks before advertising
+      // success. Repair only missing templates, never overwrite user tasks.
+      await repairStarterTasks(home.id);
+      const [persistedSystems, persistedTasks] = await Promise.all([
+        getSystems(home.id), getTasks(home.id),
+      ]);
+      const found = persistedSystems.filter(system =>
+        system.source === "onboarding-quickpick" && selectedSystems.has(system.category)
+      );
+      const missing = Array.from(selectedSystems).filter(category =>
+        !found.some(system => system.category === category &&
+          persistedTasks.some(task => task.relatedSystemId === system.id &&
+            task.createdFrom === "best-practice"))
+      );
+      if (missing.length || !persistedTasks.length) {
+        setSystemError("Some maintenance tasks are missing. Please retry setup.");
+        return;
+      }
+      createdCategories.current = new Set(found.map(system => system.category));
+      setCreatedSystemsCount(found.length);
+      queryClient.setQueryData(["systems", home.id], persistedSystems);
+      queryClient.setQueryData(["tasks", home.id], persistedTasks);
       await queryClient.invalidateQueries({ queryKey: ["tasks", home.id] });
       setStep("first-tasks");
     } catch (err) {
       setSystemError(err instanceof Error ? err.message : "Unable to create your systems. Please try again.");
     }
-  }, [createdHome, basics, selectedSystems, createHomeMutation, createSystemsMutation, toast]);
+    } finally {
+      submissionInFlight.current = false;
+    }
+  }, [createdHome, basics, selectedSystems, createHomeMutation, createSystemsMutation, toast, resuming, queryClient]);
 
   const handleUploadInspectionFork = useCallback(() => {
     trackEvent("onboarding_step", "onboarding", "inspection_fork_chosen");
@@ -216,13 +292,19 @@ export default function Onboarding() {
   }, []);
 
   const handleGoToDashboard = useCallback(() => {
+    if (!tasksQuery.data?.length || tasksQuery.isError) {
+      setSystemError("Your maintenance plan is not ready. Return to systems and retry.");
+      setStep("systems-quickpick");
+      return;
+    }
+    sessionStorage.removeItem("homebuddy:onboarding-selection");
     trackEvent("onboarding_step", "onboarding", "done_to_dashboard");
     toast({
       title: "Home setup complete",
       description: "Your systems and available maintenance tasks are saved.",
     });
     setLocation("/dashboard");
-  }, [setLocation, toast]);
+  }, [setLocation, toast, tasksQuery.data, tasksQuery.isError]);
 
   const handleGoToInspectionsUpload = useCallback(() => {
     trackEvent("onboarding_step", "onboarding", "inspection_upload_redirect");
@@ -233,6 +315,8 @@ export default function Onboarding() {
   // fork is intentionally not counted — it's a branch, not a gate.
   const progressIndex =
     step === "house-basics" ? 0 : step === "systems-quickpick" ? 1 : 2;
+
+  if (resuming) return <div className="min-h-screen flex items-center justify-center text-muted-foreground" role="status">Restoring your home setup…</div>;
 
   return (
     <div className="min-h-screen bg-background flex">

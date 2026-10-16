@@ -184,6 +184,7 @@ export function StepFirstTasks({
         <Button
           className="w-full h-12 font-medium"
           onClick={onNext}
+          disabled={isLoading || hasError || tasks.length === 0}
           data-testid="button-go-to-dashboard"
         >
           Open Overview
@@ -194,6 +195,7 @@ export function StepFirstTasks({
           variant="outline"
           className="w-full h-11 font-medium"
           onClick={onUploadInspection}
+          disabled={isLoading || hasError || tasks.length === 0}
           data-testid="button-upload-inspection"
         >
           <Upload className="mr-2 h-4 w-4" />

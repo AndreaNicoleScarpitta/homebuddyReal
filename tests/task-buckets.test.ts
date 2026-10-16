@@ -41,6 +41,20 @@ describe("shared Overview and Plan task categorization", () => {
     );
   });
 
+  it("does not count skipped, rejected or done-state tasks as open", () => {
+    const tasks = [
+      task("skipped", { status: "skipped", state: "skipped", urgency: "now" }),
+      task("rejected", { state: "rejected", urgency: "now" }),
+      task("done-v2", { state: "done", urgency: "now" }),
+      task("active", { state: "approved", urgency: "now" }),
+    ];
+    const buckets = categorizeTasks(tasks, now);
+    expect(tasks.filter(isTaskOpen).map(t => t.id)).toEqual(["active"]);
+    expect(buckets.due.map(t => t.id)).toEqual(["active"]);
+    expect(buckets.completed.map(t => t.id)).toEqual(["done-v2"]);
+    expect(buckets.archived.map(t => t.id)).toEqual(["skipped", "rejected"]);
+  });
+
   it("separates two urgent tasks from thirteen upcoming without inflating totals", () => {
     const tasks = [
       ...Array.from({ length: 2 }, (_, i) => task(`urgent-${i}`, { urgency: "now" })),

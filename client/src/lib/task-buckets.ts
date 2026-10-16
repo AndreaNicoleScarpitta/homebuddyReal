@@ -3,7 +3,8 @@ import type { V2Task } from "@/lib/api";
 
 /** A task is open unless either V2 lifecycle field explicitly marks it complete. */
 export function isTaskOpen(task: V2Task): boolean {
-  return task.status !== "completed" && task.state !== "completed";
+  return !["completed", "skipped"].includes(task.status) &&
+    !["completed", "done", "skipped", "rejected"].includes(task.state);
 }
 
 /**
@@ -18,10 +19,15 @@ export function categorizeTasks(tasks: V2Task[], now = new Date()) {
   const due: V2Task[] = [];
   const past_due: V2Task[] = [];
   const completed: V2Task[] = [];
+  const archived: V2Task[] = [];
 
   for (const task of tasks) {
     if (!isTaskOpen(task)) {
-      completed.push(task);
+      if (task.status === "completed" || task.state === "completed" || task.state === "done") {
+        completed.push(task);
+      } else {
+        archived.push(task);
+      }
       continue;
     }
 
@@ -55,5 +61,5 @@ export function categorizeTasks(tasks: V2Task[], now = new Date()) {
     (a.dueDate ? new Date(a.dueDate).getTime() : 0)
   );
 
-  return { upcoming, due, past_due, completed };
+  return { upcoming, due, past_due, completed, archived };
 }

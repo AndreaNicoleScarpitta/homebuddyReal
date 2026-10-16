@@ -245,11 +245,18 @@ async function seedStarterTasks(
 ): Promise<number> {
   const templates = getTemplatesForCategory(category);
   const now = new Date();
+  let created = 0;
   for (let index = 0; index < templates.length; index++) {
     const template = templates[index];
+    const existing = await tx.execute(sql`
+      SELECT 1 FROM projection_task
+      WHERE home_id = ${homeId} AND system_id = ${systemId} AND title = ${template.title}
+      LIMIT 1
+    `);
+    if (existing.rows.length) continue;
     const due = new Date(now);
     due.setMonth(due.getMonth() + template.monthsUntilDue);
-    await appendAndApply(tx, {
+    const seeded = await appendAndApply(tx, {
       aggregateType: "task",
       aggregateId: crypto.randomUUID(),
       expectedVersion: 0,
@@ -271,8 +278,9 @@ async function seedStarterTasks(
       meta: {}, actor,
       idempotencyKey: `${keyPrefix}:starter:${index}`,
     });
+    if (!seeded.deduped) created += 1;
   }
-  return templates.length;
+  return created;
 }
 
 // ---------------------------------------------------------------------------
@@ -445,6 +453,29 @@ v2Router.post("/homes", async (req: Request, res: Response) => {
 
     let legacyId: number | null = null;
     const result = await db.transaction(async (tx) => {
+      // Serialize this user's home creation. This prevents two simultaneous
+      // taps (or a lost HTTP response followed by retry) creating two homes.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${userId}))`);
+      // Onboarding is a single-home bootstrap. Ordinary /homes calls must
+      // still support users deliberately creating additional homes.
+      const existing = req.body.onboarding === true
+        ? await tx.execute(sql`
+          SELECT home_id, legacy_id, attrs FROM projection_home
+          WHERE user_id = ${userId} AND attrs->>'onboardingSource' = 'quick-onboarding'
+          LIMIT 1
+        `)
+        : await tx.execute(sql`
+          SELECT ph.home_id, ph.legacy_id, ph.attrs FROM event_log e
+          JOIN projection_home ph ON ph.home_id = e.aggregate_id::text
+          WHERE e.actor_id = ${userId} AND e.aggregate_type = 'home'
+            AND e.idempotency_key = ${req.idempotencyKey!}
+          LIMIT 1
+        `);
+      if (existing.rows.length) {
+        const current = existing.rows[0] as { home_id: string; legacy_id: number; attrs: Record<string, unknown> };
+        return { existing: true, id: current.home_id, legacyId: current.legacy_id,
+          userId, ...snakeToCamel(current.attrs) };
+      }
       const legacyResult = await tx.execute(sql`
         INSERT INTO homes (user_id, address, address_line_1, address_line_2, city, state, zip_code, built_year, sq_ft, type)
         VALUES (
@@ -463,7 +494,7 @@ v2Router.post("/homes", async (req: Request, res: Response) => {
       `);
       legacyId = (legacyResult.rows[0] as { id: number }).id;
 
-      return appendAndApply(tx, {
+      const event = await appendAndApply(tx, {
         aggregateType: "home",
         aggregateId: homeId,
         expectedVersion: 0,
@@ -476,26 +507,18 @@ v2Router.post("/homes", async (req: Request, res: Response) => {
             builtYear,
             sqFt,
             type: req.body.type,
+            ...(req.body.onboarding === true ? { onboardingSource: "quick-onboarding" } : {}),
           },
         },
         meta: { userId, legacyId },
         actor,
         idempotencyKey: req.idempotencyKey!,
       });
+      return { existing: false, id: homeId, legacyId, userId, city, state,
+        zipCode, builtYear, sqFt, type: req.body.type, ...event };
     });
 
-    res.status(201).json({
-      id: homeId,
-      legacyId,
-      userId,
-      city,
-      state,
-      zipCode,
-      builtYear,
-      sqFt,
-      type: req.body.type,
-      ...result,
-    });
+    res.status(result.existing ? 200 : 201).json(result);
   } catch (err) {
     handleError(res, err);
   }
@@ -625,6 +648,24 @@ v2Router.post("/homes/:homeId/systems", async (req: Request, res: Response) => {
     // The former implementation depended on a missing legacy system ID and
     // silently skipped task generation for newly onboarded V2 systems.
     const result = await db.transaction(async (tx) => {
+      // Serialize system quick-picks for one home across tabs and retries.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${homeId}))`);
+      if (attrs.source === "onboarding-quickpick") {
+        const existing = await tx.execute(sql`
+          SELECT system_id FROM projection_system
+          WHERE home_id = ${homeId} AND system_type = ${category}
+            AND attrs->>'source' = 'onboarding-quickpick'
+          LIMIT 1
+        `);
+        if (existing.rows.length) {
+          const currentId = String((existing.rows[0] as any).system_id);
+          // Repair incomplete historical starter batches without generating
+          // duplicates. This shares the same transaction and home lock.
+          await seedStarterTasks(tx, actor, homeId, currentId, category,
+            `repair:${homeId}:${currentId}`);
+          return { systemId: currentId, event: { deduped: true } };
+        }
+      }
       const systemResult = await appendAndApply(tx, {
         aggregateType: "system",
         aggregateId: systemId,
@@ -640,11 +681,13 @@ v2Router.post("/homes/:homeId/systems", async (req: Request, res: Response) => {
       if (!systemResult.deduped) {
         await seedStarterTasks(tx, actor, homeId, systemId, category, req.idempotencyKey!);
       }
-      return systemResult;
+      return { systemId, event: systemResult };
     });
 
     const flatAttrs = snakeToCamel(attrs);
-    res.status(201).json({ id: systemId, homeId, ...flatAttrs, ...result });
+    res.status(result.event.deduped ? 200 : 201).json({
+      id: result.systemId, homeId, ...flatAttrs, ...result.event,
+    });
   } catch (err) {
     handleError(res, err);
   }
@@ -750,8 +793,6 @@ v2Router.post("/homes/:homeId/starter-tasks/repair", async (req: Request, res: R
     const actor = getActor(req);
     const result = await db.transaction(async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${homeId}))`);
-      const existing = await tx.execute(sql`SELECT 1 FROM projection_task WHERE home_id = ${homeId} LIMIT 1`);
-      if (existing.rows.length) return { created: 0, skipped: true };
       const systems = await tx.execute(sql`
         SELECT system_id, system_type, attrs FROM projection_system
         WHERE home_id = ${homeId} AND attrs->>'source' = 'onboarding-quickpick'
@@ -762,7 +803,7 @@ v2Router.post("/homes/:homeId/starter-tasks/repair", async (req: Request, res: R
         created += await seedStarterTasks(tx, actor, homeId, row.system_id, category,
           `repair:${homeId}:${row.system_id}`);
       }
-      return { created, skipped: false };
+      return { created, skipped: created === 0 };
     });
     return res.json(result);
   } catch (err) {

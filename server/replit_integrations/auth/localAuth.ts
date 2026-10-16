@@ -23,6 +23,7 @@ import { db } from "../../db";
 import { users } from "@shared/models/auth";
 import { and, eq, gt } from "drizzle-orm";
 import { sendWelcomeEmail, sendPasswordResetEmail } from "../../lib/email";
+import { isFeatureEnabled } from "../../lib/env-validation";
 import { sanitizeUser as sanitize } from "./sanitize";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -228,9 +229,17 @@ export function registerLocalAuthRoutes(app: Express) {
         return res.status(400).json({ error: "Valid email required" });
       }
 
+      // An unconfigured mail provider must never look like a successfully
+      // sent reset message. Return the same status for EVERY address.
+      if (!isFeatureEnabled("email")) {
+        return res.status(503).json({
+          error: "Password recovery is temporarily unavailable. Please contact support.",
+        });
+      }
+
       const user = await authStorage.getUserByEmail(email);
 
-      // Always respond the same way — don't reveal whether the account exists
+      // Do not reveal whether the email address exists.
       if (!user || !user.passwordHash) {
         return res.json({ success: true });
       }
@@ -243,8 +252,13 @@ export function registerLocalAuthRoutes(app: Express) {
       // Use only env-configured base URL — never trust request Host header
       const baseUrl = getBaseUrl(req);
       const resetUrl = `${baseUrl}/reset-password?token=${rawToken}`;
-      sendPasswordResetEmail(email, user.firstName, resetUrl).catch(() => {});
-
+      // Await actual provider acceptance. Do not silently swallow errors.
+      // A generic response avoids exposing account existence by response body.
+      const accepted = await sendPasswordResetEmail(email, user.firstName, resetUrl);
+      if (!accepted) {
+        // Avoid a differentiated response that reveals registered email addresses.
+        console.error("Password reset email delivery failed; check Resend status");
+      }
       res.json({ success: true });
     } catch (err) {
       console.error("Forgot-password error:", err);
