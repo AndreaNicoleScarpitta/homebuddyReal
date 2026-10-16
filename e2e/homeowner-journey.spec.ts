@@ -38,7 +38,7 @@ async function registerAndOnboard(page: Page, email: string) {
   expect(tasks).toHaveLength(15);
   expect(new Set(tasks.map((t: {id: string}) => t.id)).size).toBe(15);
   expect(tasks.filter((t: {urgency: string}) => t.urgency === "now")).toHaveLength(2);
-  await page.getByTestId("task-list").getByTestId(/^button-expand-task-/).first().click();
+  await page.getByTestId("task-list").getByTestId(/^button-expand-task-/).first().locator("p").first().click();
   await expect(page.getByTestId("quick-guide-2")).toBeVisible();
   await expect(page.getByText("Task ID", { exact: true })).toHaveCount(0);
   await page.getByTestId("quick-guide-2").getByRole("button", { name: "Got it", exact: true }).click();
