@@ -373,6 +373,8 @@ export default function MaintenanceLog() {
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [selectedTask, setSelectedTask] = useState<V2Task | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterTab>(() => {
+    const requested = new URLSearchParams(window.location.search).get("filter");
+    if (requested && ["upcoming", "due", "past_due", "completed"].includes(requested)) return requested as FilterTab;
     try {
       const saved = sessionStorage.getItem(`homebuddy:plan-filter:${user?.id}`);
       if (saved && ["upcoming", "due", "past_due", "completed"].includes(saved)) return saved as FilterTab;

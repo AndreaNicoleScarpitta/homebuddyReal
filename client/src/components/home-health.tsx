@@ -208,7 +208,7 @@ export function HomeHealth({
   // One semantic link keeps the entire status card keyboard and touch accessible.
   return tier === "needs-attention" ? (
     <Link
-      href="/maintenance-log"
+      href={overdueTasksCount > 0 ? "/maintenance-log?filter=past_due" : "/maintenance-log?filter=due"}
       className="group block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
       aria-label="View maintenance tasks in Plan"
       data-testid="link-needs-attention-card"

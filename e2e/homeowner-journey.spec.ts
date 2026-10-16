@@ -23,9 +23,14 @@ async function registerAndOnboard(page: Page, email: string) {
   await page.getByTestId("input-zip").fill("99201");
   await page.getByTestId("input-year").fill("2005");
   await page.getByTestId("button-continue").click();
+  await expect(page.getByTestId("text-selected-count")).toContainText("0 selected");
+  for (const category of ["hvac", "plumbing", "electrical", "roof"]) {
+    await page.getByTestId(`chip-system-${category}`).click();
+  }
   await expect(page.getByTestId("text-selected-count")).toContainText("4 selected");
   await page.getByTestId("button-generate-plan").click();
-  await expect(page.getByTestId("text-magic-moment")).toHaveText("Your starter plan is ready.", { timeout: 20000 });
+  await expect(page).toHaveURL(/maintenance-log/, { timeout: 20000 });
+  await expect(page.getByTestId("quick-guide-1")).toBeVisible();
   const home = await (await page.request.get("/v2/home")).json();
   const systems = await (await page.request.get("/v2/homes/" + home.id + "/systems")).json();
   const tasks = await (await page.request.get("/v2/homes/" + home.id + "/tasks")).json();
@@ -33,8 +38,13 @@ async function registerAndOnboard(page: Page, email: string) {
   expect(tasks).toHaveLength(15);
   expect(new Set(tasks.map((t: {id: string}) => t.id)).size).toBe(15);
   expect(tasks.filter((t: {urgency: string}) => t.urgency === "now")).toHaveLength(2);
-  await page.getByTestId("button-go-to-dashboard").click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await page.getByTestId("task-list").getByTestId(/^button-expand-task-/).first().click();
+  await expect(page.getByTestId("quick-guide-2")).toBeVisible();
+  await expect(page.getByText("Task ID", { exact: true })).toHaveCount(0);
+  await page.getByTestId("quick-guide-2").getByRole("button", { name: "Got it", exact: true }).click();
+  await page.getByTestId("quick-guide-3").getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByTestId("quick-guide-3")).toHaveCount(0);
+  await expect(page).toHaveURL(/maintenance-log/);
   return { home, systems, tasks };
 }
 
