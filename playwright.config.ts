@@ -11,7 +11,8 @@ export default defineConfig({
   timeout: 30_000,
 
   use: {
-    baseURL: "http://localhost:5000",
+    baseURL: process.env.CI ? "https://localhost:5443" : "http://localhost:5000",
+    ignoreHTTPSErrors: !!process.env.CI,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
