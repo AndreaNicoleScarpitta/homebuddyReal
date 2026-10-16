@@ -182,6 +182,7 @@ export async function getHome(): Promise<V2Home | null> {
  */
 export async function createHome(data: {
   zipCode: string;
+  onboarding?: boolean;
   addressLine1?: string;
   addressLine2?: string;
   city?: string;
