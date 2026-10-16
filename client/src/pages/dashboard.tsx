@@ -1,11 +1,9 @@
 import { Layout } from "@/components/layout";
 import { HomeHealth } from "@/components/home-health";
-import { MaintenanceCard } from "@/components/maintenance-card";
 import { SwipeableTask } from "@/components/swipeable-task";
 import { AddSystemWizard } from "@/components/add-system-wizard";
 import { SystemsSummary } from "@/components/systems-summary";
 import { OnboardingTour, useTourState } from "@/components/onboarding-tour";
-import { ContractorSection } from "@/components/contractor-section";
 import { RiskCard } from "@/components/intelligence/risk-card";
 import { MissingDataPrompts } from "@/components/intelligence/missing-data-prompt";
 import { Card, CardContent } from "@/components/ui/card";

@@ -57,6 +57,10 @@ for (const width of [320, 375, 390, 1440]) {
     await page.goto("/maintenance-log");
     await expect(page.getByTestId("text-due-count")).toHaveText("2");
     await expect(page.getByTestId("text-upcoming-count")).toHaveText("13");
+    // Plan must not promote contractor search/quotes/scheduling that the task cards no longer offer.
+    await expect(page.locator('section[aria-label="Contractor assistance"]')).toHaveCount(0);
+    await expect(page.getByText(/tasks? need a contractor/i)).toHaveCount(0);
+    await expect(page.getByText(/search, quote, and schedule all from the card/i)).toHaveCount(0);
     await page.reload();
     await expect(page.getByTestId("text-upcoming-count")).toHaveText("13");
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);

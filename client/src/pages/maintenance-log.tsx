@@ -1,6 +1,5 @@
 import { Layout } from "@/components/layout";
 import { SwipeableTask } from "@/components/swipeable-task";
-import { ContractorSection } from "@/components/contractor-section";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -639,11 +638,6 @@ export default function MaintenanceLog() {
           })}
         </div>
 
-        {tasks.some(t => t.diyLevel === "Pro-Only" && t.status !== "completed") && home && (
-          <section className="space-y-3" aria-label="Contractor assistance">
-            <ContractorSection homeId={home.id} pendingTasks={tasks.filter(t => t.status !== "completed")} zipCode={home.zipCode || undefined} />
-          </section>
-        )}
         {tasks.length === 0 && systems.length > 0 && !tasksLoading && (
           <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3" data-testid="starter-tasks-repair">
             <div>
