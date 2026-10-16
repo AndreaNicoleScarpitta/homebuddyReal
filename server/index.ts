@@ -25,6 +25,10 @@ import { csrfProtection, registerCsrfRoute } from "./lib/csrf";
 import { registerOpenApiRoute } from "./openapi";
 
 const app = express();
+// Railway terminates TLS at its reverse proxy. Trust the immediate hop (not
+// arbitrary X-Forwarded-For entries), otherwise every visitor is rate-limited
+// as one proxy IP and shared households can exhaust a common login quota.
+if (process.env.NODE_ENV === "production") app.set("trust proxy", 1);
 const httpServer = createServer(app);
 
 declare module "http" {
@@ -171,13 +175,29 @@ app.use((req, res, next) => {
   // Express processes middleware in registration order; a limiter added after a
   // matching route handler is never reached.
 
-  const authLimiter = rateLimit({
+  // Scope brute-force protection to sensitive authentication writes. In the
+  // previous release a single shared 20-request bucket was applied to ALL
+  // /api/auth traffic, including GET /api/auth/user and /providers. Those
+  // routine reads burned through the quota and caused valid sessions to appear
+  // logged out. Separate buckets also prevent a failed login from blocking an
+  // otherwise valid signup or recovery attempt on the same shared IP.
+  const credentialLimiter = (max: number, skipSuccessfulRequests = true) => rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 20,
+    max,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: "Too many login attempts, please try again later" },
+    skipSuccessfulRequests,
+    message: { error: "Too many authentication attempts. Please try again later." },
   });
+
+  const loginLimiter = credentialLimiter(12);
+  // Count even successful signups and recovery-link requests to prevent
+  // account-creation/email abuse. Valid logins and successful token resets
+  // can be safely omitted from the failure quota.
+  const signupLimiter = credentialLimiter(12, false);
+  const recoveryRequestLimiter = credentialLimiter(6, false);
+  const resetLimiter = credentialLimiter(12);
+  const testLoginLimiter = credentialLimiter(12);
 
   const contactLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -206,7 +226,11 @@ app.use((req, res, next) => {
   });
 
   // Apply limiters before routes so they are guaranteed to run
-  app.use("/api/auth", authLimiter);
+  app.post("/api/auth/login", loginLimiter);
+  app.post("/api/auth/signup", signupLimiter);
+  app.post("/api/auth/forgot-password", recoveryRequestLimiter);
+  app.post("/api/auth/reset-password", resetLimiter);
+  app.post("/api/auth/test-login", testLoginLimiter);
   app.use("/api/contact", contactLimiter);
   app.use("/api", mutationLimiter);
   app.use("/api", readLimiter);

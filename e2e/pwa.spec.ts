@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
 
+// Self-signed TLS certificates are not valid for service worker installation
+// in Chromium, even when navigation ignores certificate errors. Chromium
+// explicitly treats HTTP localhost as a trustworthy origin for service
+// workers; use it for PWA behavior while the authenticated user journeys
+// exercise real Secure cookies via the HTTPS CI proxy.
+const PWA_ORIGIN = "http://localhost:5000";
+
 test("manifest, service worker, offline page and correctly sized icons are served", async ({ request }) => {
   const manifestResponse = await request.get("/manifest.json");
   expect(manifestResponse.ok()).toBeTruthy();
@@ -25,7 +32,7 @@ test("manifest, service worker, offline page and correctly sized icons are serve
 });
 
 test("browser installs worker and shows a static offline screen for navigation", async ({ page, context }) => {
-  await page.goto("/");
+  await page.goto(`${PWA_ORIGIN}/`);
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
   });
@@ -40,7 +47,7 @@ test("browser installs worker and shows a static offline screen for navigation",
   )).toEqual(["homebuddy-offline-v1"]);
   await context.setOffline(true);
   try {
-    await page.goto("/house", { waitUntil: "domcontentloaded" });
+    await page.goto(`${PWA_ORIGIN}/house`, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "You're offline" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Try again" })).toBeVisible();
   } finally {
@@ -51,7 +58,7 @@ test("browser installs worker and shows a static offline screen for navigation",
 });
 
 test("offline cache never stores user information or hashed app assets", async ({ page }) => {
-  await page.goto("/");
+  await page.goto(`${PWA_ORIGIN}/`);
   await page.evaluate(async () => { await navigator.serviceWorker.ready; });
   const entries = await page.evaluate(async () => {
     const names = await caches.keys();

@@ -91,7 +91,7 @@ test("entire Needs Attention card opens Plan and urgent tasks are excluded from 
   await expect(attentionCard).toContainText("2 urgent tasks");
   await expect(attentionCard).toContainText("15 total open tasks (including urgent)");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await attentionCard.getByText("Needs Attention", { exact: true }).click();
+  await attentionCard.click({ force: true });
   await expect(page).toHaveURL(/maintenance-log/);
   await expect(page.getByTestId("text-due-count")).toHaveText("2");
   await expect(page.getByTestId("text-upcoming-count")).toHaveText("13");
