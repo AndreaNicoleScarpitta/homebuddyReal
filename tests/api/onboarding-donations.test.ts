@@ -25,7 +25,7 @@ describe.skipIf(!enabled)("quick onboarding starter tasks and donation-only bill
   it("creates a system and visible starter tasks atomically for a new V2 home", async () => {
     const home = await fetch(`${base}/v2/homes`, {
       method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
-      body: JSON.stringify({ zipCode: "99201", type: "Single Family Home" }),
+      body: JSON.stringify({ zipCode: "99201", type: "Single Family Home", onboarding: true }),
     });
     expect(home.status).toBe(201);
     homeId = (await home.json()).id;
@@ -126,6 +126,24 @@ describe.skipIf(!enabled)("quick onboarding starter tasks and donation-only bill
     const tasks = await loaded.json() as Array<{ relatedSystemId: string }>;
     expect(tasks).toHaveLength(getTemplatesForCategory("Roof").length);
     expect(tasks.every(t => t.relatedSystemId === oldSystemId)).toBe(true);
+
+    // A second system is missing tasks while the first is already populated:
+    // repair must not skip the entire home just because SOME tasks exist.
+    const secondSystem = crypto.randomUUID();
+    await db.execute(sql`
+      INSERT INTO projection_system (system_id, home_id, system_type, attrs)
+      VALUES (${secondSystem}, ${oldHomeId}, 'Electrical',
+        ${JSON.stringify({ name: "Electrical", category: "Electrical", source: "onboarding-quickpick" })}::jsonb)
+    `);
+    const partial = await fetch(`${base}/v2/homes/${oldHomeId}/starter-tasks/repair`, {
+      method: "POST", headers: { ...repairHeaders, "Idempotency-Key": crypto.randomUUID() },
+    });
+    expect(partial.status).toBe(200);
+    expect(await partial.json()).toEqual({ created: getTemplatesForCategory("Electrical").length, skipped: false });
+    const both = await fetch(`${base}/v2/homes/${oldHomeId}/tasks`, {
+      headers: { "x-test-user-id": repairUid },
+    });
+    expect((await both.json()).length).toBe(7);
 
     const again = await fetch(`${base}/v2/homes/${oldHomeId}/starter-tasks/repair`, {
       method: "POST", headers: { ...repairHeaders, "Idempotency-Key": crypto.randomUUID() },
