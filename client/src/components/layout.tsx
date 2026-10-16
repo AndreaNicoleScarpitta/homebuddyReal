@@ -15,7 +15,7 @@ import { OfflineBanner } from "@/components/offline-banner";
 // A homeowner's three jobs: understand, recall, and act.
 // Supporting capabilities remain available in their property context.
 export const primaryNav = [
-  { href: "/dashboard", icon: Home, label: "Overview", match: ["/dashboard", "/"] },
+  { href: "/dashboard", icon: Home, label: "Home", match: ["/dashboard", "/"] },
   { href: "/house", icon: Layers, label: "My House", match: ["/house", "/systems", "/records", "/documents", "/warranties", "/insurance", "/utilities", "/timeline", "/transfer-kit"] },
   { href: "/maintenance-log", icon: ClipboardList, label: "Plan", match: ["/maintenance-log", "/calendar"] },
 ];
@@ -241,7 +241,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </main>
 
       {/* PWA install banner — appears above bottom nav after 20 s */}
-      <PwaInstallPrompt />
+      {!location.startsWith("/maintenance-log") && !location.startsWith("/onboarding") && <PwaInstallPrompt />}
 
       {/* Mobile Bottom Navigation — the same three jobs as desktop */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t z-50 safe-area-bottom">

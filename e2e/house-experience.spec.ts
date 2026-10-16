@@ -26,6 +26,7 @@ async function mockAuthenticatedHome(page: Page) {
   await page.route("**/api/auth/user", r => r.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify({ id: "owner-1", email: "owner@example.test", firstName: "Owner", disclaimerAccepted: true }),
   }));
+  await page.route("**/v2/guidance", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ version: 1, status: "dismissed", moment: 3 }) }));
   await page.route("**/v2/home", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(home) }));
   await page.route("**/api/home", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: 41, ...home }) }));
   await page.route("**/v2/homes/house-uuid/systems", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([system, electricalSystem]) }));
@@ -145,7 +146,7 @@ test("authenticated homeowner has three primary destinations and a global AI act
   await expect(page.getByTestId("page-my-house")).toBeVisible();
   const primary = page.locator('aside nav > div:first-child > a');
   await expect(primary).toHaveCount(3);
-  await expect(primary.nth(0)).toContainText("Overview");
+  await expect(primary.nth(0)).toContainText("Home");
   await expect(primary.nth(1)).toContainText("My House");
   await expect(primary.nth(2)).toContainText("Plan");
   await expect(page.locator("aside nav").getByText("Records")).toHaveCount(0);
@@ -160,7 +161,7 @@ test("home files remain findable, and a homeowner can associate a file with thei
   await page.getByTestId("input-house-search").fill("Insurance Policy");
   await expect(page.getByTestId("house-search-results")).toContainText("Insurance Policy.pdf");
   await page.goto("/house?section=files");
-  await expect(page.getByTestId("text-house-section")).toContainText("House files");
+  await expect(page.getByTestId("text-house-section")).toContainText("Documents");
   await expect(page.getByTestId("card-document-9")).toBeVisible();
   await page.getByTestId("select-file-system-9").selectOption("7");
   await expect.poll(() => files[0].systemId).toBe(7);
@@ -180,7 +181,7 @@ test("mobile shows three destinations and global AI without a Records tab", asyn
   await expect(page.getByTestId("page-my-house")).toBeVisible();
   const bottomNav = page.locator("nav.fixed.bottom-0 a");
   await expect(bottomNav).toHaveCount(3);
-  await expect(bottomNav.nth(0)).toContainText("Overview");
+  await expect(bottomNav.nth(0)).toContainText("Home");
   await expect(bottomNav.nth(1)).toContainText("My House");
   await expect(bottomNav.nth(2)).toContainText("Plan");
   await expect(page.getByTestId("button-ask-ai-mobile")).toBeVisible();

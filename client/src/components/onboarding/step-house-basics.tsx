@@ -1,3 +1,4 @@
+import React from "react";
 /**
  * Step 1 of the onboarding flip: ZIP only required.
  *
@@ -41,11 +42,10 @@ export function StepHouseBasics({ value, onChange, onNext }: StepHouseBasicsProp
           className="text-2xl font-heading font-bold text-foreground"
           data-testid="text-welcome"
         >
-          What's your ZIP code?
+          Start with your home
         </h1>
         <p className="text-muted-foreground mt-1">
-          That's all we need to get you your first maintenance plan — we'll
-          use it for local climate, codes, and typical costs.
+          Add your ZIP code to create your home. The other details can wait.
         </p>
       </div>
 
@@ -65,11 +65,13 @@ export function StepHouseBasics({ value, onChange, onNext }: StepHouseBasicsProp
             inputMode="numeric"
             data-testid="input-zip"
             autoComplete="postal-code"
+            required
+            aria-required="true"
             autoFocus
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-2">
             <Label
               htmlFor="year"
@@ -85,7 +87,7 @@ export function StepHouseBasics({ value, onChange, onNext }: StepHouseBasicsProp
               min={1600}
               max={new Date().getFullYear()}
               placeholder="e.g., 1985"
-              className="h-12 bg-secondary/30 border-border/50 focus:bg-background"
+              className="h-12 bg-secondary/30 border-border/50 focus:bg-background text-base"
               value={builtYear}
               onChange={(e) => onChange({ ...value, builtYear: e.target.value })}
               data-testid="input-year"
@@ -107,7 +109,7 @@ export function StepHouseBasics({ value, onChange, onNext }: StepHouseBasicsProp
               min={100}
               max={100000}
               placeholder="e.g., 2400"
-              className="h-12 bg-secondary/30 border-border/50 focus:bg-background"
+              className="h-12 bg-secondary/30 border-border/50 focus:bg-background text-base"
               value={sqFt}
               onChange={(e) => onChange({ ...value, sqFt: e.target.value })}
               data-testid="input-sqft"
@@ -118,17 +120,15 @@ export function StepHouseBasics({ value, onChange, onNext }: StepHouseBasicsProp
         <div className="flex items-start gap-3 text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
           <Shield className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
           <span>
-            We don't ask for your street address yet — you can add it later
-            when you want contractor matching or permit lookups. Your data
-            is encrypted in transit and at rest.
+            You can add or update home details later in My House.
           </span>
         </div>
       </div>
 
       <Button
-        className="w-full h-12 font-medium"
+        className="w-full h-12 font-medium text-stone-950 text-base"
         onClick={onNext}
-        disabled={!zipValid}
+        disabled={!zipValid || (!!builtYear && (!Number.isInteger(Number(builtYear)) || Number(builtYear) < 1600 || Number(builtYear) > new Date().getFullYear())) || (!!sqFt && (Number(sqFt) < 100 || Number(sqFt) > 100000))}
         data-testid="button-continue"
       >
         Continue

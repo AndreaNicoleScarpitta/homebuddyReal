@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -101,15 +101,15 @@ function DocumentRow({
 
   return (
     <div
-      className={`flex items-center gap-4 p-4 rounded-xl bg-secondary/30 border border-border/50 hover:bg-secondary/50 transition-colors group ${previewable && doc.objectPath ? "cursor-pointer" : ""}`}
+      className={`flex flex-wrap sm:flex-nowrap items-center gap-3 p-3 sm:p-4 rounded-xl bg-secondary/30 border border-border/50 hover:bg-secondary/50 transition-colors group ${previewable && doc.objectPath ? "cursor-pointer" : ""}`}
       data-testid={`card-document-${doc.id}`}
       onClick={() => previewable && doc.objectPath && onView(doc)}
     >
       <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
         <Icon className="h-5 w-5 text-primary" />
       </div>
-      <div className="flex-1 min-w-0">
-        <h3 className="font-medium text-foreground truncate" data-testid={`text-document-name-${doc.id}`}>
+      <div className="flex-1 min-w-24">
+        <h3 className="font-medium text-foreground break-words" data-testid={`text-document-name-${doc.id}`}>
           {doc.name}
         </h3>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -135,7 +135,8 @@ function DocumentRow({
         {doc.objectPath && previewable && (
           <button
             onClick={() => onView(doc)}
-            className="p-2 text-muted-foreground hover:text-primary transition-colors md:opacity-50 md:group-hover:opacity-100"
+            className="p-3 min-h-11 min-w-11 text-muted-foreground hover:text-primary transition-colors md:opacity-50 md:group-hover:opacity-100"
+            aria-label={`View ${doc.name}`}
             data-testid={`button-view-${doc.id}`}
           >
             <Eye className="h-4 w-4" />
@@ -146,7 +147,8 @@ function DocumentRow({
             href={doc.objectPath}
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2 text-muted-foreground hover:text-foreground transition-colors md:opacity-50 md:group-hover:opacity-100"
+            className="p-3 min-h-11 min-w-11 text-muted-foreground hover:text-foreground transition-colors md:opacity-50 md:group-hover:opacity-100"
+            aria-label={`Download ${doc.name}`}
             data-testid={`link-download-${doc.id}`}
           >
             <Download className="h-4 w-4" />
@@ -154,7 +156,8 @@ function DocumentRow({
         )}
         <button
           onClick={() => onDelete(doc.id)}
-          className="p-2 text-muted-foreground hover:text-red-600 transition-colors md:opacity-50 md:group-hover:opacity-100"
+          className="p-3 min-h-11 min-w-11 text-muted-foreground hover:text-red-600 transition-colors md:opacity-50 md:group-hover:opacity-100"
+          aria-label={`Delete ${doc.name}`}
           data-testid={`button-delete-${doc.id}`}
         >
           <Trash2 className="h-4 w-4" />
@@ -167,15 +170,18 @@ function DocumentRow({
 export function DocumentsSection({ systemId }: { systemId?: number }) {
   // An omitted systemId means the house-wide library. A provided systemId
   // filters the same underlying records; files are never duplicated.
+  useEffect(() => { trackEvent("documents_opened", "documents", "storage"); }, []);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [uploadCategory, setUploadCategory] = useState<string>("General");
   const searchParams = new URLSearchParams(useSearch());
   const [fileSearch, setFileSearch] = useState(searchParams.get("q") || "");
+  const [pendingDocument, setPendingDocument] = useState<any>(null);
+  const [savingDocument, setSavingDocument] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<HomeDocument | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: home, isLoading: homeLoading } = useQuery({
+  const { data: home, isLoading: homeLoading, isError: homeError, refetch: retryHome } = useQuery({
     queryKey: ["home"],
     queryFn: getHome,
   });
@@ -189,7 +195,7 @@ export function DocumentsSection({ systemId }: { systemId?: number }) {
   const associableSystems = systems.filter(s => typeof s.legacyId === "number");
 
 
-  const { data: documents = [], isLoading: docsLoading } = useQuery({
+  const { data: documents = [], isLoading: docsLoading, isError: docsError, refetch: retryDocs } = useQuery({
     queryKey: ["documents", homeId],
     queryFn: () => getDocuments(homeId!),
     enabled: typeof homeId === "number",
@@ -217,38 +223,33 @@ export function DocumentsSection({ systemId }: { systemId?: number }) {
     mutationFn: ({ id, target }: { id: number; target: number | null }) => updateDocumentSystem(id, target),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents"] });
-      toast({ title: "File association updated" });
+      toast({ title: "Document linked" });
     },
-    onError: (error: Error) => toast({ title: "Could not link file", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Could not link document", description: error.message, variant: "destructive" }),
   });
 
-  const handleUploadComplete = async (result: any) => {
+  const handleUploadComplete = async (result: any, retry = false) => {
     if (!homeId || !result.successful?.[0]) return;
-
     const file = result.successful[0];
+    const payload = { name: file.name, fileType: file.type, fileSize: file.size || 0,
+      objectPath: file.objectPath, category: result.category ?? uploadCategory.toLowerCase(), systemId: systemId ?? null };
+    setSavingDocument(true);
+    setPendingDocument({ ...result, category: payload.category });
     try {
-      const objectPath = file.objectPath || `/objects/uploads/${file.id}`;
-      await createDocument(homeId, {
-        name: file.name,
-        fileType: file.type,
-        fileSize: file.size || 0,
-        objectPath,
-        category: uploadCategory.toLowerCase(),
-        systemId: systemId ?? null,
-      });
-      queryClient.invalidateQueries({ queryKey: ["documents"] });
-      trackEvent("upload", "documents", "document_uploaded");
-      toast({
-        title: "Document uploaded",
-        description: `${file.name} has been saved.`,
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to save document metadata",
-        variant: "destructive",
-      });
-    }
+      if (!file.objectPath) throw new Error("Document storage was not confirmed");
+      // An uncertain metadata response must be reconciled before retrying the
+      // same uploaded object. Never upload a second object to retry metadata.
+      const existing = retry ? await getDocuments(homeId) : [];
+      const saved = existing.find(doc => doc.objectPath === file.objectPath) ?? await createDocument(homeId, payload);
+      queryClient.setQueryData<HomeDocument[]>(["documents", homeId], old => [...(old ?? []).filter(doc => doc.id !== saved.id), saved]);
+      void queryClient.invalidateQueries({ queryKey: ["documents", homeId] });
+      setPendingDocument(null);
+      trackEvent("document_storage_confirmed", "documents", "saved");
+      toast({ title: "Document saved", description: `${file.name} is in My House → Documents.` });
+    } catch {
+      trackEvent("document_storage_failed", "documents", "metadata_write");
+      toast({ title: "We could not save this document. Try again.", variant: "destructive" });
+    } finally { setSavingDocument(false); }
   };
 
   if (homeLoading || docsLoading) {
@@ -258,6 +259,9 @@ export function DocumentsSection({ systemId }: { systemId?: number }) {
       </div>
     );
   }
+
+  if (homeError || docsError) return <div role="alert" className="space-y-3 p-4"><p>We could not load your documents.</p><Button onClick={() => { void retryHome(); void retryDocs(); }}>Try again</Button></div>;
+  if (home && !homeId) return <div role="alert">Documents are temporarily unavailable. <Button onClick={() => retryHome()}>Try again</Button></div>;
 
   if (!home) {
     return (
@@ -275,7 +279,7 @@ export function DocumentsSection({ systemId }: { systemId?: number }) {
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
           <div>
             <p className="text-muted-foreground">
-              Keep your files findable and connected to your house
+              Keep your documents findable and connected to your house
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -299,10 +303,11 @@ export function DocumentsSection({ systemId }: { systemId?: number }) {
               </SelectContent>
             </Select>
             <ObjectUploader
+              disabled={!!pendingDocument}
               maxNumberOfFiles={1}
               maxFileSize={10485760}
               onComplete={handleUploadComplete}
-              buttonClassName="shadow-lg shadow-primary/20"
+              buttonClassName="shadow-lg shadow-primary/20 min-h-11 text-stone-950"
               accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xls,.xlsx,.txt,.csv"
             >
               <Upload className="h-4 w-4 mr-2" />
@@ -311,13 +316,14 @@ export function DocumentsSection({ systemId }: { systemId?: number }) {
           </div>
         </header>
 
+        {pendingDocument && <div role="status" className="rounded-xl border p-4 space-y-2"><p>{savingDocument ? "Saving document…" : "We could not save this document. Try again."}</p>{!savingDocument && <Button onClick={() => handleUploadComplete(pendingDocument, true)}>Retry saving document</Button>}</div>}
         <input
           type="search"
-          aria-label="Search house files"
-          placeholder="Search files by name or category"
+          aria-label="Search documents"
+          placeholder="Search documents by name or category"
           value={fileSearch}
           onChange={e => setFileSearch(e.target.value)}
-          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+          className="w-full min-h-11 rounded-md border bg-background px-3 py-2 text-base"
           data-testid="input-files-search"
         />
         {visibleDocuments.length === 0 ? (
@@ -326,8 +332,9 @@ export function DocumentsSection({ systemId }: { systemId?: number }) {
               <FolderOpen className="h-8 w-8 text-primary" />
             </div>
             <h2 className="text-xl font-semibold text-foreground">
-              {fileSearch ? "No files match that search" : systemId !== undefined ? "No files linked to this system yet" : "No files yet"}
+              {fileSearch ? "No documents match that search" : systemId !== undefined ? "No documents linked to this system yet" : "No documents yet"}
             </h2>
+            {fileSearch && <Button variant="ghost" onClick={() => setFileSearch("")}>Clear search</Button>}
             <p className="text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
               Upload insurance policies, warranties, permits, contracts, and
               other important home documents to keep them organized in one

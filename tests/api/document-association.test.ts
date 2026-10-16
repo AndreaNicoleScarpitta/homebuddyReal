@@ -79,4 +79,17 @@ describe.skipIf(!enabled)("document ↔ system authorization (live API)", () => 
     expect(doc.name).toBe("A.pdf");
     expect(doc.objectPath).toBe("/objects/a");
   });
+  it("concurrent metadata retries return one stored document", async () => {
+    const objectPath = `/objects/retry-${crypto.randomUUID()}`;
+    const requests = Array.from({ length: 3 }, () => fetch(`${base}/api/home/${homeA}/documents`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-test-user-id": a },
+      body: JSON.stringify({ name: "Retry.pdf", objectPath }),
+    }));
+    const responses = await Promise.all(requests);
+    expect(responses.every(response => response.ok)).toBe(true);
+    const records = await Promise.all(responses.map(response => response.json()));
+    expect(new Set(records.map(record => record.id)).size).toBe(1);
+  });
+
 });

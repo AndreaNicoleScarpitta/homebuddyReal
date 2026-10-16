@@ -1,18 +1,21 @@
+import { trackEvent } from "@/lib/analytics";
 import { useState, useRef } from "react";
 import type { ReactNode, ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 
 interface ObjectUploaderProps {
+  disabled?: boolean;
   maxNumberOfFiles?: number;
   maxFileSize?: number;
-  onComplete?: (result: { successful: Array<{ id: string; name: string; type: string; size: number; objectPath?: string }> }) => void;
+  onComplete?: (result: { successful: Array<{ id: string; name: string; type: string; size: number; objectPath?: string }> }) => void | Promise<void>;
   buttonClassName?: string;
   children: ReactNode;
   accept?: string;
 }
 
 export function ObjectUploader({
+  disabled = false,
   maxFileSize = 10485760,
   onComplete,
   buttonClassName,
@@ -20,6 +23,8 @@ export function ObjectUploader({
   accept = ".pdf,.png,.jpg,.jpeg",
 }: ObjectUploaderProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -31,7 +36,9 @@ export function ObjectUploader({
       return;
     }
 
+    trackEvent("upload_started", "documents", "object_write");
     setIsUploading(true);
+    setUploadError(null);
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -47,8 +54,10 @@ export function ObjectUploader({
       }
 
       const data = await response.json();
+      if (!data.objectPath) throw new Error("Upload did not return a saved object");
+      setSaving(true);
 
-      onComplete?.({
+      await onComplete?.({
         successful: [{
           id: crypto.randomUUID(),
           name: file.name,
@@ -59,9 +68,11 @@ export function ObjectUploader({
       });
     } catch (error) {
       console.error("Upload error:", error);
-      alert("Upload failed. Please try again.");
+      trackEvent("document_storage_failed", "documents", "object_write");
+      setUploadError("We could not save this document. Try again.");
     } finally {
       setIsUploading(false);
+      setSaving(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -81,18 +92,19 @@ export function ObjectUploader({
       <Button
         onClick={() => fileInputRef.current?.click()}
         className={buttonClassName}
-        disabled={isUploading}
+        disabled={isUploading || disabled}
         data-testid="button-upload"
       >
         {isUploading ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            Uploading...
+            {saving ? "Saving document…" : "Uploading document…"}
           </>
         ) : (
           children
         )}
       </Button>
+      {uploadError && <p role="alert" className="mt-2 text-sm text-destructive">{uploadError}</p>}
     </div>
   );
 }

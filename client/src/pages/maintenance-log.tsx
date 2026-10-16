@@ -1,3 +1,6 @@
+import { QuickGuidePanel } from "@/components/onboarding-tour";
+import { useQuickGuide } from "@/lib/guidance";
+import { useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { SwipeableTask } from "@/components/swipeable-task";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,7 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Plus,
-  Copy,
   Wrench, 
   CheckCircle2,
   Clock,
@@ -24,6 +26,7 @@ import {
   UserCheck,
   HardHat,
   ChevronDown,
+  ChevronRight,
   DollarSign,
   Shield,
   Gauge,
@@ -33,7 +36,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -62,7 +65,7 @@ function MaintenanceLogSkeleton() {
         </div>
         <Skeleton className="h-10 w-28" />
       </header>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <Skeleton className="h-20" />
         <Skeleton className="h-20" />
         <Skeleton className="h-20" />
@@ -92,14 +95,15 @@ function diyColor(diy?: string | null) {
   }
 }
 
-function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand }: {
+function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand, guide }: {
   task: V2Task;
   systemsById: Record<string, V2System>;
   onComplete: (task: V2Task) => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
+  guide?: React.ReactNode;
 }) {
-  const { toast } = useToast();
+  const reducedMotion = useReducedMotion();
   const dueDate = task.dueDate ? new Date(task.dueDate) : null;
   const isOverdue = dueDate && isPast(dueDate) && !isToday(dueDate);
   const isDueToday = dueDate && isToday(dueDate);
@@ -139,6 +143,16 @@ function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand }: 
           isCompleted ? "border-green-200 bg-green-50/30 dark:border-green-900/30 dark:bg-green-950/20" :
           "bg-muted/30 hover:bg-muted/50"
         } ${isExpanded ? "rounded-b-none border-b-0" : ""}`}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        aria-label={`Review ${task.title}`}
+        aria-controls={`task-details-${task.id}`}
+        onKeyDown={event => {
+          if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault(); onToggleExpand();
+          }
+        }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onClick={handleClick}
@@ -216,10 +230,10 @@ function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand }: 
       <AnimatePresence>
         {isExpanded && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
+            initial={reducedMotion ? false : { height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: "easeInOut" }}
+            transition={{ duration: reducedMotion ? 0 : 0.2, ease: "easeInOut" }}
             className="overflow-hidden"
           >
             <div 
@@ -229,30 +243,9 @@ function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand }: 
                 isCompleted ? "border-green-200 bg-green-50/20 dark:border-green-900/30 dark:bg-green-950/10" :
                 "border-border bg-muted/20"
               }`}
+              id={`task-details-${task.id}`}
               data-testid={`panel-task-details-${task.id}`}
             >
-              <div className="flex items-center gap-2 mb-3 min-w-0">
-                <span className="text-xs text-muted-foreground shrink-0">Task ID</span>
-                <code className="text-xs text-muted-foreground break-all select-all min-w-0" data-testid={`text-task-id-${task.id}`}>{task.id}</code>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 shrink-0"
-                  aria-label="Copy task ID"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(String(task.id));
-                      toast({ title: "Task ID copied" });
-                    } catch {
-                      toast({ title: "Could not copy", description: "Select the task ID and copy it manually.", variant: "destructive" });
-                    }
-                  }}
-                >
-                  <Copy className="h-3 w-3 mr-1" aria-hidden="true" />
-                  Copy
-                </Button>
-              </div>
               {task.description && (
                 <p className="text-sm text-muted-foreground mb-3">{task.description}</p>
               )}
@@ -349,12 +342,13 @@ function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand }: 
                   </div>
                 )}
               </div>
+              {guide}
               {!isCompleted && (
                 <div className="mt-3 pt-3 border-t border-border/50">
                   <Button 
                     size="sm" 
                     variant="outline"
-                    className="h-8 text-xs"
+                    className="min-h-11 text-sm"
                     onClick={(e) => { e.stopPropagation(); onComplete(task); }}
                     data-testid={`button-complete-expanded-${task.id}`}
                   >
@@ -372,24 +366,36 @@ function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand }: 
 }
 
 export default function MaintenanceLog() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [selectedTask, setSelectedTask] = useState<V2Task | null>(null);
-  const [activeFilter, setActiveFilter] = useState<FilterTab>("upcoming");
+  const [activeFilter, setActiveFilter] = useState<FilterTab>(() => {
+    const requested = new URLSearchParams(window.location.search).get("filter");
+    if (requested && ["upcoming", "due", "past_due", "completed"].includes(requested)) return requested as FilterTab;
+    try {
+      const saved = sessionStorage.getItem(`homebuddy:plan-filter:${user?.id}`);
+      if (saved && ["upcoming", "due", "past_due", "completed"].includes(saved)) return saved as FilterTab;
+    } catch {}
+    return "upcoming";
+  });
+  useEffect(() => {
+    try { sessionStorage.setItem(`homebuddy:plan-filter:${user?.id}`, activeFilter); } catch {}
+  }, [activeFilter, user?.id]);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [expandedLogEntryId, setExpandedLogEntryId] = useState<number | null>(null);
 
   useEffect(() => { trackSlugPageView(PAGE_SLUGS.maintenanceLog); }, []);
 
-  const { data: home, isLoading: homeLoading } = useQuery({
+  const { data: home, isLoading: homeLoading, isError: homeError, refetch: retryHome } = useQuery({
     queryKey: ["home"],
     queryFn: getHome,
     enabled: isAuthenticated,
   });
 
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
+  const { data: tasks = [], isLoading: tasksLoading, isError: tasksError, refetch: retryTasks } = useQuery({
     queryKey: ["tasks", home?.id],
     queryFn: () => getTasks(home!.id),
     enabled: !!home?.id,
@@ -418,7 +424,7 @@ export default function MaintenanceLog() {
           : skipped ? "Your current plan was preserved." : "No starter templates were available for these systems.",
       });
     },
-    onError: (error: Error) => toast({ title: "Could not restore starter tasks", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "We could not create starter tasks. Try again.", description: error.message, variant: "destructive" }),
   });
 
   const categorized = useMemo(() => categorizeTasks(tasks), [tasks]);
@@ -430,15 +436,25 @@ export default function MaintenanceLog() {
     completed: categorized.completed.length,
   }), [categorized]);
 
+  const planLoaded = useRef(false);
   useEffect(() => {
-    if (counts.past_due > 0) {
-      setActiveFilter("past_due");
-    } else if (counts.due > 0) {
-      setActiveFilter("due");
-    } else {
-      setActiveFilter("upcoming");
+    if (home && !tasksLoading && !tasksError && !planLoaded.current) {
+      planLoaded.current = true;
+      trackEvent("plan_loaded", "plan", "confirmed");
     }
-  }, [tasks.length]);
+  }, [home, tasksLoading, tasksError]);
+  const initialCategoryPicked = useRef(false);
+  useEffect(() => {
+    if (tasksLoading || !home || initialCategoryPicked.current) return;
+    initialCategoryPicked.current = true;
+    if (sessionStorage.getItem(`homebuddy:plan-first-entry:${user?.id}`)) {
+      sessionStorage.removeItem(`homebuddy:plan-first-entry:${user?.id}`);
+      setActiveFilter(counts.past_due ? "past_due" : counts.due ? "due" : counts.upcoming ? "upcoming" : counts.completed ? "completed" : "upcoming");
+    }
+  }, [tasksLoading, home, counts]);
+  const guide = useQuickGuide(!!home && !tasksLoading && !tasksError, tasks.length > 0, expandedTaskId);
+  const guidePanel = (moment: number, hint = false) => <QuickGuidePanel moment={moment} hint={hint} empty={!tasks.length} onDismiss={guide.dismiss} onNext={guide.next} onUpload={() => { guide.finish(); navigate("/house?section=files"); }} />;
+
 
   const filteredTasks = categorized[activeFilter];
 
@@ -503,6 +519,7 @@ export default function MaintenanceLog() {
       toast({ title: "Error", description: "Could not complete task.", variant: "destructive" });
     },
     onSuccess: () => {
+      trackEvent("task_write_succeeded", "plan", "confirmed");
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["logEntries"] });
       toast({ title: "Task completed!", description: "Nice work — this has been logged." });
@@ -523,6 +540,8 @@ export default function MaintenanceLog() {
     );
   }
 
+  if (homeError || tasksError) return <Layout><div role="alert" className="p-6 space-y-4"><p>We could not load your plan.</p><Button onClick={() => { void retryHome(); void retryTasks(); }}>Try again</Button></div></Layout>;
+
   if (!home) {
     return (
       <Layout>
@@ -533,8 +552,9 @@ export default function MaintenanceLog() {
             </div>
             <h2 className="text-xl font-semibold mb-2">Set up your home first</h2>
             <p className="text-muted-foreground">
-              Complete your home profile to start tracking your maintenance.
+              Add your ZIP code to create your home.
             </p>
+            <Link href="/onboarding" className="inline-flex items-center min-h-11 underline">Set up home</Link>
           </div>
         </div>
       </Layout>
@@ -569,17 +589,18 @@ export default function MaintenanceLog() {
           </div>
         </header>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <button
             type="button"
             aria-label={`Completed: ${counts.completed} tasks`}
             aria-pressed={activeFilter === "completed"}
             aria-controls="plan-task-list"
-            onClick={() => { setActiveFilter("completed"); setExpandedTaskId(null); setExpandedLogEntryId(null); trackEvent('click', 'maintenance_log', 'filter_completed'); }}
+            onClick={() => { setActiveFilter("completed"); setExpandedTaskId(null); setExpandedLogEntryId(null); trackEvent('summary_filter_selected', 'plan', 'completed'); }}
             className={`rounded-xl border bg-card text-card-foreground shadow text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeFilter === "completed" ? "ring-2 ring-primary border-primary bg-primary/5" : ""}`}
             data-testid="filter-completed"
           >
-            <CardContent className="pt-4">
+            <CardContent className="pt-4 relative">
+              <ChevronRight aria-hidden="true" className="absolute right-2 top-5 h-4 w-4 text-muted-foreground"/>
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
                   <CheckCircle2 className="h-5 w-5 text-green-600" />
@@ -596,11 +617,12 @@ export default function MaintenanceLog() {
             aria-label={`Past Due: ${counts.past_due} tasks`}
             aria-pressed={activeFilter === "past_due"}
             aria-controls="plan-task-list"
-            onClick={() => { setActiveFilter("past_due"); setExpandedTaskId(null); setExpandedLogEntryId(null); trackEvent('click', 'maintenance_log', 'filter_past_due'); }}
+            onClick={() => { setActiveFilter("past_due"); setExpandedTaskId(null); setExpandedLogEntryId(null); trackEvent('summary_filter_selected', 'plan', 'past_due'); }}
             className={`rounded-xl border bg-card text-card-foreground shadow text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeFilter === "past_due" ? "ring-2 ring-primary border-primary bg-primary/5" : ""}`}
             data-testid="filter-past_due"
           >
-            <CardContent className="pt-4">
+            <CardContent className="pt-4 relative">
+              <ChevronRight aria-hidden="true" className="absolute right-2 top-5 h-4 w-4 text-muted-foreground"/>
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-red-500/10 flex items-center justify-center">
                   <AlertTriangle className="h-5 w-5 text-red-600" />
@@ -617,11 +639,12 @@ export default function MaintenanceLog() {
             aria-label={`Due / Urgent: ${counts.due} tasks`}
             aria-pressed={activeFilter === "due"}
             aria-controls="plan-task-list"
-            onClick={() => { setActiveFilter("due"); setExpandedTaskId(null); setExpandedLogEntryId(null); trackEvent('click', 'maintenance_log', 'filter_due'); }}
+            onClick={() => { setActiveFilter("due"); setExpandedTaskId(null); setExpandedLogEntryId(null); trackEvent('summary_filter_selected', 'plan', 'due'); }}
             className={`rounded-xl border bg-card text-card-foreground shadow text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeFilter === "due" ? "ring-2 ring-primary border-primary bg-primary/5" : ""}`}
             data-testid="filter-due"
           >
-            <CardContent className="pt-4">
+            <CardContent className="pt-4 relative">
+              <ChevronRight aria-hidden="true" className="absolute right-2 top-5 h-4 w-4 text-muted-foreground"/>
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-orange-500/10 flex items-center justify-center">
                   <Clock className="h-5 w-5 text-orange-600" />
@@ -638,11 +661,12 @@ export default function MaintenanceLog() {
             aria-label={`Upcoming: ${counts.upcoming} tasks`}
             aria-pressed={activeFilter === "upcoming"}
             aria-controls="plan-task-list"
-            onClick={() => { setActiveFilter("upcoming"); setExpandedTaskId(null); setExpandedLogEntryId(null); trackEvent('click', 'maintenance_log', 'filter_upcoming'); }}
+            onClick={() => { setActiveFilter("upcoming"); setExpandedTaskId(null); setExpandedLogEntryId(null); trackEvent('summary_filter_selected', 'plan', 'upcoming'); }}
             className={`rounded-xl border bg-card text-card-foreground shadow text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeFilter === "upcoming" ? "ring-2 ring-primary border-primary bg-primary/5" : ""}`}
             data-testid="filter-upcoming"
           >
-            <CardContent className="pt-4">
+            <CardContent className="pt-4 relative">
+              <ChevronRight aria-hidden="true" className="absolute right-2 top-5 h-4 w-4 text-muted-foreground"/>
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center">
                   <CalendarClock className="h-5 w-5 text-blue-600" />
@@ -660,14 +684,21 @@ export default function MaintenanceLog() {
           <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3" data-testid="starter-tasks-repair">
             <div>
               <p className="font-medium text-sm">No maintenance tasks yet</p>
-              <p className="text-xs text-muted-foreground mt-1">If you added systems during quick setup, restore their recommended starter tasks.</p>
+              <p className="text-xs text-muted-foreground mt-1">Create recommended maintenance tasks for your saved systems.</p>
             </div>
             <Button variant="outline" onClick={() => repairPlanMutation.mutate()} disabled={repairPlanMutation.isPending} data-testid="button-repair-starter-tasks">
-              {repairPlanMutation.isPending ? "Restoring…" : "Create starter plan"}
+              {repairPlanMutation.isPending ? "Creating starter tasks…" : "Create starter plan"}
             </Button>
           </div>
         )}
-        <div id="plan-task-list" data-testid="task-list">
+        {!guide.open && guide.state?.status === "not_offered" && <section className="rounded-xl border p-4" aria-label="Quick guide available"><p>A simpler way to find things. Tap the summary cards to filter tasks. Your documents are in My House → Documents.</p><div className="flex flex-wrap gap-2 mt-2"><Button variant="outline" onClick={guide.start}>Show quick guide</Button><Button variant="ghost" onClick={guide.dismiss}>Dismiss</Button></div></section>}
+        {!guide.open && guide.state?.status === "suspended" && <div className="flex gap-2"><Button variant="outline" onClick={guide.start}>Continue quick guide</Button><Button variant="ghost" aria-label="Dismiss guide" className="min-h-11" onClick={guide.dismiss}>Dismiss</Button></div>}
+        {guide.open && (guide.state?.moment === 1 || (guide.state?.moment === 2 && !expandedTaskId)) && guidePanel(guide.state.moment, guide.state.moment === 2)}
+        {guide.open && guide.state?.moment === 3 && !expandedTaskId && guidePanel(3)}
+        {guide.open && <p className="sr-only" role="status">Quick guide available.</p>}
+        <p className="sr-only" role="status">{activeFilter.replace("_", " ")}: {filteredTasks.length} tasks</p>
+        {tasks.length === 0 && systems.length === 0 && <div className="rounded-xl border p-4"><p>No tasks yet. Add systems to get maintenance suggestions.</p><Button variant="outline" className="mt-3 min-h-11" onClick={() => navigate("/house/systems")}>Add systems</Button></div>}
+        <div id="plan-task-list" tabIndex={-1} data-testid="task-list">
           {filteredTasks.length === 0 ? (
             <div className="text-center py-16">
               <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
@@ -686,7 +717,7 @@ export default function MaintenanceLog() {
                 {activeFilter === "completed" && "No completed tasks yet"}
               </h3>
               <p className="text-muted-foreground text-sm max-w-md mx-auto">
-                {activeFilter === "upcoming" && "Tasks scheduled for the future will appear here."}
+                {activeFilter === "upcoming" && "Tasks scheduled for the future will appear here. Choose another summary card to see other tasks."}
                 {activeFilter === "due" && "Tasks due within 7 days or marked urgent will appear here."}
                 {activeFilter === "past_due" && "Great job staying on top of your maintenance!"}
                 {activeFilter === "completed" && "Complete your first task to start building your maintenance history."}
@@ -701,15 +732,17 @@ export default function MaintenanceLog() {
                     key={task.id}
                     onSwipeLeft={() => handleSwipeComplete(task)}
                     onSwipeRight={() => handleDeleteTask(task)}
-                    disabled={isCompleted}
+                    disabled={isCompleted || guide.open}
                   >
                     <TaskRow
                       task={task}
                       systemsById={systemsById}
                       onComplete={handleCompleteTask}
                       isExpanded={expandedTaskId === task.id}
-                      onToggleExpand={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}
+                      onToggleExpand={() => { const opening = expandedTaskId !== task.id; setExpandedTaskId(opening ? task.id : null); if (opening) trackEvent("task_details_opened", "plan", "real_task"); }}
+                      guide={guide.open && guide.state?.moment === 2 && expandedTaskId === task.id ? guidePanel(2) : undefined}
                     />
+                  {guide.open && guide.state?.moment === 3 && expandedTaskId === task.id && guidePanel(3)}
                   </SwipeableTask>
                 );
               })}
@@ -959,6 +992,7 @@ function AddLogEntryDialog({ isOpen, onClose, homeId, legacyHomeId, task, system
       }
     },
     onSuccess: () => {
+      trackEvent("task_write_succeeded", "plan", "confirmed");
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["logEntries"] });
       toast({ title: "Logged!", description: "Maintenance work has been recorded." });

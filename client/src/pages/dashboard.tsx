@@ -3,7 +3,6 @@ import { HomeHealth } from "@/components/home-health";
 import { SwipeableTask } from "@/components/swipeable-task";
 import { AddSystemWizard } from "@/components/add-system-wizard";
 import { SystemsSummary } from "@/components/systems-summary";
-import { OnboardingTour, useTourState } from "@/components/onboarding-tour";
 import { RiskCard } from "@/components/intelligence/risk-card";
 import { MissingDataPrompts } from "@/components/intelligence/missing-data-prompt";
 import { Card, CardContent } from "@/components/ui/card";
@@ -478,7 +477,6 @@ function CompleteTaskDialog({ isOpen, onClose, task, homeId }: { isOpen: boolean
 export default function Dashboard() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
-  const { hasSeenTour, showTour, tourKey, startTour, completeTour } = useTourState();
   const [showAddSystem, setShowAddSystem] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
   const [showSwipeHint, setShowSwipeHint] = useState(() => {
@@ -494,7 +492,7 @@ export default function Dashboard() {
 
   useEffect(() => { trackSlugPageView(PAGE_SLUGS.dashboard); }, []);
 
-  const { data: home, isLoading: homeLoading } = useQuery({
+  const { data: home, isLoading: homeLoading, isError: homeError } = useQuery({
     queryKey: ["home"],
     queryFn: getHome,
     enabled: isAuthenticated,
@@ -612,28 +610,13 @@ export default function Dashboard() {
     }
   }, [tasks]);
 
-  const homeQuerySettled = !homeLoading && isAuthenticated;
+  const homeQuerySettled = !homeLoading && !homeError && isAuthenticated;
   useEffect(() => {
     if (!authLoading && homeQuerySettled && !home) {
       navigate("/onboarding");
     }
   }, [authLoading, homeQuerySettled, home, navigate]);
 
-  useEffect(() => {
-    // Gate the tour on having actual content to tour. Under the Phase 1
-    // onboarding flip users can land on the dashboard while systems are
-    // still being written server-side, and firing the tour against an
-    // empty screen is actively confusing — the coach-marks point at
-    // components that have nothing in them yet. Wait until the user has
-    // at least one system or task before narrating the UI.
-    const hasContent = systems.length > 0 || tasks.length > 0;
-    if (home && hasSeenTour === false && !showTour && hasContent) {
-      const timer = setTimeout(() => {
-        startTour();
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [home, hasSeenTour, showTour, startTour, systems.length, tasks.length]);
 
   if (authLoading || homeLoading) {
     return (
@@ -686,19 +669,7 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <OnboardingTour
-        key={tourKey}
-        isOpen={showTour}
-        onComplete={() => {
-          completeTour();
-          navigate("/house");
-        }}
-        onSkip={() => {
-          // User dismissed early (X or backdrop) → just close the tour.
-          // Do NOT open the Add System wizard; they didn't ask for it.
-          completeTour();
-        }}
-      />
+
       
       {/* Pull-to-refresh indicator — mobile only */}
       {(isPulling || isRefreshing) && (
@@ -729,7 +700,7 @@ export default function Dashboard() {
         <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-heading font-bold text-foreground" data-testid="text-heading">
-              Overview
+              Home
             </h1>
             <p className="text-muted-foreground mt-1">
               {activeTasks.length > 0
@@ -854,18 +825,7 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Help link */}
-        {hasSeenTour && (
-          <div className="text-center pt-4">
-            <button 
-              onClick={() => { trackEvent('click', 'dashboard', 'restart_tour'); startTour(); }}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              data-testid="button-restart-tour"
-            >
-              Need help? Take a quick tour
-            </button>
-          </div>
-        )}
+
       </div>
     </Layout>
   );
