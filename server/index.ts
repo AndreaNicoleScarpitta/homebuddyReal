@@ -177,18 +177,22 @@ app.use((req, res, next) => {
   // routine reads burned through the quota and caused valid sessions to appear
   // logged out. Separate buckets also prevent a failed login from blocking an
   // otherwise valid signup or recovery attempt on the same shared IP.
-  const credentialLimiter = (max: number) => rateLimit({
+  const credentialLimiter = (max: number, skipSuccessfulRequests = true) => rateLimit({
     windowMs: 15 * 60 * 1000,
     max,
     standardHeaders: true,
     legacyHeaders: false,
-    skipSuccessfulRequests: true,
+    skipSuccessfulRequests,
     message: { error: "Too many authentication attempts. Please try again later." },
   });
 
   const loginLimiter = credentialLimiter(12);
-  const signupLimiter = credentialLimiter(12);
-  const recoveryLimiter = credentialLimiter(6);
+  // Count even successful signups and recovery-link requests to prevent
+  // account-creation/email abuse. Valid logins and successful token resets
+  // can be safely omitted from the failure quota.
+  const signupLimiter = credentialLimiter(12, false);
+  const recoveryRequestLimiter = credentialLimiter(6, false);
+  const resetLimiter = credentialLimiter(12);
   const testLoginLimiter = credentialLimiter(12);
 
   const contactLimiter = rateLimit({
@@ -220,8 +224,8 @@ app.use((req, res, next) => {
   // Apply limiters before routes so they are guaranteed to run
   app.post("/api/auth/login", loginLimiter);
   app.post("/api/auth/signup", signupLimiter);
-  app.post("/api/auth/forgot-password", recoveryLimiter);
-  app.post("/api/auth/reset-password", recoveryLimiter);
+  app.post("/api/auth/forgot-password", recoveryRequestLimiter);
+  app.post("/api/auth/reset-password", resetLimiter);
   app.post("/api/auth/test-login", testLoginLimiter);
   app.use("/api/contact", contactLimiter);
   app.use("/api", mutationLimiter);
