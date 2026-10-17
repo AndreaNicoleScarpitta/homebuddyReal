@@ -199,8 +199,9 @@ export async function getUserUsage(userId: string): Promise<UsageSnapshot> {
     `),
     safe(sql`
       SELECT COUNT(*)::int AS count
-      FROM inspection_reports
-      WHERE user_id = ${userId} AND created_at >= date_trunc('month', NOW())
+      FROM inspection_reports r
+      JOIN homes h ON h.id = r.home_id
+      WHERE h.user_id = ${userId} AND r.created_at >= date_trunc('month', NOW())
     `),
   ]);
 
