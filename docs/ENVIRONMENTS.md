@@ -62,3 +62,10 @@ Never log or copy session secrets, auth tokens, provider keys, database password
 3. Configure and test backups, volume alerts, R2 recoverability, and Sentry alerts. Connected Railway actions cannot currently set backup schedules.
 4. Add a distinct Cloudflare R2 staging bucket if Cloudflare parity is required; replace Railway staging bucket references only after verifying correct credentials and CORS. Do not copy the production bucket keys.
 5. Verify staging object-store credentials, upload persistence, OAuth paths, and full Playwright journeys before promoting.
+
+
+### October 2026 reliability follow-up
+
+See [OPERATIONS_RECOVERY.md](./OPERATIONS_RECOVERY.md) for production backup schedules, restore testing boundaries, staging branch protection, and Stripe key rotation.
+
+The legacy `stripe-replit-sync` startup process is opt-in via `STRIPE_SYNC_ENABLED=1` (default disabled); donation checkout is independent and still requires a **valid** `STRIPE_SECRET_KEY`. Disabling legacy sync avoids unnecessary Stripe startup calls but **does not repair** an invalid donation API key. Existing subscription webhook routes and portal access remain in the code.
