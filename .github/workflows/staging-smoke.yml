@@ -1,0 +1,22 @@
+name: Staging smoke verification
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full 40-character staging deployment commit
+        required: true
+        type: string
+
+jobs:
+  staging-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: staging
+      - name: Validate live staging deployment (read-only)
+        env:
+          STAGING_BASE_URL: https://homebuddy-web-staging.up.railway.app
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node script/verify-staging.mjs

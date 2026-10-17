@@ -83,6 +83,16 @@ app.get("/api/health", async (_req, res) => {
   }
 });
 
+// Public, non-sensitive deployment provenance for the staging promotion gate.
+// Never return secrets, runtime variable values, or customer information.
+app.get("/api/version", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    commit: process.env.RAILWAY_GIT_COMMIT_SHA || null,
+    environment: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || "unknown",
+  });
+});
+
 const isDev = process.env.NODE_ENV !== "production";
 
 // Generate a per-request nonce for CSP to avoid 'unsafe-inline'

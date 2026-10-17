@@ -5,9 +5,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
   pull_request:
-    branches: [main]
+    branches: [main, staging]
 
 jobs:
   lint-and-typecheck:
@@ -125,12 +125,37 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  # Only the exact running staging commit can be promoted to main.
+  # This job skips on staging pushes/PRs, and must pass for main PRs.
+  staging-promotion:
+    name: staging-promotion
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Enforce staging-to-main promotion only
+        env:
+          SOURCE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          SOURCE_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          DEST_REPO: ${{ github.repository }}
+        run: |
+          if [ "$SOURCE_BRANCH" != "staging" ] || [ "$SOURCE_REPO" != "$DEST_REPO" ]; then
+            echo "::error::Production PRs must originate from this repository's staging branch."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - name: Verify staging is healthy and serving the exact proposed commit
+        env:
+          STAGING_BASE_URL: https://homebuddy-web-staging.up.railway.app
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node script/verify-staging.mjs
+
   # Single stable required check. `if: always()` means cancelled or
   # missing upstream jobs cannot silently register a success.
   release-gate:
     name: release-gate
     if: always()
-    needs: [lint-and-typecheck, test, e2e, build]
+    needs: [lint-and-typecheck, test, e2e, build, staging-promotion]
     runs-on: ubuntu-latest
     steps:
       - name: Refuse release if any critical check failed or was skipped
@@ -139,6 +164,9 @@ jobs:
           TEST: ${{ needs.test.result }}
           E2E: ${{ needs.e2e.result }}
           BUILD: ${{ needs.build.result }}
+          PROMOTION: ${{ needs.staging-promotion.result }}
+          EVENT: ${{ github.event_name }}
+          BASE_BRANCH: ${{ github.base_ref }}
         run: |
           echo "typecheck=$LINT, unit-api=$TEST, browser=$E2E, build=$BUILD"
           for status in "$LINT" "$TEST" "$E2E" "$BUILD"; do
@@ -147,4 +175,8 @@ jobs:
               exit 1
             fi
           done
+          if [ "$EVENT" = "pull_request" ] && [ "$BASE_BRANCH" = "main" ] && [ "$PROMOTION" != "success" ]; then
+            echo "::error::Staging verification did not pass; production promotion blocked."
+            exit 1
+          fi
           echo "All release checks passed."
