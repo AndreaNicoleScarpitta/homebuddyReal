@@ -1,5 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Production is never a valid browser-test target. Remote browser runs are
+// explicitly restricted to HomeBuddy's isolated staging host.
+const stagingURL = process.env.STAGING_BASE_URL;
+if (stagingURL && !["homebuddy-web-staging.up.railway.app", "staging.homebuddy.space"].includes(new URL(stagingURL).hostname)) {
+  throw new Error("Refusing remote Playwright tests outside approved staging hosts");
+}
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -11,7 +18,7 @@ export default defineConfig({
   timeout: 30_000,
 
   use: {
-    baseURL: process.env.CI ? "https://localhost:5443" : "http://localhost:5000",
+    baseURL: stagingURL || (process.env.CI ? "https://localhost:5443" : "http://localhost:5000"),
     ignoreHTTPSErrors: !!process.env.CI,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
@@ -24,7 +31,7 @@ export default defineConfig({
     },
   ],
 
-  webServer: {
+  webServer: stagingURL ? undefined : {
     command: "npm run dev",
     url: "http://localhost:5000/api/health",
     // Always reuse an existing server if one is up.

@@ -149,6 +149,22 @@ jobs:
           STAGING_BASE_URL: https://homebuddy-web-staging.up.railway.app
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
         run: node script/verify-staging.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run real staging homeowner and document lifecycle
+        env:
+          STAGING_BASE_URL: https://homebuddy-web-staging.up.railway.app
+        run: npx playwright test e2e/staging-journey.spec.ts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: staging-browser-failures
+          path: playwright-report/
+          if-no-files-found: ignore
 
   # Single stable required check. `if: always()` means cancelled or
   # missing upstream jobs cannot silently register a success.

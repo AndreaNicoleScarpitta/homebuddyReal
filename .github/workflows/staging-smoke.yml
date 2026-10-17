@@ -20,3 +20,13 @@ jobs:
           STAGING_BASE_URL: https://homebuddy-web-staging.up.railway.app
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: node script/verify-staging.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Exercise live staging account and document lifecycle
+        env:
+          STAGING_BASE_URL: https://homebuddy-web-staging.up.railway.app
+        run: npx playwright test e2e/staging-journey.spec.ts

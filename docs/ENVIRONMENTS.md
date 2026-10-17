@@ -29,7 +29,7 @@ Production URL: https://www.homebuddy.space
 
 1. Develop and PR into `staging`, with CI release-gate passing before merge.
 2. Railway staging deploys the staging branch and applies **staging** migrations to its separate PostgreSQL instance.
-3. Inspect staging logs and perform live smoke checks. Use GitHub Actions → **Staging smoke verification** and supply the exact 40-character staging commit SHA. The verifier checks `/api/version`, `/api/health`, and `/login`. This is non-destructive and **does not replace** full human QA.
+3. Inspect staging logs and perform live smoke checks. Use GitHub Actions → **Staging smoke verification** and supply the exact 40-character staging commit SHA. The verifier checks `/api/version`, `/api/health`, and `/login`. The verifier uses only read-only endpoints; the associated Playwright staging journey uses newly created synthetic accounts and deletes them. It does not replace full human QA.
 4. Promote by PR from `staging` into `main`. The `staging-promotion` CI check requires the exact proposed source SHA to be live and healthy in staging. PRs from other branches to `main` fail.
 5. Protect `main` and `staging` in GitHub. Require the `release-gate` check; reject direct pushes, bypasses and force pushes.
 6. Railway production → homebuddyReal → Settings → Source → **Wait for CI: On**. Verify `source.checkSuites=true`. The integration used for initial provisioning does not expose this property for writes.
