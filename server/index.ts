@@ -14,6 +14,7 @@ import { verifyDatabaseConnection } from "./lib/db-check";
 import { logger } from "./lib/logger";
 import { WebhookHandlers } from "./webhookHandlers";
 import { registerBillingRoutes } from "./billing-routes";
+import { shouldInitializeLegacyStripeSync } from "./lib/stripe-startup";
 import { registerMeRoutes } from "./me-routes";
 import { registerCalendarRoutes } from "./calendar-routes";
 import { startNotificationScheduler, stopNotificationScheduler } from "./jobs/notificationScheduler";
@@ -155,29 +156,36 @@ app.use((req, res, next) => {
   // request 500s. Exits the process on failure.
   await verifyDatabaseConnection();
 
-  try {
-    const { runMigrations } = await import('stripe-replit-sync');
-    const { getStripeSync } = await import('./stripeClient');
-    const databaseUrl = process.env.DATABASE_URL;
-    if (databaseUrl) {
-      logger.info("Initializing Stripe schema...");
-      await runMigrations({ databaseUrl });
-      logger.info("Stripe schema ready");
-      const stripeSync = await getStripeSync();
-      const webhookBaseUrl =
-        process.env.APP_URL?.replace(/\/$/, "") ||
-        (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : null) ||
-        "http://localhost:5000";
-      const webhookResult = await stripeSync.findOrCreateManagedWebhook(
-        `${webhookBaseUrl}/api/stripe/webhook`
-      );
-      logger.info({ url: webhookResult?.webhook?.url || "OK" }, "Stripe webhook configured");
-      stripeSync.syncBackfill()
-        .then(() => logger.info("Stripe data synced"))
-        .catch((err: any) => logger.error({ err: err.message }, "Error syncing Stripe data"));
+  // Subscription synchronization is a legacy, opt-in integration.
+  // Donation checkout uses the Stripe SDK directly and does not require this
+  // boot-time migration, webhook creation, or historical subscription backfill.
+  if (shouldInitializeLegacyStripeSync()) {
+    try {
+      const { runMigrations } = await import('stripe-replit-sync');
+      const { getStripeSync } = await import('./stripeClient');
+      const databaseUrl = process.env.DATABASE_URL;
+      if (databaseUrl) {
+        logger.info("Initializing Stripe schema...");
+        await runMigrations({ databaseUrl });
+        logger.info("Stripe schema ready");
+        const stripeSync = await getStripeSync();
+        const webhookBaseUrl =
+          process.env.APP_URL?.replace(/\/$/, "") ||
+          (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : null) ||
+          "http://localhost:5000";
+        const webhookResult = await stripeSync.findOrCreateManagedWebhook(
+          `${webhookBaseUrl}/api/stripe/webhook`
+        );
+        logger.info({ url: webhookResult?.webhook?.url || "OK" }, "Stripe webhook configured");
+        stripeSync.syncBackfill()
+          .then(() => logger.info("Stripe data synced"))
+          .catch((err: any) => logger.error({ err: err.message }, "Error syncing Stripe data"));
+      }
+    } catch (error) {
+      logger.error({ err: (error as Error).message }, "Failed to initialize Stripe (non-fatal)");
     }
-  } catch (error) {
-    logger.error({ err: (error as Error).message }, "Failed to initialize Stripe (non-fatal)");
+  } else {
+    logger.info("Legacy Stripe subscription sync disabled; donation checkout remains independent.");
   }
 
   // ── Rate limiters ─────────────────────────────────────────────────────────
