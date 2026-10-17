@@ -1,59 +1,31 @@
-# Production release gate
+# HomeBuddy protected release process
 
-HomeBuddy production on Railway automatically deploys from `main`.
+Verified in the Railway and GitHub production setup on 2026-10-17. Verify live controls again before an actual release.
 
-## Required repository rule — configure once
+## Protected branches and required checks
 
-GitHub repository administrator: open **Settings → Rules → Rulesets → New branch ruleset**
-(or Settings → Branches → Add branch protection rule), targeting branch `main`.
+- `staging` and `main` are protected by enforced GitHub rulesets. Do not push directly, force-push, delete or bypass.
+- A feature PR targets **staging**; CI runs `lint-and-typecheck`, `test`, `e2e`, `build`, and the aggregate required `release-gate` check.
+- Merging `staging` deploys Railway's **separate staging project**; the staging smoke workflow then creates and deletes synthetic accounts and verifies lifecycle operations.
+- A **production** PR must originate from `staging` and pass `staging-promotion`, which verifies the **exact staging SHA** is live and tests the homeowner/document journey before allowing a `main` merge.
+- Railway production `homebuddyReal` has **Wait for CI enabled** (`source.checkSuites=true`), verified in the October 17 production promotion. Production waits for the complete main CI workflow before deploying.
 
-1. Require a pull request before merging. Require that branches are up to date.
-2. Require status checks to pass before merging: select exactly **`release-gate`** from workflow **CI**.
-3. Restrict bypass permissions, block force pushes and branch deletion.
-4. Activate the ruleset and verify an intentionally failing pull request cannot be merged.
+**Do not enable Railway Wait for CI on staging under the current workflow**: the staging smoke job waits for the live staging deployment, so enabling it would create a dependency cycle.
 
-The `release-gate` job in `.github/workflows/ci.yml` fails whenever
-`lint-and-typecheck`, `test`, `e2e`, or `build` fails, is cancelled,
-or is skipped. The gate uses an `if: always()` dependency check.
+## Production release checklist
 
-**Important:** Merely declaring a GitHub Actions job DOES NOT block merges.
-Only the repository ruleset/branch protection makes the check mandatory. The
-GitHub integration used to implement this change does not have permission to
-configure branch protections.
+1. Confirm the staging environment is healthy, serving the exact SHA, and its smoke workflow passed.
+2. Verify the promotion PR and aggregate GitHub checks passed, plus any schema migration review.
+3. Obtain explicit release authorization and merge the protected promotion PR.
+4. Confirm Railway waited for CI and deployed the **merge commit SHA**, not merely the staging SHA.
+5. Inspect migration + schema-drift output, database connection, `/api/health`, `/api/version`, startup logs, and no increase in 5xx errors.
+6. Verify mobile auth/onboarding, maintenance tasks and any changed document/payment journey. Do not run destructive tests against customer data.
+7. Ensure rollback compatibility; **reverting code does not reverse an applied database migration**.
 
-## Railway Wait for CI — configure once
+## Local/CI test boundaries
 
-Railway production currently deploys pushes to `main` automatically and has
-`source.checkSuites = false`. The Railway service setting **Wait for CI**
-must be enabled so a failed GitHub Actions workflow cannot deploy.
+CI PostgreSQL is ephemeral and isolated. The Playwright configuration explicitly refuses arbitrary remote URLs and production test targets. Local runs should use Docker Compose PostgreSQL on localhost:5433 and a synthetic user. Never bypass auth, secret management or home ownership to satisfy CI.
 
-In Railway: project `attractive-truth` → service `homebuddyReal` →
-**Settings → Source → Wait for CI → On**. This feature requires the
-Railway GitHub app's updated permissions and a GitHub Actions workflow with
-a `push: main` trigger (included in `.github/workflows/ci.yml`).
-See https://docs.railway.com/deployments/github-autodeploys#wait-for-ci.
+Staging uses its own database/object-storage bucket. Live Stripe keys and production homeowner documents do not belong in staging.
 
-Railway evaluates **whole workflow results**; the `release-gate` job ensures
-our workflow cannot be green when build, API tests, E2E, or typechecking fail.
-
-The available Railway integration cannot change this source check-suite flag.
-Verify that the service reports `source.checkSuites: true` after enabling it.
-
-## Release verification
-
-- Never deploy a feature PR until the `release-gate` check is green.
-- Confirm Railway deployed the exact merge commit (not an older build).
-- Confirm Railway application and Postgres are online and migrations pass.
-- Check `/api/health`, authentication routes and the updated UI on a phone.
-- Never execute destructive tests against customer accounts or customer data.
-
-## Test boundaries
-
-CI has its own PostgreSQL database and synthetic accounts. Tests must not point
-at the production Railway URL. Test keys and test bypasses are disabled in
-production. Password recovery email and object-storage delivery are separate
-production integration tasks and not simulated as configured.
-
-## Staging promotion update (2026-10-17)
-
-See [ENVIRONMENTS.md](./ENVIRONMENTS.md). The staging project exists separately from the production Railway project because the current Railway integration cannot create an additional environment in an existing project. A main-targeted PR now requires verification that the exact staging SHA is running and healthy, enforced by CI's `staging-promotion` job. **This is not a substitute for GitHub branch protection and Railway Wait for CI, which require console activation.** Until those controls are verified, the production release gate is not considered enforced.
+For incident handling, see [OPERATIONS_RECOVERY.md](OPERATIONS_RECOVERY.md).

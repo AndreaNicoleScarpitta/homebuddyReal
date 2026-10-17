@@ -1,10 +1,10 @@
 # HomeBuddy — reliability, backups and recovery
 
-Updated 2026-10-17. **These are operational instructions, not evidence that a production backup or restore test has already succeeded.**
+Updated 2026-10-17 after verified production deployment, a PITR recovery drill and successful donation checkout. Future changes must be verified independently.
 
 ## Branch protections
 
-Production `main` is protected through the active **Homebuddy Protected Branches** GitHub ruleset requiring `release-gate`. Protect `staging` as well: GitHub → repository Settings → Rules → Rulesets; add an exact target pattern `staging` to an appropriate ruleset (or create a second named `HomeBuddy Staging`). Require PRs and the `release-gate` CI check. Block force pushes, deletion and unrestricted bypass; allow zero approvers while the founder works solo. **Do not select "all branches",** which would restrict feature branch development.
+Production `main` is protected through the active **Homebuddy Protected Branches** GitHub ruleset requiring `release-gate`. `staging` is also protected by an enforced GitHub ruleset requiring a PR and `release-gate`. Do not bypass either branch. **Do not select "all branches",** which would restrict feature branch development.
 
 After saving, verify both `main` and `staging` return `protected: true` from GitHub and a deliberately failed required check blocks merging.
 
@@ -21,25 +21,25 @@ Project: Railway `attractive-truth` → `Postgres` → **Backups**.
 
 Railway backup schedules **cannot be read or configured through the connected integration used for this work**. Do not mark backups configured until their presence is confirmed in the Railway dashboard. Backups are incremental, billable storage.
 
-### Restoration drill — do not restore onto the live database
+### Point-in-time recovery and drills
 
-Railway's native volume-backup restore is scoped to the *same project and environment* and changes the mounted volume of its database service. **Do not click Restore/Deploy on production Postgres to perform a drill:** it would replace the live database. The separate staging Railway project cannot directly receive this native backup.
+Production PostgreSQL has PITR enabled with a live `Postgres-PITR` WAL archive. On October 17, 2026, a separate `Postgres-restored-...` service was created from the PITR timeline, recovered to a consistent state and accepted connections. The user accessed the restored database. The service and its test volumes were deleted after verification, without changing the production database volume.
 
-Perform a non-destructive drill using an encrypted logical backup (`pg_dump -Fc`) of production, a disposable isolated PostgreSQL instance with new credentials, and `pg_restore` to that instance. Run it through a secure operator machine/CI with least-privilege database access. Never upload credentials, data dumps or customer information into this repository, CI artifacts or logs. Validate schema, migration journal and representative table row counts, document recovery time, then securely delete the disposable copy. For an entirely synthetic drill, you may use a staging PostgreSQL logical backup to prove the command path, but **do not count this as proof that production data is recoverable**.
+**Use the upper “Point-in-time recovery” → “Restore to this moment” control for a non-destructive drill:** it creates a sibling PostgreSQL service. A normal **volume-backup Restore** instead stages a swap of the **existing production PostgreSQL mount**. Never apply it as a recovery test. Review the Railway pending changes before deploying anything.
 
-If you need a true same-environment snapshot restoration, use a maintenance window and a separately reviewed disaster-recovery plan. Avoid unintentionally disrupting live traffic.
+Preserve the original `Postgres`, `postgres-volume`, and `Postgres-PITR` resources. A PITR restored sibling is a real production-data copy: restrict access and delete it when finished. The completed drill verified infrastructure-level restore only; future drills should validate the recovered tables/row counts, record elapsed restore time, and test offsite recovery separately.
 
-## PostgreSQL warnings
+## PostgreSQL warnings and usage advisories
 
-Railway reported **two service warnings** while production PostgreSQL was online. The Oct 15 logs show obsolete SQL queries referencing `inspection_reports.user_id` and `job_queue.data`; the code now uses ownership JOINs and `job_queue.payload`. Logs queried for Oct 17 showed no PostgreSQL ERROR/WARNING entries, and CPU, memory and disk usage were low. This is evidence of improvement, **not proof that the two Railway warning notifications are resolved**. Open Postgres → Observability/Issues and inspect the two warning descriptions and timestamps. Resolve the underlying reason before dismissing a notification. Record the final status.
+Railway displayed two warning notifications. Review showed the public database URL/network egress advisory and a Railway **usage alert**; neither was evidence of a PostgreSQL outage. The application uses the private Railway connection. Historical SQL column errors were corrected by previous deployments; no matching new PostgreSQL SQL errors were observed after the fixes. Continue to review disk/CPU, WAL push success, costs and new error logs; do not assume every future alert is benign.
 
 ## Stripe, donations and legacy subscriber access
 
 HomeBuddy only offers one-time donations to new users. The direct `POST /api/donations/checkout` endpoint calls Stripe Checkout with `STRIPE_SECRET_KEY`. Its historical subscription service, managed webhook registration and backfill are now opt-in (`STRIPE_SYNC_ENABLED=1`), disabled by default, because they are unnecessary for voluntary donation checkout.
 
-**Production currently logs a StripeAuthenticationError (invalid `sk_live_...` API key).** Turning off legacy synchronization removes noisy boot calls, **but does not fix live donations**. In the Stripe dashboard, obtain a valid live-mode secret key with the minimum permissions needed for Checkout and any retained customer portal access; configure it only in Railway Variables → `STRIPE_SECRET_KEY`. Do not paste the value into tickets, GitHub, logs or chat. Verify any historical subscriber cancellation paths before rotating or disabling their integration. If the key was compromised, rotate it in Stripe and retire the previous key according to Stripe's guidance.
+The historical live Stripe key failed authentication, but was replaced in Railway on 2026-10-17. The application was redeployed, and a real `POST /api/donations/checkout` returned **HTTP 200**, opening hosted Stripe Checkout without completing payment. Keep the live secret only in Railway; do not include it in issues, GitHub or chat. Existing subscription webhook routes remain and require separate signing-secret/customer-portal verification.
 
-After setting a valid key, test a **safe provider operation** (for example read-only authenticated account lookup) using a secure operator environment; then verify that a small donation checkout opens successfully and cancels without charging the account. Only then mark donations PASS. Ensure the `STRIPE_WEBHOOK_SECRET` is valid for any active Stripe webhook events. Do not re-enable legacy sync merely to make donations work.
+**Status:** donation Checkout session creation verified PASS; actual payment settlement, webhook delivery, customer portal and legacy subscriber lifecycle are **not** covered by this test. Reverify these separately before changing webhook/legacy billing behavior. Never re-enable legacy sync merely to make donations work.
 
 ## Release and alert checks
 

@@ -31,4 +31,4 @@ jobs:
       - name: Exercise live staging account and document lifecycle
         env:
           STAGING_BASE_URL: https://homebuddy-web-staging.up.railway.app
-        run: npx playwright test e2e/staging-journey.spec.ts
+        run: npm run test:e2e -- e2e/staging-journey.spec.ts

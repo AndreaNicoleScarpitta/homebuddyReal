@@ -1,93 +1,31 @@
-# Home Buddy
+# HomeBuddy — AI coding agent guidance
 
-## Quick Start (Local Development on Windows)
+**Read [README.md](README.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first.** They are the canonical engineer onboarding and architecture sources. Use [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md) for an isolated local environment.
 
-```bash
-# Start PostgreSQL (Docker)
-docker start homebuddy-postgres
-# Or create fresh: docker run -d --name homebuddy-postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=home_buddy -p 5433:5432 postgres:16
-# NOTE: host port 5433 on purpose — another project (afarensis-db) claims 5432 on this
-# machine. When something else owns the port, `docker start` binds NOTHING silently and
-# the app connects to the wrong postgres ("password authentication failed").
+## Product
 
-# Set env vars and run
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5433/home_buddy"
-export PORT=5000
-export NODE_ENV=development
-npx tsx server/index.ts
-```
+HomeBuddy is the intelligent operating record of a home. Three main surfaces: Home/Overview (Needs Attention leads to Plan), Plan (Upcoming, Due / Urgent, Past Due, Completed clickable task summaries), My House (systems, shutoffs/reference info, documents in House files). Quick setup must create starter tasks; document analysis may suggest systems/tasks with owner approval.
 
-App runs at http://localhost:5000. Login with test/password123.
+HomeBuddy currently offers **one-time voluntary donations**, not paid subscription upgrades. Do **not** revive deprecated paid plan checkout. Historical Stripe subscriber paths remain; legacy synchronization is off by default (`STRIPE_SYNC_ENABLED=1` only by explicit reviewed opt-in).
 
-## Architecture
+## Development rules
 
-- **Backend**: Express + TypeScript, PostgreSQL with Drizzle ORM, event-sourced architecture
-- **Frontend**: React 19 + Vite + Tailwind CSS v4 + Radix UI, Wouter router
-- **AI**: OpenAI GPT-4o (document analysis, task suggestions, chat)
-- **Auth**: Replit OIDC (production) + test login (local dev)
-- **Session**: PostgreSQL via connect-pg-simple
+- Work on a branch based on `staging`; PR to `staging`. Promotion to `main` is a separate guarded release.
+- Node 20, local Postgres 16 on localhost:5433, `npm run dev`, `npm run db:migrate`, `npm run check`, `npm test`, `npm run test:e2e`, `npm run build`.
+- Do not rely on a shared test account. Use synthetic local account creation.
+- Never access production data, R2 buckets or secret keys for local debugging. Keep test objects private.
+- Use reviewed, additive migrations. Never use `db:push` on staging or production.
+- Respect auth, CSRF, document/home ownership, event projections, and the distinct `/api` and `/v2` implementations. Do not refactor route stacks as a side effect.
+- Keep mobile layouts usable and test first-time signup → setup → task planning → account deletion flows.
+- Read `docs/OPERATIONS_RECOVERY.md` before any database, backup, or Stripe operational changes.
 
-## Key Paths
+## Key entry points
 
-- `server/index.ts` — Server entry point
-- `server/routes.ts` — Legacy API routes (`/api`) — auth, billing, uploads, and some domain CRUD
-- `server/routes_v2.ts` — V2 event-sourced API routes (`/v2`) — the preferred home for domain work
-- `server/db.ts` — Database connection (Pool + Drizzle)
-- `shared/schema.ts` — Drizzle schema (all tables)
-- `client/src/App.tsx` — Client routing & auth gate
-- `client/src/pages/` — Page components
-- `vite.config.ts` — Vite build config (root: client/, aliases: @/*, @shared/*, @assets/*)
-- `drizzle.config.ts` — Drizzle Kit config
-- `docs/simplification-remaining-work.md` — deferred table drops, the stripe-replit-sync trap, and the `/api` vs `/v2` duplication list. **Read before dropping tables or "tidying" the Stripe boot path.**
+- React routes: `client/src/App.tsx`; pages: `client/src/pages`.
+- Express startup: `server/index.ts`; auth: `server/replit_integrations/auth`.
+- HTTP routes: `server/routes.ts`, `server/routes_v2.ts`; storage/ownership: `server/storage.ts` and related services.
+- Eventing: `server/eventing`, `server/domain`, `server/projections`.
+- Drizzle schema: `shared/schema.ts`; migrations: `migrations/`; runner: `script/migrate.ts`.
+- Donation route: `server/billing-routes.ts`; document analysis: `server/lib/analysis-pipeline`.
 
-## Product shape
-
-Three primary surfaces: **Overview** (dashboard), **My House** (the connected operating record), and **Plan** (maintenance). Only these appear in primary navigation.
-`/house` is the canonical property profile with systems, searchable House Files, coverage,
-services, history, and home tools; legacy record paths redirect to the appropriate context.
-`/house/systems` retains the complete system inventory; `/systems/:id` preserves deep links.
-Documents remain home-level and may be optionally linked to a legacy system via an additive
-`home_documents.system_id` field. Never bypass same-home ownership verification.
-Ask Home Buddy remains a global action and uses existing `/chat` history.
-Insights are distributed into Overview and system detail. Transfer Kit is available in Home Tools.
-See `docs/intelligent-home-architecture.md` for the rollout and workflow test plan.
-
-Monetization is a single subscription: Free and Plus. Premium is unlisted and its checkout
-is closed because it sells multiple homes, which the app does not support (`/v2/home`
-returns one home and there is no switcher). Donations were removed entirely.
-
-## Commands
-
-- `npm run dev` — Full-stack dev (requires NODE_ENV=development set separately on Windows)
-- `npm run build` — Production build (client to dist/public, server to dist/index.cjs)
-- `npm run start` — Run production build
-- `npm run db:migrate` — Apply migration files (the deploy path: CI and the Dockerfile CMD both use this; self-baselines existing databases)
-- `npm run db:push` — Dev-only schema sync. WARNING: push DROPS anything not in shared/schema.ts, including the hand-written CHECK/FK constraints and it can't create the event_log trigger — after a local push, run `npm run db:migrate` to restore them. Never use push in prod/CI.
-- `npm run check` — TypeScript check
-
-## Schema Changes
-
-1. Edit `shared/schema.ts` (or `shared/models/*`)
-2. `npx drizzle-kit generate --name <description>` — creates a reviewed SQL file in `migrations/`
-3. Review the generated SQL, commit it; deploys apply it via `db:migrate`
-For constraints/triggers drizzle can't model, use `npx drizzle-kit generate --custom --name <description>` and write idempotent SQL (see migrations/0001–0003 for the pattern; use `NOT VALID` on constraints so legacy prod rows can't block a deploy).
-
-## Windows-Specific Notes
-
-- `reusePort` removed from server listen (ENOTSUP on Windows)
-- `npm run dev` script uses inline `NODE_ENV=development` which doesn't work on Windows cmd; use `export` in bash or set env vars separately
-- Replit OIDC disabled locally (no REPL_ID); use test login
-
-## Environment Variables
-
-Required: `DATABASE_URL` (+ `SESSION_SECRET` in production)
-Optional: `AI_INTEGRATIONS_OPENAI_API_KEY`, `VITE_GOOGLE_PLACES_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM` (verified Resend sender — without it emails only reach the Resend account owner), `STRIPE_SECRET_KEY`, `STRIPE_PRICE_PLUS`/`STRIPE_PRICE_PREMIUM`, `R2_ENDPOINT`/`R2_BUCKET`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `APP_URL`, `SENTRY_DSN`
-
-Server boot logs a `[on ]/[OFF]` config report per integration (`server/lib/env-validation.ts`) — read the deploy logs to audit what's live.
-
-## Design System
-
-- "Modern Utility" aesthetic, construction orange (#f97316)
-- Plus Jakarta Sans (headings), Inter (UI)
-- Minimalist, no cards, pill-style components
-- Anxiety-aware UX, calm professional tone
+When this file conflicts with source behavior or runtime evidence, investigate and fix the stale instructions rather than assuming older design notes are still in force.
