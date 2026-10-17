@@ -5,12 +5,14 @@
   "license": "MIT",
   "scripts": {
     "dev:client": "vite dev --port 5000",
-    "dev": "NODE_ENV=development tsx server/index.ts",
+    "dev": "tsx server/index.ts",
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "db:push": "drizzle-kit push",
-    "db:migrate": "tsx script/migrate.ts"
+    "db:migrate": "tsx script/migrate.ts",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1032.0",
@@ -152,5 +154,8 @@
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
+  },
+  "engines": {
+    "node": ">=20.19 <21"
   }
 }
