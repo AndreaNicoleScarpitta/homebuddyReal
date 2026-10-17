@@ -53,3 +53,7 @@ CI has its own PostgreSQL database and synthetic accounts. Tests must not point
 at the production Railway URL. Test keys and test bypasses are disabled in
 production. Password recovery email and object-storage delivery are separate
 production integration tasks and not simulated as configured.
+
+## Staging promotion update (2026-10-17)
+
+See [ENVIRONMENTS.md](./ENVIRONMENTS.md). The staging project exists separately from the production Railway project because the current Railway integration cannot create an additional environment in an existing project. A main-targeted PR now requires verification that the exact staging SHA is running and healthy, enforced by CI's `staging-promotion` job. **This is not a substitute for GitHub branch protection and Railway Wait for CI, which require console activation.** Until those controls are verified, the production release gate is not considered enforced.
