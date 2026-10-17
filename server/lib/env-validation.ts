@@ -62,16 +62,14 @@ export function validateEnvironment(): EnvValidationResult {
   }
 
   if (!process.env.STRIPE_SECRET_KEY) {
-    result.warnings.push("STRIPE_SECRET_KEY not set - checkout and billing portal will fail");
+    result.warnings.push("STRIPE_SECRET_KEY not set - donation checkout and legacy billing portal will be unavailable");
   }
-  if (!process.env.STRIPE_PRICE_PLUS) {
-    result.warnings.push("STRIPE_PRICE_PLUS not set - paid plan checkout will be unavailable");
+  if (process.env.STRIPE_SYNC_ENABLED === "1") {
+    if (!process.env.STRIPE_PRICE_PLUS || !process.env.STRIPE_PRICE_PREMIUM) {
+      result.warnings.push("Legacy subscription sync opted in without all historical Stripe price IDs");
+    }
   }
-  if (!process.env.STRIPE_PRICE_PREMIUM) {
-    // Premium is unlisted, but the webhook still needs this price id to map
-    // existing subscribers onto the premium plan.
-    result.warnings.push("STRIPE_PRICE_PREMIUM not set - existing Premium subscribers will be treated as free");
-  }
+
 
   const hasGoogleId = !!process.env.GOOGLE_CLIENT_ID;
   const hasGoogleSecret = !!process.env.GOOGLE_CLIENT_SECRET;
@@ -102,8 +100,8 @@ function logConfigReport(): void {
     ["file storage (R2)", !!(process.env.R2_ENDPOINT && process.env.R2_BUCKET && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY)],
     ["email (Resend)", !!process.env.RESEND_API_KEY],
     ["email sender (EMAIL_FROM)", !!process.env.EMAIL_FROM],
-    ["stripe key", !!process.env.STRIPE_SECRET_KEY],
-    ["stripe paid plans", !!(process.env.STRIPE_PRICE_PLUS && process.env.STRIPE_PRICE_PREMIUM)],
+    ["Stripe donation key configured (validity not verified)", !!process.env.STRIPE_SECRET_KEY],
+    ["legacy Stripe subscription sync (explicit opt-in)", process.env.STRIPE_SYNC_ENABLED === "1"],
     ["google login", !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)],
     ["places autocomplete", !!process.env.VITE_GOOGLE_PLACES_API_KEY],
     ["sentry", !!process.env.SENTRY_DSN],
