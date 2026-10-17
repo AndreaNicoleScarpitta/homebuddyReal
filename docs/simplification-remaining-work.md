@@ -1,6 +1,7 @@
 # Simplification — remaining work
 
-Phases 1–5 of the product simplification are committed. This file records what
+This is a historical debt list; check today's routes and deployed model before acting.
+Phases 1–5 of product simplification have been deployed. This file records what
 was deliberately **not** done, and why, so the next person does not have to
 reconstruct the reasoning.
 
@@ -12,9 +13,7 @@ defined in `shared/schema.ts` and still exist in production.
 **Do not drop them in the same deploy that removes their code.** The June 2026
 auth outage was schema drift on `users`; the rule since then is that a drop
 migration ships at least one clean deploy *after* the code that stopped using
-it, with a database backup taken first. Nothing from Phases 1–5 has been
-deployed yet, so a drop migration written today would land simultaneously with
-the code removal — exactly the situation the rule exists to prevent.
+it, with a database backup taken first. The releases have since deployed, but no table drop is safe without a new search for readers, tested migrations, a current backup, and a separate compatibility review.
 
 Drop list, once Phases 1–5 are live and stable:
 
@@ -30,22 +29,11 @@ Drop list, once Phases 1–5 are live and stable:
 Write each cluster as its own reviewed migration with `DROP TABLE IF EXISTS`,
 per the workflow in CLAUDE.md. Take a backup before each.
 
-## 2. stripe-replit-sync — still required, despite looking donation-only
+## 2. Stripe legacy sync — opt-in, **not needed for donations**
 
-It is tempting to remove: donations are gone and the mirrored `stripe` schema
-has no remaining reader. Two things still depend on it:
+New paid subscriptions were discontinued and **one-time donations are available** through `server/billing-routes.ts`. `server/index.ts` no longer runs the legacy Stripe auto-sync unless `STRIPE_SYNC_ENABLED=1`. Donation checkout uses the Stripe SDK directly; it worked in production on October 17 after a new live key was configured.
 
-- `server/webhookHandlers.ts` calls `sync.processWebhook()` before doing its own
-  verification.
-- `server/index.ts` calls `findOrCreateManagedWebhook()` at boot, which is what
-  registers the Stripe webhook endpoint in the first place.
-
-Subscription correctness does **not** depend on the sync — plan changes are
-applied from an independently verified event using `STRIPE_WEBHOOK_SECRET`. But
-removing the boot call means the endpoint is no longer managed for you. Before
-removing it: confirm in the Stripe dashboard that the endpoint exists and that
-its signing secret matches `STRIPE_WEBHOOK_SECRET`, then drop the boot block,
-the `getStripeSync` export, and the dependency together with the `stripe` schema.
+Do **not** re-enable sync by default or drop the historical `stripe` schema / `stripe-replit-sync` package casually. `server/webhookHandlers.ts` and any existing subscribers/customer portal require a separate audit of the endpoint, signing secret, event processing and cancellation paths. Remove legacy integration only in a dedicated, reviewed migration with an existing-subscriber plan.
 
 ## 3. Legacy `/api` vs `/v2` — smaller than it looked, but real
 
@@ -67,8 +55,7 @@ What is genuinely duplicated — the same resource implemented twice:
 Utilities and insurance exist **only** on `/api` — there is no v2 equivalent, so
 consolidating those means writing new v2 endpoints, not just re-pointing calls.
 
-This was not attempted because it is a multi-day refactor that touches the
-Records sections and the event-sourcing semantics, carries real regression risk,
+This was not attempted because it is a multi-day refactor that touches legacy data and UI sections and the event-sourcing semantics, carries real regression risk,
 and delivers nothing a user can see. Do it deliberately, one resource at a time,
 each with its own tests — not as a sweep.
 

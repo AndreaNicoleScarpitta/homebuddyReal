@@ -1,75 +1,14 @@
-# Home Buddy - Home Maintenance Assistant
+# HomeBuddy — historical Replit project notes
 
-## Overview
-Home Buddy is a home maintenance assistant web application designed to simplify home management. It features OAuth authentication, comprehensive home profile management, AI-powered maintenance task tracking, a chat assistant with session history, document storage via object storage, and inspection report management. It is configured as a Progressive Web App (PWA) for installability across devices. The project aims to provide a reliable, anxiety-aware tool for homeowners to manage their properties efficiently.
+This repository previously ran on Replit. The original long-form notes described older architecture and features, including obsolete authentication, contractor, navigation and billing decisions. **Do not use those notes for current implementation.**
 
-## User Preferences
-- Design: "Modern Utility" aesthetic with construction orange (#f97316)
-- Typography: Plus Jakarta Sans (headings), Inter (UI)
-- UX: Emotional design, anxiety-aware
-- Style: Minimalist, no cards, split-hero layouts, pill-style components
-- Tone: Calm professional, not "friendly startup" - empathetic but grounded
-- AI Messaging: Always include disclaimers that estimates are ranges, user is in control
-- Provider Integration: Angi for contractor research, opt-in only, never pushy
+Current sources of truth:
 
-## System Architecture
-The application employs a robust architecture featuring social login authentication (Google, Facebook, Instagram via Passport.js) and a PostgreSQL database. It utilizes Drizzle ORM for schema management. All API routes are secured with authorization checks, structured logging, and comprehensive error handling. A key architectural decision is the adoption of an event-driven pattern for core functionalities, using an event log and projection tables for data consistency and scalability.
+- [README.md](README.md) — product description, stack, local start, common commands.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Home, Plan, My House, eventing, auth and integrations.
+- [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md) — safe local PostgreSQL and optional sandbox credentials.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — test, review and protected staging → production workflow.
+- [docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md) — actual Railway topology.
+- [docs/OPERATIONS_RECOVERY.md](docs/OPERATIONS_RECOVERY.md) — backup, PITR and Stripe operations.
 
-Core features include:
-- **Authentication**: Replit OIDC for OAuth, session-based with PostgreSQL session store. Each user has a unique `uuid` column (auto-generated via `gen_random_uuid()`, unique index) in addition to their provider-assigned `id`. UUID is displayed on the profile page.
-- **Data Management**: Event-sourced architecture for critical aggregates (Homes, Systems, Tasks, Reports, Findings, Assistant Actions, Circuit Maps). Data immutability enforced on the event log.
-- **API**: Versioned API endpoints (`/v2`) with idempotency keys, state machine guards, and ownership verification for data security.
-- **AI Integration — File Upload & Analysis Pipeline**: 3-stage AI pipeline (Pre-Processor → Contractor Analysis → Reasoning Engine) in `server/lib/analysis-pipeline/`. Supports PDF, PNG, JPG, JPEG, HEIC, DOCX, TXT uploads. Stage 1 (GPT-4o) extracts structured signals (systems, equipment, issues, recommendations, attributes, safety). Stage 2 matches findings to existing systems, creates proposed tasks, identifies suggested new systems (approval-first). Stage 3 infers follow-up tasks from contractor language patterns (19 patterns: end-of-life, monitor, professional eval, debris, shingle damage, install dates, periodic inspection, water damage, code violations, safety hazards, structural cracks/settling, grading/drainage, wood rot, caulking, failed window seals, improper venting, corrosion/rust, insulation deficiencies, known-risk materials). Patterns are tightened to prevent false positives — monitor requires a recommendation verb context, professional eval requires action verbs, code violation requires explicit code/standard context. Unknown systems require user approval before tasks/attributes are created. Declining removes all pending data. Image files use GPT-4o vision for OCR. DOCX uses mammoth for text extraction. Routes: `POST /v2/homes/:homeId/file-analysis`, `GET /v2/homes/:homeId/suggestions`, `POST /v2/suggestions/:id/approve`, `POST /v2/suggestions/:id/decline`, `POST /v2/homes/:homeId/confirm-matched-tasks`.
-- **Universal System-Scoped Attributes**: ALL attributes across the entire system are namespaced. The shared module `server/lib/attribute-namespace.ts` provides `generateInstancePrefix()` for instance-level uniqueness (e.g., two HVAC units → `hvac_main_floor_ac` vs `hvac_upstairs_heat_pump`), `namespaceTaskAttributes()`/`denamespaceTaskAttributes()` for round-trip encoding, and `validateInstanceNamespace()` for cross-instance isolation. Applied to: document analysis, manual task creation (QuickAddTaskDialog), AI task analysis (`/v2/tasks/analyze`), system wizard suggestions (`/v2/systems/suggest-tasks`), and batch task creation. Tasks carry a `namespacePrefix` field. Maintenance cards display the namespace badge when present.
-- **Circuit Panel Mapping**: Photograph breaker panels, AI-powered breaker identification (GPT-4o vision), structured annotation editor with room/amperage fields, event-sourced with CircuitMapCreated/Annotated/Deleted events. Accessible from Dashboard → Home Info → Circuit Panel Map button (requires Electrical system).
-- **Document Storage**: Object storage integration (GCS) for home documents (insurance, warranties, permits, receipts) with presigned URL upload flow.
-- **Background Processing**: A job queue system handles asynchronous tasks like report analysis, digest generation, and reconciliation checks for overdue tasks.
-- **PWA Capabilities**: Service worker, manifest, and app icons for installability and offline access.
-- **Disclaimer & Terms Gate**: Users must accept a versioned safety disclaimer (v1.0) before accessing file upload/analysis features. Disclaimer covers: "not a monitoring service", AI guidance limitations, user responsibility, emergency warnings, liability limits. Backend stores `disclaimerAccepted`, `disclaimerAcceptedAt`, `disclaimerVersion` on user record + audit log table (`disclaimer_audit_log` with userId, version, action, IP, timestamp). Backend `requireDisclaimer()` guard on file-analysis, approve, decline, confirm-matched-tasks routes returns 403 with `DISCLAIMER_REQUIRED` code. Frontend `useDisclaimer` hook + redirect gate on `/document-analysis` → `/disclaimer`. Version bumps force re-acceptance. Routes: `GET /api/disclaimer/status`, `POST /api/disclaimer/accept`.
-- **Security**: Comprehensive security hardening including input sanitization, security headers (Helmet), rate limiting (express-rate-limit), and robust error handling to prevent data leakage.
-- **Systems Inventory + Review**: Dashboard shows per-type count pills in `SystemsSummary` component. `/systems` directory page with search, filter-by-type chips, sort options, and type instances view (review existing vs add new). `/systems/:id` detail page with editable attributes, notes, related tasks, maintenance history placeholder, and documents placeholder. GA4 events: `systems_directory_opened`, `system_type_opened`, `system_instance_opened`, `system_instance_add_started`, `system_instance_created`. Max 2 clicks from Dashboard to any system detail. System categories: Roof, HVAC, Plumbing, Electrical, Windows, Siding/Exterior, Foundation, Chimney, Appliances, Water Heater, Landscaping, Pest, Paint, Other. Notes section includes category-specific placeholder examples (e.g., Roof shows "GAF Timberline HDZ in Charcoal...") and contextual hints (e.g., "Record the shingle brand, product line, and color so you can get an exact match for repairs").
-- **Paint System Category**: Dedicated "Paint" system category with a custom Paint Colors card on the detail page. Users can add key/value pairs (room/wall name + hex color) with optional brand and color code fields. Each entry shows a color swatch preview with the hex value. Colors are stored as JSON in the system's notes field (`{ paintColors: [{ name, color, brand, code }] }`). Native HTML color picker integrated alongside hex text input. Contrast-aware text on swatches for readability.
-- **Maintenance Schedule Generation**: After adding any system, the wizard presents best-practice maintenance tasks. Known system types (HVAC, Roof, Plumbing, Electrical, etc.) use predefined task templates with cadence, urgency, cost estimates, and safety warnings. "Other" system types use GPT-4o to research and suggest tasks via NLP. Users approve/deny individual tasks before they're created. Recurring schedule toggle enables automatic cadence-based reminders. Tasks are created via batch through the V2 event-sourced pipeline.
-- **AI Task Analysis**: When manually adding tasks, GPT-4o auto-determines urgency (priority), DIY safety level, estimated cost, description, and safety warnings based on the task title and category. Debounced analysis triggers after 800ms of typing. Fallback to manual entry if AI analysis fails.
-- **Contractor Mode**: User setting (in Profile → Contractor Mode toggle) that unlocks manual DIY level overrides on tasks. When OFF, users cannot change the AI-determined DIY level. Stored in notification_preferences as `contractorMode` boolean.
-- **Dynamic Health Score**: Home health score is computed client-side from system conditions when no server-side score exists. Condition-weighted average (Great=100, Good=90, Fair=70, Poor=40, Unknown=80) with task urgency/overdue penalties. Prevents false "Needs Attention" alerts for homes with only good-condition systems.
-- **Tooltip + Definitions System**: In-product help system with reusable FieldTooltip component (hover/tap/focus), Definitions Drawer (search, categories, detail views with related terms), 50+ structured term definitions covering all dropdowns and fields. Entry points: sidebar help icon (desktop), header help icon (mobile), and "Learn more" links from any tooltip. Privacy-safe analytics (term_slug only, no user data). Content stored as typed JSON in `client/src/data/definitions.ts`.
-- **Slug Registry & Analytics**: Central registry in `client/src/lib/slug-registry.ts` with `PAGE_SLUGS` and `MODAL_SLUGS`. All slugs are lowercase kebab-case, validated unique at dev startup via `validateUniqueSlugs()` in App.tsx. Every page fires `trackSlugPageView(slug)` on mount; every modal fires `trackModalOpen(slug)` when opened. Analytics wrappers (`trackSlugPageView`, `trackModalOpen`) in `client/src/lib/analytics.ts` map to GA4 events (`page_view`/`modal_open` with slug labels).
-- **Swipe Gestures on Tasks**: SwipeableTask wrapper component (framer-motion drag) applied to both Dashboard MaintenanceCards and Maintenance Log TaskRows. Swipe left → immediately completes the task (optimistic update + log entry + persistence). Swipe right → deletes the task (optimistic removal + persistence). Threshold: 100px displacement or 500px/s velocity. Disabled for already-completed tasks. Action lock prevents duplicate rapid swipes. Visual affordances: green "Done" background on left, red "Delete" background on right. State machine allows TaskCompleted from all active states (proposed, approved, scheduled, in_progress, overdue). Dashboard filters completed tasks out of urgency groups; maintenance-log moves them to Completed tab.
-- **UI/UX**: React-based frontend with a "Modern Utility" design, featuring onboarding tours, rich text rendering, and responsive components.
-- **Navigation**: Primary sidebar and mobile bottom nav are Home, Plan, Systems, Records. Records is a single page (`/records`) with a `?type=` filter for documents, warranties, insurance and utilities; the four former standalone pages redirect into it. Document analysis is an action on the dashboard, not a nav item. Ask AI, Insights, Timeline and Transfer Kit are in a secondary group pending a usage review.
-- **Sign-Up Page**: Dedicated `/signup` page with benefits grid, social proof pills, and split layout (marketing left, form right). Visually distinct from login page. Landing page CTAs ("Sign Up Free", "Get Started Free", "Start Managing Your Home") all link to `/signup`. Login page has "Sign up free" link, signup page has "Sign in here" link. OAuth primary button, test credentials secondary.
-- **Delete All Data**: Uses PostgreSQL savepoints (`SAVEPOINT/ROLLBACK TO SAVEPOINT`) inside a transaction to gracefully handle missing tables without aborting the entire transaction.
-- **System Detail Related Tasks**: Tasks show a hoverable "Done" button for inline completion via `completeTaskMutation`.
-- **Add System Wizard**: Accepts `initialCategory` prop to pre-select category and skip step 1 when navigating from a filtered system type view.
-- **Onboarding Guard**: Dashboard redirect to `/onboarding` is gated by `homeQuerySettled` to prevent false redirects before data loads.
-- **Maintenance Log Fix**: Task completion reorders operations (complete task first, then create log entry) and gracefully handles missing `legacyId` (skips legacy log entry if null). Swipe completion also guarded.
-- **Test Login**: `POST /api/auth/test-login` with `{"username":"test","password":"password123"}` creates/upserts test-user-001 and establishes session. Login page at `/login` has username/password form + Replit OAuth option.
-- **Daily Notification Digest**: `server/jobs/notificationScheduler.ts` runs hourly via setInterval, checks for users with `email_enabled` + `maintenance_reminders` enabled, collects overdue/due-today/due-soon tasks, batches into max 1 email per user per day (20-hour minimum gap tracked via `lastDigestSentAt` on `notification_preferences`). Uses Resend API via `sendEmail()`. Branded HTML email template with task sections color-coded by urgency. Links to `/maintenance-log`. Scheduler starts on server boot.
-
-## External Dependencies
-- **PostgreSQL**: Primary database for all application data.
-- **Passport.js**: For OAuth-based social login (Google, Facebook, Instagram).
-- **GPT-4o (OpenAI API)**: Powers the AI chat assistant and vision capabilities.
-- **Resend**: For sending email notifications (e.g., contact form submissions).
-- **Angi**: Integrated for contractor research and suggestions (opt-in only).
-- **Google Places API**: Used for address autocomplete functionality.
-- **USPS API**: Removed — address verification is no longer used.
-- **connect-pg-simple**: PostgreSQL session store.
-- **Stripe**: Subscription billing for the Plus plan.
-- **stripe-replit-sync**: Stripe schema sync, webhook management, and backfill.
-- **express-rate-limit**: Middleware for API rate limiting.
-- **pino**: Structured logging library.
-- **Vitest**: Unit testing framework.
-
-## SEO
-- `client/index.html`: Title, meta description, keywords, canonical URL (`https://home-buddy.replit.app/`), Open Graph + Twitter Card tags, JSON-LD structured data (SoftwareApplication + WebApplication with free pricing).
-- `client/public/robots.txt`: Allows `/`, blocks `/api/`, `/v2/`, and authenticated routes. References sitemap.
-- `client/public/sitemap.xml`: Lists `/`, `/terms`, `/login`, `/contact`, and 3 guide pages as crawlable.
-- Landing page (`client/src/pages/landing.tsx`): Semantic HTML (`<header>`, `<nav>`, `<main>`, `<section>`, `<footer>`), aria-labels, dynamic `<title>` override, keyword-rich footer with Guides section linking to SEO content pages.
-- **SEO Content Pages** (public, pre-login, in `client/src/pages/guides/`):
-  - `/guides/home-maintenance-checklist-by-month` — 12-month maintenance checklist targeting "home maintenance checklist by month"
-  - `/guides/annual-home-maintenance-schedule` — Seasonal schedule (Spring/Summer/Fall/Winter) targeting "annual home maintenance schedule"
-  - `/guides/what-to-maintain-in-a-new-house` — 10-system guide for first-time homeowners targeting "what to maintain in a new house"
-  - All use `SeoPageLayout` wrapper (`client/src/components/seo-page-layout.tsx`) with shared header, footer, CTA section, and dynamic meta tags.
-- Update canonical URL if domain changes.
+HomeBuddy is a mobile-first PWA and the intelligent operating record of a home. New user billing is limited to **one-time donations**; paid plan upgrades are discontinued. The production application is on Railway rather than Replit. Replit-named legacy source modules are still present for compatibility; a historical module name does not imply its historical deployment model is active.

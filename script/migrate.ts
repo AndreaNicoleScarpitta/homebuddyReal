@@ -1,3 +1,4 @@
+import "dotenv/config";
 /**
  * Production migration runner.
  *

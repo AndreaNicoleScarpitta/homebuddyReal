@@ -1,6 +1,6 @@
 # HomeBuddy staging and production environments
 
-Updated 2026-10-17. **Implementation status must be verified in Railway and GitHub; this document does not imply console-only controls are enabled.**
+Updated 2026-10-17 following successful release and recovery verification. Runtime/provider state must always be rechecked before operational changes.
 
 ## Infrastructure topology
 
@@ -39,15 +39,11 @@ Production URL: https://www.homebuddy.space
 
 ### Backups and recovery
 
-Production PostgreSQL has a persistent Railway volume. A volume alone **is not a backup**. In Railway → project `attractive-truth` → Postgres → Backups:
-- Enable daily scheduled volume snapshots; choose retention based on actual plan limits, e.g. 7 daily and 4 weekly restore points if supported.
-- Consider point-in-time recovery for customer data if supported by the selected Postgres service.
-- Alert on backup failures and storage exhaustion. Confirm that snapshots are billed.
-- For a restoration drill, create a temporary **isolated** database and restore a recent snapshot into it. Validate migration journal, tables, row counts and read queries. Never restore to the production database or reattach its volume.
-- Record RPO, RTO, snapshot timestamp, measured restore time, operator and result. Do not mark the drill passed without evidence.
-- Configure an appropriate R2 object retention/versioning policy and periodically test readback of a recoverable object without using user PII.
-
-**Schema rollback warning:** Revert the application image only if its code remains compatible with the migrated database schema. Database migrations are not automatically reversible. For incompatible changes, roll forward using an additive migration or restore an isolated snapshot after an approved disaster-recovery decision.
+- Production PostgreSQL uses a persistent volume, scheduled volume snapshots, and a live `Postgres-PITR` bucket.
+- On 2026-10-17, a PITR restore into an **isolated new service** completed at the selected transaction timestamp; Postgres reached consistent recovery and accepted connections. The temporary service and detached volumes were subsequently deleted. This confirms infrastructure-level recovery, **not** a row-by-row production data audit.
+- A **volume backup restore** would stage a mount replacement on the existing production Postgres. Never deploy such a restore for an ordinary rehearsal.
+- Scheduled backups are verified in the Railway dashboard, not exposed by the connected Railway API. Preserve at least one historical recovery point and monitor backup failures/storage costs.
+- See [OPERATIONS_RECOVERY.md](./OPERATIONS_RECOVERY.md) for restore boundaries and operator instructions.
 
 ### Monitoring and secrets
 
@@ -55,17 +51,14 @@ Production `/api/health` checks DB connectivity. `/api/version` identifies the c
 
 Never log or copy session secrets, auth tokens, provider keys, database passwords, homeowner PII, or documents into CI artifacts. Never use production accounts for QA.
 
-### Remaining manual provider-console actions
+### Manual operational follow-ups
 
-1. GitHub Settings → Rules → Rulesets: protect `main` and `staging`, require PR and `release-gate` (unless a rule is already active). Test that a deliberately failing PR cannot merge.
-2. Railway production homebuddyReal → Settings → Source → enable **Wait for CI**. Check the live service configuration reflects this.
-3. Configure and test backups, volume alerts, R2 recoverability, and Sentry alerts. Connected Railway actions cannot currently set backup schedules.
-4. Add a distinct Cloudflare R2 staging bucket if Cloudflare parity is required; replace Railway staging bucket references only after verifying correct credentials and CORS. Do not copy the production bucket keys.
-5. Verify staging object-store credentials, upload persistence, OAuth paths, and full Playwright journeys before promoting.
-
+1. Verify any new Cloudflare/Railway object-storage integration uses isolated staging credentials and CORS rather than copying production document secrets.
+2. Monitor backup and alert delivery, PITR storage costs, and Sentry; test offsite backup recovery separately if required by reliability targets.
+3. Maintain and periodically test protected branches, Railway Wait for CI, and the exact-SHA staging promotion gate.
 
 ### October 2026 reliability follow-up
 
 See [OPERATIONS_RECOVERY.md](./OPERATIONS_RECOVERY.md) for production backup schedules, restore testing boundaries, staging branch protection, and Stripe key rotation.
 
-The legacy `stripe-replit-sync` startup process is opt-in via `STRIPE_SYNC_ENABLED=1` (default disabled); donation checkout is independent and still requires a **valid** `STRIPE_SECRET_KEY`. Disabling legacy sync avoids unnecessary Stripe startup calls but **does not repair** an invalid donation API key. Existing subscription webhook routes and portal access remain in the code.
+The legacy `stripe-replit-sync` startup process is opt-in via `STRIPE_SYNC_ENABLED=1` (default disabled). On October 17 the production Stripe key was replaced and one-time donation checkout returned HTTP 200 and opened Stripe Checkout without charging a card. Webhook/payment completion and historical subscriber access are separate verification boundaries; do not re-enable legacy sync automatically.

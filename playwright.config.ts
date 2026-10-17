@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { defineConfig, devices } from "@playwright/test";
 
 // Production is never a valid browser-test target. Remote browser runs are
