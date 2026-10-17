@@ -1,10 +1,9 @@
 /**
- * Only former subscription features need StripeSync managed webhooks/backfill.
- * One-time donations use Stripe Checkout directly. Keep legacy synchronization
- * opt-in so unrelated app boot / home usage are not tied to Stripe account API.
+ * One-time donations use Stripe Checkout directly; historical subscription
+ * reconciliation and managed webhook synchronization are an explicit opt-in.
  */
 export function shouldInitializeLegacyStripeSync(
-  env: { STRIPE_SYNC_ENABLED?: string } = process.env,
+  enabled: string | undefined = process.env.STRIPE_SYNC_ENABLED,
 ): boolean {
-  return env.STRIPE_SYNC_ENABLED === "1";
+  return enabled === "1";
 }
