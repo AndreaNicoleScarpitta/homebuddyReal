@@ -213,3 +213,32 @@ test("a linked document is also discoverable from its system profile", async ({ 
   await expect(page.getByTestId("text-system-name")).toContainText("Heat Pump");
   await expect(page.getByTestId("card-document-9")).toBeVisible();
 });
+
+test("Home Assistant fits narrow mobile viewports without obscuring prompts or the composer", async ({ page }) => {
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 700 });
+    await mockAuthenticatedHome(page);
+    await page.route("**/v2/homes/house-uuid/chat/sessions", route =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
+    );
+    await page.goto("/chat");
+
+    const composer = page.getByTestId("chat-composer");
+    const prompt = page.getByTestId("button-suggestion-prioritize");
+    await expect(composer).toBeVisible();
+    await expect(prompt).toBeVisible();
+    await expect(page.getByTestId("input-message")).toBeVisible();
+    await expect(page.getByTestId("button-add-photo")).toBeVisible();
+    await expect(page.getByTestId("button-send")).toBeVisible();
+
+    const composerBox = await composer.boundingBox();
+    const promptBox = await prompt.boundingBox();
+    expect(composerBox).not.toBeNull();
+    expect(promptBox).not.toBeNull();
+    expect(composerBox!.x).toBeGreaterThanOrEqual(0);
+    expect(composerBox!.x + composerBox!.width).toBeLessThanOrEqual(width + 1);
+    expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(700);
+    expect(promptBox!.y + promptBox!.height).toBeLessThanOrEqual(composerBox!.y + 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+});
