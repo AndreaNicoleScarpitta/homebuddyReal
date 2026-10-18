@@ -1,15 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  Shield,
-  CheckCircle2,
-  Sparkles,
-  FileText,
-  Zap,
-  CalendarClock,
-  Paintbrush,
-  Mail,
-  Loader2,
-} from "lucide-react";
+import { Shield, House, FileText, CalendarClock, Mail, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { trackEvent, trackSlugPageView } from "@/lib/analytics";
 import { PAGE_SLUGS } from "@/lib/slug-registry";
@@ -31,33 +21,9 @@ const GoogleIcon = () => (
 );
 
 const benefits = [
-  {
-    icon: CalendarClock,
-    title: "Personalized schedules",
-    description: "AI builds maintenance tasks tailored to your exact systems",
-  },
-  {
-    icon: FileText,
-    title: "Upload inspection reports",
-    description: "AI reads your documents and extracts every system and finding",
-  },
-  {
-    icon: Zap,
-    title: "DIY safety ratings",
-    description: "Know what you can fix yourself and what needs a professional",
-  },
-  {
-    icon: Paintbrush,
-    title: "Track everything",
-    description: "From paint colors to circuit breakers — one place for it all",
-  },
-];
-
-const socialProof = [
-  "14 system categories",
-  "50+ task templates",
-  "19 AI detection patterns",
-  "24/7 AI-powered insights",
+  { icon: House, title: "Know your home", description: "Keep useful details about your systems and shutoffs together." },
+  { icon: CalendarClock, title: "Know what comes next", description: "Get starter tasks based on the details you provide." },
+  { icon: FileText, title: "Keep your home's record", description: "Save documents and record completed maintenance." },
 ];
 
 export default function Signup() {
@@ -68,11 +34,10 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [firstName, setFirstName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [passwordMismatch, setPasswordMismatch] = useState(false);
 
-  useEffect(() => { trackSlugPageView(PAGE_SLUGS.signup); }, []);
+  useEffect(() => { trackSlugPageView(PAGE_SLUGS.signup); trackEvent("signup_page_view", "conversion", "signup"); }, []);
 
   // Check which OAuth providers are configured on the server
   const { data: providers } = useQuery<{ google: boolean }>({
@@ -95,7 +60,7 @@ export default function Signup() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, firstName: firstName || null }),
+        body: JSON.stringify({ email, password, firstName: null }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Signup failed");
@@ -115,7 +80,7 @@ export default function Signup() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-background to-background dark:from-orange-950/20 dark:via-background dark:to-background">
       <header className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-md border-b border-border/40">
-        <nav className="container mx-auto px-6 h-16 flex justify-between items-center">
+        <nav className="container mx-auto px-4 sm:px-6 h-16 flex justify-between items-center gap-2">
           <Link href="/" className="flex items-center gap-2 no-underline" data-testid="link-signup-home">
             <img
               src="/images/home-buddy-icon.png"
@@ -124,7 +89,7 @@ export default function Signup() {
               width="32"
               height="32"
             />
-            <span className="text-xl font-heading font-bold text-foreground">Home Buddy</span>
+            <span className="text-base sm:text-xl font-heading font-bold text-foreground">HomeBuddy</span>
           </Link>
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground hidden sm:inline">Already have an account?</span>
@@ -141,27 +106,27 @@ export default function Signup() {
       </header>
 
       <main className="pt-16">
-        <div className="container mx-auto px-6 py-12 lg:py-20">
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-start">
+        <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-12 lg:py-20">
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-start">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5 }}
-              className="space-y-10 lg:sticky lg:top-28"
+              className="order-2 space-y-6 lg:order-1 lg:sticky lg:top-28"
             >
               <div className="space-y-6">
                 <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
                   <Sparkles className="h-4 w-4" />
-                  AI-powered home maintenance
+                  Your home, organized
                 </div>
 
                 <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-foreground leading-[1.08] tracking-tight">
-                  Take control of<br />
-                  <span className="text-primary">your home.</span>
+                  Know your home.<br />
+                  <span className="text-primary">Stay ahead.</span>
                 </h1>
 
                 <p className="text-lg text-muted-foreground max-w-lg leading-relaxed">
-                  Home Buddy gives you a personalized maintenance plan in minutes. Stop worrying about what you're forgetting.
+                  Start with a few details, get a useful maintenance plan, and keep your home's important information together.
                 </p>
               </div>
 
@@ -182,29 +147,18 @@ export default function Signup() {
                 ))}
               </div>
 
-              <div className="flex flex-wrap gap-3">
-                {socialProof.map((stat) => (
-                  <span
-                    key={stat}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 text-xs font-medium"
-                  >
-                    <CheckCircle2 className="h-3 w-3" />
-                    {stat}
-                  </span>
-                ))}
-              </div>
             </motion.div>
 
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.1 }}
-              className="w-full max-w-md mx-auto lg:mx-0"
+              className="order-1 w-full max-w-md mx-auto lg:order-2 lg:mx-0"
             >
-              <div className="bg-card border border-border/50 rounded-2xl shadow-xl shadow-black/5 p-8 space-y-6">
+              <div className="bg-card border border-border/50 rounded-2xl shadow-xl shadow-black/5 p-5 sm:p-8 space-y-6">
                 <div className="space-y-2">
                   <h2 className="text-2xl font-heading font-bold text-foreground">Create your account</h2>
-                  <p className="text-sm text-muted-foreground">Set up your home profile in under 2 minutes</p>
+                  <p className="text-sm text-muted-foreground">Create your account, then add your home details.</p>
                 </div>
 
                 {!showEmailForm ? (
@@ -215,7 +169,7 @@ export default function Signup() {
                         onClick={() => trackEvent("signup_attempt", "auth", "google")}
                         className={cn(
                           buttonVariants({ variant: "outline", size: "default" }),
-                          "w-full h-11 text-sm font-medium gap-3 justify-center no-underline",
+                          "w-full min-h-12 text-sm font-medium gap-3 justify-center no-underline",
                         )}
                         data-testid="button-signup-google"
                       >
@@ -228,7 +182,7 @@ export default function Signup() {
                       onClick={() => setShowEmailForm(true)}
                       className={cn(
                         buttonVariants({ variant: "outline", size: "default" }),
-                        "w-full h-11 text-sm font-medium gap-3 justify-center",
+                        "w-full min-h-12 text-sm font-medium gap-3 justify-center",
                       )}
                       data-testid="button-signup-email"
                     >
@@ -238,12 +192,6 @@ export default function Signup() {
                   </div>
                 ) : (
                   <form onSubmit={handleEmailSignup} className="space-y-4" data-testid="form-signup-email">
-                    <div className="space-y-2">
-                      <Label htmlFor="signup-firstname">First name (optional)</Label>
-                      <Input id="signup-firstname" type="text" autoComplete="given-name"
-                        value={firstName} onChange={(e) => setFirstName(e.target.value)}
-                        data-testid="input-signup-firstname" />
-                    </div>
                     <div className="space-y-2">
                       <Label htmlFor="signup-email">Email</Label>
                       <Input id="signup-email" type="email" autoComplete="email" required
@@ -275,7 +223,7 @@ export default function Signup() {
                         <p className="text-xs text-destructive">Passwords don't match.</p>
                       )}
                     </div>
-                    <Button type="submit" className="w-full h-11" disabled={submitting} data-testid="button-submit-signup">
+                    <Button type="submit" className="w-full min-h-12" disabled={submitting} data-testid="button-submit-signup">
                       {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}
                     </Button>
                     <button type="button" onClick={() => setShowEmailForm(false)}
@@ -287,7 +235,7 @@ export default function Signup() {
 
                 <div className="flex items-center gap-2 text-sm text-muted-foreground justify-center pt-2">
                   <Shield className="h-4 w-4" />
-                  <span>Secure authentication. Your data stays yours.</span>
+                  <span>Manage your home information from your account.</span>
                 </div>
 
                 <p className="text-center text-xs text-muted-foreground leading-relaxed">
