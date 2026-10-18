@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Shield, House, FileText, CalendarClock, Mail, Loader2 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { trackEvent, trackSlugPageView } from "@/lib/analytics";
 import { PAGE_SLUGS } from "@/lib/slug-registry";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,7 @@ const benefits = [
 
 export default function Signup() {
   const [, setLocation] = useLocation();
+  const reduceMotion = useReducedMotion();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [showEmailForm, setShowEmailForm] = useState(false);
@@ -37,7 +38,12 @@ export default function Signup() {
   const [submitting, setSubmitting] = useState(false);
   const [passwordMismatch, setPasswordMismatch] = useState(false);
 
-  useEffect(() => { trackSlugPageView(PAGE_SLUGS.signup); trackEvent("signup_page_view", "conversion", "signup"); }, []);
+  useEffect(() => {
+    document.title = "Set Up Your Home | HomeBuddy";
+    document.querySelector('meta[name="description"]')?.setAttribute("content", "Create your HomeBuddy account, add a few home details, and start with a useful maintenance plan.");
+    trackSlugPageView(PAGE_SLUGS.signup);
+    trackEvent("signup_page_view", "conversion", "signup");
+  }, []);
 
   // Check which OAuth providers are configured on the server
   const { data: providers } = useQuery<{ google: boolean }>({
@@ -96,7 +102,7 @@ export default function Signup() {
             <Link
               href="/login"
               onClick={() => trackEvent("click", "signup", "sign_in_header")}
-              className="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-accent no-underline transition-colors"
+              className="inline-flex min-h-11 items-center justify-center rounded-md border border-border px-3 sm:px-4 py-2 text-sm font-medium text-foreground hover:bg-accent no-underline transition-colors"
               data-testid="link-signup-signin"
             >
               Sign In
@@ -109,9 +115,9 @@ export default function Signup() {
         <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-12 lg:py-20">
           <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-start">
             <motion.div
-              initial={{ opacity: 0, x: -20 }}
+              initial={reduceMotion ? false : { opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5 }}
+              transition={{ duration: reduceMotion ? 0 : 0.5 }}
               className="order-2 space-y-6 lg:order-1 lg:sticky lg:top-28"
             >
               <div className="space-y-6">
@@ -150,9 +156,9 @@ export default function Signup() {
             </motion.div>
 
             <motion.div
-              initial={{ opacity: 0, x: 20 }}
+              initial={reduceMotion ? false : { opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
+              transition={{ duration: reduceMotion ? 0 : 0.5, delay: reduceMotion ? 0 : 0.1 }}
               className="order-1 w-full max-w-md mx-auto lg:order-2 lg:mx-0"
             >
               <div className="bg-card border border-border/50 rounded-2xl shadow-xl shadow-black/5 p-5 sm:p-8 space-y-6">
@@ -194,13 +200,13 @@ export default function Signup() {
                   <form onSubmit={handleEmailSignup} className="space-y-4" data-testid="form-signup-email">
                     <div className="space-y-2">
                       <Label htmlFor="signup-email">Email</Label>
-                      <Input id="signup-email" type="email" autoComplete="email" required
+                      <Input id="signup-email" type="email" autoComplete="email" required className="min-h-11"
                         value={email} onChange={(e) => setEmail(e.target.value)}
                         data-testid="input-signup-email" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="signup-password">Password</Label>
-                      <Input id="signup-password" type="password" autoComplete="new-password" required
+                      <Input id="signup-password" type="password" autoComplete="new-password" required className="min-h-11"
                         minLength={8} value={password}
                         onChange={(e) => { setPassword(e.target.value); setPasswordMismatch(false); }}
                         data-testid="input-signup-password" />
@@ -216,7 +222,7 @@ export default function Signup() {
                         minLength={8}
                         value={confirmPassword}
                         onChange={(e) => { setConfirmPassword(e.target.value); setPasswordMismatch(false); }}
-                        className={passwordMismatch ? "border-destructive focus-visible:ring-destructive" : ""}
+                        className={"min-h-11 " + (passwordMismatch ? "border-destructive focus-visible:ring-destructive" : "")}
                         data-testid="input-signup-confirm"
                       />
                       {passwordMismatch && (
