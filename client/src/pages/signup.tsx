@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Shield, House, FileText, CalendarClock, Mail, Loader2 } from "lucide-react";
-import { motion, useReducedMotion } from "framer-motion";
 import { trackEvent, trackSlugPageView } from "@/lib/analytics";
 import { PAGE_SLUGS } from "@/lib/slug-registry";
 import { cn } from "@/lib/utils";
@@ -28,7 +27,6 @@ const benefits = [
 
 export default function Signup() {
   const [, setLocation] = useLocation();
-  const reduceMotion = useReducedMotion();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [showEmailForm, setShowEmailForm] = useState(false);
@@ -84,7 +82,7 @@ export default function Signup() {
   const googleAvailable = providers?.google ?? true; // optimistic until loaded
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-background to-background dark:from-orange-950/20 dark:via-background dark:to-background">
+    <div className="min-h-screen w-full min-w-0 overflow-x-clip bg-gradient-to-br from-orange-50 via-background to-background dark:from-orange-950/20 dark:via-background dark:to-background">
       <header className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-md border-b border-border/40">
         <nav className="container mx-auto px-4 sm:px-6 h-16 flex justify-between items-center gap-2">
           <Link href="/" className="flex items-center gap-2 no-underline" data-testid="link-signup-home">
@@ -114,10 +112,7 @@ export default function Signup() {
       <main className="pt-16">
         <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-12 lg:py-20">
           <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-start">
-            <motion.div
-              initial={reduceMotion ? false : { opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: reduceMotion ? 0 : 0.5 }}
+            <div
               className="order-2 space-y-6 lg:order-1 lg:sticky lg:top-28"
             >
               <div className="space-y-6">
@@ -153,12 +148,9 @@ export default function Signup() {
                 ))}
               </div>
 
-            </motion.div>
+            </div>
 
-            <motion.div
-              initial={reduceMotion ? false : { opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: reduceMotion ? 0 : 0.5, delay: reduceMotion ? 0 : 0.1 }}
+            <div
               className="order-1 w-full max-w-md mx-auto lg:order-2 lg:mx-0"
             >
               <div className="bg-card border border-border/50 rounded-2xl shadow-xl shadow-black/5 p-5 sm:p-8 space-y-6">
@@ -258,7 +250,7 @@ export default function Signup() {
                   Sign in here
                 </Link>
               </p>
-            </motion.div>
+            </div>
           </div>
         </div>
       </main>
