@@ -1,607 +1,293 @@
-import { Calendar, MessageSquare, ArrowRight, Sparkles, FileText, Scan, CalendarClock, Shield, Heart, Zap, ChevronRight, CheckCircle2, RefreshCw, Smartphone } from "lucide-react";
-import { motion } from "framer-motion";
-import { DashboardDemo, ChatDemo, DocumentAnalysisDemo, TaskGenerationDemo } from "@/components/landing-demos";
+import { useEffect, useState } from "react";
+import { Link } from "wouter";
+import {
+  ArrowRight, BookOpen, CheckCircle2, ClipboardList, Clock3, FileText,
+  House, MessageCircle, ShieldCheck, Smartphone, Wrench,
+} from "lucide-react";
 import { trackEvent, trackSlugPageView } from "@/lib/analytics";
 import { PAGE_SLUGS } from "@/lib/slug-registry";
-import { useEffect } from "react";
-import { Link } from "wouter";
+
+// All preview content is illustrative. It uses the current Home / Plan / My House
+// / Assistant navigation and makes no claims about a visitor's actual property.
+type PreviewTab = "home" | "plan" | "house" | "assistant";
+const previewTabs: { id: PreviewTab; label: string }[] = [
+  { id: "home", label: "Home" },
+  { id: "plan", label: "Plan" },
+  { id: "house", label: "My House" },
+  { id: "assistant", label: "Assistant" },
+];
+
+function ProductPreview() {
+  const [active, setActive] = useState<PreviewTab>("home");
+
+  return (
+    <div className="w-full min-w-0 overflow-hidden rounded-[1.5rem] border border-border bg-card shadow-[0_18px_60px_-24px_rgba(42,35,28,0.28)]" data-testid="landing-product-preview">
+      <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <img src="/images/home-buddy-icon.webp" alt="" className="h-7 w-7 shrink-0 rounded-lg" width="28" height="28" />
+          <span className="truncate text-sm font-bold text-foreground">HomeBuddy</span>
+        </div>
+        <span className="shrink-0 text-[11px] text-muted-foreground">Illustrative preview</span>
+      </div>
+      <div className="grid grid-cols-4 gap-1 border-b border-border px-2 py-2 sm:px-4" role="tablist" aria-label="Explore HomeBuddy">
+        {previewTabs.map((tab) => (
+          <button
+            key={tab.id}
+            id={"preview-tab-" + tab.id}
+            type="button"
+            role="tab"
+            aria-selected={active === tab.id}
+            aria-controls="preview-panel"
+            onClick={() => setActive(tab.id)}
+            className={"min-h-11 min-w-0 rounded-lg px-1 py-2 text-[11px] font-semibold transition-colors sm:text-sm " +
+              (active === tab.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div id="preview-panel" role="tabpanel" aria-labelledby={"preview-tab-" + active} className="min-h-[260px] space-y-4 p-4 sm:min-h-[290px] sm:p-6">
+        {active === "home" && (
+          <>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Your home at a glance</p>
+              <h3 className="mt-1 text-xl font-bold text-foreground sm:text-2xl">Know what needs attention</h3>
+              <p className="mt-1 text-sm text-muted-foreground">See the next useful action without digging through a checklist.</p>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/20">
+              <div className="flex items-start gap-3">
+                <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">Needs attention</p>
+                  <p className="mt-1 text-sm text-foreground">Check your HVAC filter</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Open Plan to review and track the task.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <span className="rounded-full border border-border px-3 py-1.5">Systems</span>
+              <span className="rounded-full border border-border px-3 py-1.5">Maintenance</span>
+              <span className="rounded-full border border-border px-3 py-1.5">Home information</span>
+            </div>
+          </>
+        )}
+        {active === "plan" && (
+          <>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Maintenance planning</p>
+              <h3 className="mt-1 text-xl font-bold text-foreground sm:text-2xl">A plan you can act on</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Review what is coming up and record what is done.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {["Upcoming", "Due / Urgent", "Past Due", "Completed"].map((label) => (
+                <div key={label} className="flex min-h-14 items-center justify-center rounded-lg border border-border bg-muted/30 p-2 text-center text-xs font-semibold text-foreground">{label}</div>
+              ))}
+            </div>
+            <div className="flex items-center gap-3 rounded-xl border border-border px-3 py-4">
+              <Wrench className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+              <span className="min-w-0 flex-1 text-sm font-medium text-foreground">Check smoke alarms</span>
+              <span className="text-xs text-muted-foreground">Example task</span>
+            </div>
+          </>
+        )}
+        {active === "house" && (
+          <>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">My House</p>
+              <h3 className="mt-1 text-xl font-bold text-foreground sm:text-2xl">Information worth keeping</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Systems, shutoffs, warranties, and saved files where you can find them.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl border border-border p-3"><House className="mb-2 h-5 w-5 text-primary" aria-hidden="true" /><p className="text-sm font-semibold">Systems & appliances</p></div>
+              <div className="rounded-xl border border-border p-3"><ShieldCheck className="mb-2 h-5 w-5 text-primary" aria-hidden="true" /><p className="text-sm font-semibold">Emergency & utilities</p></div>
+              <div className="col-span-2 flex items-center gap-3 rounded-xl border border-border p-3"><FileText className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" /><div><p className="text-sm font-semibold">Documents</p><p className="text-xs text-muted-foreground">Inspection reports, manuals, and records you upload</p></div></div>
+            </div>
+          </>
+        )}
+        {active === "assistant" && (
+          <>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Home Assistant</p>
+              <h3 className="mt-1 text-xl font-bold text-foreground sm:text-2xl">Ask a home question</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Get practical guidance, with home context where available.</p>
+            </div>
+            <div className="ml-auto w-fit max-w-[88%] rounded-2xl rounded-br-sm bg-primary px-4 py-3 text-sm text-primary-foreground">Where should I keep my water shutoff details?</div>
+            <div className="mr-auto max-w-[92%] rounded-2xl rounded-bl-sm bg-muted px-4 py-3 text-sm leading-relaxed text-foreground">Save the shutoff location under My House → Emergency & utilities, so it's easier to find when needed.</div>
+          </>
+        )}
+      </div>
+      <div className="border-t border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground sm:px-6">
+        Example content · Your home record is created during setup
+      </div>
+    </div>
+  );
+}
+
+const benefits = [
+  { icon: ClipboardList, title: "Know what needs attention", copy: "See maintenance priorities and the tasks coming up for your home." },
+  { icon: FileText, title: "Keep home details together", copy: "Save system information, documents, warranties, and important shutoff details." },
+  { icon: CheckCircle2, title: "Keep a useful history", copy: "Mark work complete and keep track of what you've taken care of." },
+  { icon: MessageCircle, title: "Get help with the next step", copy: "Ask questions and get guidance informed by the home details available." },
+];
+
+const steps = [
+  { title: "Tell us about your home", copy: "Add a few property details and select the systems you have." },
+  { title: "Start with a maintenance plan", copy: "HomeBuddy creates starter tasks you can review and manage." },
+  { title: "Build a record over time", copy: "Track completed work and add useful documents and home information." },
+];
+
+const questions = [
+  { question: "Is setup complicated?", answer: "No lengthy inventory is required to begin. Quick setup starts with a few home details and your main systems, then creates starter maintenance tasks." },
+  { question: "What happens after I sign up?", answer: "You'll be guided through quick setup. When it's complete, you'll have a maintenance plan to review and a place to save information about your home." },
+  { question: "Can I add documents I already have?", answer: "Yes. You can upload house files, including inspection reports and manuals. Where document analysis is available, suggestions can help you add relevant details or tasks for review." },
+  { question: "Can I manage or remove my information?", answer: "You decide what home information and documents to add. Account settings include a way to request deletion of your account and its associated data." },
+  { question: "Does it work on my phone?", answer: "Yes. HomeBuddy is designed for mobile browsers and can be installed as a progressive web app on supported devices." },
+];
+
+const guideLinks = [
+  { label: "Monthly maintenance checklist", href: "/guides/home-maintenance-checklist-by-month" },
+  { label: "Annual maintenance schedule", href: "/guides/annual-home-maintenance-schedule" },
+  { label: "New homeowner guide", href: "/guides/what-to-maintain-in-a-new-house" },
+  { label: "First 90 days after buying", href: "/guides/first-90-days-after-buying-a-house" },
+  { label: "After a home inspection", href: "/guides/what-to-fix-after-home-inspection" },
+  { label: "Home maintenance costs", href: "/guides/how-much-does-home-maintenance-cost" },
+  { label: "Printable maintenance schedule", href: "/guides/printable-home-maintenance-schedule" },
+];
+
+function trackSignupClick(placement: "header" | "hero" | "final") {
+  trackEvent("landing_signup_click", "conversion", placement);
+  // Preserve historic event labels so existing dashboard comparisons remain usable.
+  trackEvent("click", "landing", placement === "header" ? "sign_up_header" : placement === "hero" ? "cta_hero" : "cta_final");
+}
 
 export default function Landing() {
   useEffect(() => {
-    document.title = "Home Buddy — AI Home Maintenance Planner & Tracker";
-    const metaDesc = document.querySelector('meta[name="description"]');
-    if (metaDesc) {
-      metaDesc.setAttribute("content", "Home Buddy builds a personalized maintenance schedule for your home. Upload inspection reports, track HVAC, plumbing, roof and electrical systems, and know what's safe to DIY.");
-    }
+    document.title = "HomeBuddy — Know Your Home. Stay Ahead of What Matters.";
+    document.querySelector('meta[name="description"]')?.setAttribute("content", "HomeBuddy keeps home systems, maintenance tasks, documents, and history together. Know what needs attention and build a useful home record over time.");
+    trackSlugPageView(PAGE_SLUGS.landing);
   }, []);
 
-  useEffect(() => { trackSlugPageView(PAGE_SLUGS.landing); }, []);
-
-  const stats = [
-    { value: "14", label: "System categories tracked" },
-    { value: "50+", label: "Recurring task templates" },
-    { value: "19", label: "AI detection patterns" },
-    { value: "24/7", label: "AI-powered insights" },
-  ];
-
-  const howItWorks = [
-    {
-      step: "01",
-      title: "Add your systems",
-      description: "Tell us what's in your home — HVAC, roof, plumbing, electrical, appliances. Takes about 2 minutes.",
-    },
-    {
-      step: "02",
-      title: "Get your schedule",
-      description: "AI generates a personalized maintenance calendar with the right tasks at the right intervals. No guessing.",
-    },
-    {
-      step: "03",
-      title: "Stay ahead of problems",
-      description: "See what needs attention now, what's coming up, and what you can safely handle yourself.",
-    },
-  ];
-
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-gradient-to-b from-orange-50 via-background to-background dark:from-orange-950/20 dark:via-background dark:to-background">
-      <header className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-md border-b border-border/40" role="banner">
-        <nav className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-2 px-3 sm:h-16 sm:px-6" aria-label="Main navigation">
-          <Link href="/" className="flex min-w-0 items-center gap-2 no-underline" aria-label="Home Buddy - Home">
-            <img
-              src="/images/home-buddy-icon.webp"
-              alt="Home Buddy logo"
-              className="h-8 w-8 shrink-0 rounded-lg object-cover"
-              width="32"
-              height="32"
-            />
-            <span className="whitespace-nowrap text-[clamp(1rem,4.3vw,1.25rem)] font-heading font-bold text-foreground sm:text-xl">Home Buddy</span>
+    <div className="min-h-screen min-w-0 overflow-x-clip bg-background text-foreground">
+      <header className="relative z-10 border-b border-border/70 bg-background/95" role="banner">
+        <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:px-6" aria-label="Main navigation">
+          <Link href="/" className="flex min-w-0 items-center gap-2 no-underline" aria-label="HomeBuddy homepage">
+            <img src="/images/home-buddy-icon.webp" alt="" className="h-9 w-9 shrink-0 rounded-xl" width="36" height="36" />
+            <span className="truncate text-base font-bold tracking-tight text-foreground sm:text-xl">HomeBuddy</span>
           </Link>
           <div className="flex shrink-0 items-center gap-1 sm:gap-3">
-            <Link
-              href="/login"
-              onClick={() => trackEvent('click', 'landing', 'sign_in_header')}
-              className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md px-2 py-2 text-xs font-medium text-muted-foreground hover:text-foreground no-underline transition-colors sm:px-4 sm:text-sm"
-              data-testid="button-login"
-            >
-              Sign In
-            </Link>
-            <Link
-              href="/signup"
-              onClick={() => trackEvent('click', 'landing', 'sign_up_header')}
-              className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 no-underline transition-colors sm:px-4 sm:text-sm"
-              data-testid="button-signup-header"
-            >
-              Sign Up
-            </Link>
+            <Link href="/login" className="inline-flex min-h-11 items-center px-2 text-xs font-semibold text-muted-foreground no-underline hover:text-foreground sm:px-3 sm:text-sm" data-testid="button-login" onClick={() => trackEvent("click", "landing", "sign_in_header")}>Sign in</Link>
+            <Link href="/signup" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-3 text-xs font-bold text-primary-foreground no-underline hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:px-5 sm:text-sm" onClick={() => trackSignupClick("header")} data-testid="button-signup-header">Set Up My Home</Link>
           </div>
         </nav>
       </header>
 
-      <main className="pt-14 sm:pt-16">
-        <section className="relative flex min-h-[calc(100svh-3.5rem)] items-center overflow-hidden sm:min-h-[calc(100svh-4rem)] lg:min-h-[90vh]" aria-label="Hero - AI Home Maintenance Planner">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
-          <div className="absolute top-1/4 right-0 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] bg-primary/3 rounded-full blur-3xl" />
-
-          <div className="container relative mx-auto w-full min-w-0 px-4 py-10 sm:px-6 sm:py-16 lg:py-20">
-            <div className="grid min-w-0 items-center gap-8 lg:grid-cols-2 lg:gap-16">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5 }}
-                className="min-w-0 space-y-5 sm:space-y-8"
-              >
-                <div className="inline-flex max-w-full items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium leading-tight text-primary sm:px-4 sm:py-2 sm:text-sm">
-                  <Sparkles className="h-4 w-4 shrink-0" />
-                  AI-powered home maintenance
-                </div>
-
-                <h1 className="text-[clamp(2rem,9.2vw,2.5rem)] font-heading font-bold leading-[1.12] tracking-tight text-foreground sm:text-5xl md:text-7xl">
-                  Stop guessing.<br />
-                  <span className="text-primary">Start maintaining.</span>
-                </h1>
-
-                <p className="max-w-xl text-base leading-7 text-muted-foreground sm:text-lg md:text-xl md:leading-relaxed">
-                  Home Buddy builds a personalized maintenance schedule for your home, tells you what's safe to DIY, and catches problems before they become expensive emergencies.
-                </p>
-
-                <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
-                  <a
-                    href="/api/login"
-                    target="_top"
-                    onClick={() => trackEvent('click', 'landing', 'cta_hero')}
-                    className="inline-flex h-12 w-full items-center justify-center rounded-md bg-primary px-6 text-base font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/35 no-underline sm:h-14 sm:w-auto sm:px-8 sm:text-lg"
-                    data-testid="button-cta-hero"
-                  >
-                    Get Started
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </a>
-                </div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.7, delay: 0.2 }}
-                className="hidden lg:block"
-              >
-                <DashboardDemo />
-              </motion.div>
+      <main>
+        <section className="relative overflow-hidden bg-gradient-to-b from-orange-50/70 via-background to-background py-10 dark:from-orange-950/15 sm:py-16 lg:py-20" aria-labelledby="landing-heading">
+          <div className="mx-auto grid max-w-6xl min-w-0 items-center gap-10 px-4 sm:px-6 lg:grid-cols-[minmax(0,0.93fr)_minmax(0,1.07fr)] lg:gap-14">
+            <div className="min-w-0">
+              <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-primary sm:text-sm">A better way to care for your home</p>
+              <h1 id="landing-heading" className="max-w-xl text-[clamp(2.15rem,9vw,3.8rem)] font-extrabold leading-[1.09] tracking-[-0.045em] text-foreground">
+                Know your home. <span className="text-primary">Stay ahead of what matters.</span>
+              </h1>
+              <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
+                HomeBuddy brings your home's systems, maintenance tasks, documents, and history together—so you know what needs attention and have the information to act.
+              </p>
+              <div className="mt-7 flex flex-col items-start gap-3">
+                <Link href="/signup" className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 text-base font-bold text-primary-foreground no-underline shadow-sm shadow-primary/15 transition-colors hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:w-auto" onClick={() => trackSignupClick("hero")} data-testid="button-cta-hero">
+                  Set Up My Home <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+                <p className="text-xs leading-5 text-muted-foreground">Start with a few home details. Your first maintenance plan comes next.</p>
+              </div>
+            </div>
+            <div className="min-w-0" aria-label="Product demonstration">
+              <ProductPreview />
             </div>
           </div>
         </section>
 
-        <section className="py-12 border-y border-border/40 bg-card/50" aria-label="Key metrics">
-          <div className="container mx-auto px-4 sm:px-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-              {stats.map((stat, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0 }}
-                  whileInView={{ opacity: 1 }}
-                  transition={{ delay: i * 0.1 }}
-                  viewport={{ once: true }}
-                  className="text-center"
-                >
-                  <div className="text-3xl md:text-4xl font-heading font-bold text-primary">{stat.value}</div>
-                  <div className="text-sm text-muted-foreground mt-1">{stat.label}</div>
-                </motion.div>
+        <section className="border-y border-border/70 bg-muted/20 py-12 sm:py-16" aria-labelledby="benefits-heading">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
+            <div className="max-w-2xl">
+              <h2 id="benefits-heading" className="text-2xl font-bold tracking-tight sm:text-3xl">Less to remember. More confidence at home.</h2>
+              <p className="mt-3 leading-7 text-muted-foreground">Your home needs more than a to-do list. Keep the work and the information connected.</p>
+            </div>
+            <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {benefits.map(({ icon: Icon, title, copy }) => (
+                <article key={title} className="rounded-2xl border border-border bg-card p-5">
+                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10"><Icon className="h-5 w-5 text-primary" aria-hidden="true" /></div>
+                  <h3 className="text-base font-bold">{title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{copy}</p>
+                </article>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="py-12 sm:py-24">
-          <div className="container mx-auto px-4 sm:px-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              className="max-w-2xl mb-16"
-            >
-              <p className="text-sm font-medium text-primary mb-3 tracking-wide uppercase">Document Analysis</p>
-              <h2 className="text-2xl sm:text-4xl font-heading font-bold text-foreground mb-4">
-                Upload an inspection report.<br />
-                Get an action plan in seconds.
-              </h2>
-              <p className="text-lg text-muted-foreground leading-relaxed">
-                Drop a PDF, photo, or document. Our AI reads it, identifies your home systems, flags safety issues, and creates maintenance tasks — all automatically. No more decoding contractor-speak.
-              </p>
-            </motion.div>
-
-            <div className="grid lg:grid-cols-2 gap-12 items-start">
-              <motion.div
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                viewport={{ once: true }}
-              >
-                <DocumentAnalysisDemo />
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                viewport={{ once: true }}
-                className="space-y-6 lg:py-8"
-              >
-                {[
-                  { icon: Scan, title: "Reads any home document", desc: "Inspection reports, warranties, invoices, permit records, maintenance receipts. PDF, images, or text." },
-                  { icon: Zap, title: "Extracts what matters", desc: "Detects equipment models, issue severity, estimated costs, and whether you need a professional or can handle it yourself." },
-                  { icon: Shield, title: "Catches what you'd miss", desc: "19 AI patterns detect contractor language for end-of-life warnings, code violations, safety hazards, and hidden recommendations." },
-                ].map((item, i) => (
-                  <div key={i} className="flex gap-4">
-                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                      <item.icon className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-heading font-bold text-foreground mb-1">{item.title}</h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </motion.div>
+        <section className="py-14 sm:py-20" aria-labelledby="how-heading">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
+            <div className="max-w-xl">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">How it works</p>
+              <h2 id="how-heading" className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">From a few details to a home you understand.</h2>
             </div>
-          </div>
-        </section>
-
-        <section className="py-12 sm:py-24 bg-secondary/30">
-          <div className="container mx-auto px-4 sm:px-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              className="max-w-2xl mb-16"
-            >
-              <p className="text-sm font-medium text-primary mb-3 tracking-wide uppercase">Recurring Maintenance</p>
-              <h2 className="text-2xl sm:text-4xl font-heading font-bold text-foreground mb-4">
-                Every system gets a schedule.<br />
-                You just check things off.
-              </h2>
-              <p className="text-lg text-muted-foreground leading-relaxed">
-                Add a system. Home Buddy generates the right maintenance tasks with the right cadences — based on manufacturer recommendations and industry best practices. Filter replacement every 90 days? Water heater flush every year? It's all there.
-              </p>
-            </motion.div>
-
-            <div className="grid lg:grid-cols-2 gap-12 items-start">
-              <motion.div
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                viewport={{ once: true }}
-                className="space-y-6 lg:py-8 order-2 lg:order-1"
-              >
-                {[
-                  { icon: CalendarClock, title: "Smart cadences, not guesswork", desc: "Task frequencies come from real maintenance standards. Monthly smoke detector tests, quarterly filter changes, annual system inspections — all preset." },
-                  { icon: Sparkles, title: "AI-powered for uncommon systems", desc: "Have something unusual? Our AI researches best practices and suggests a maintenance schedule tailored to your specific equipment." },
-                  { icon: Heart, title: "Know what you can handle", desc: "Every task gets a DIY safety rating. Green means go. Red means call a pro. No judgment, just clarity." },
-                ].map((item, i) => (
-                  <div key={i} className="flex gap-4">
-                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                      <item.icon className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-heading font-bold text-foreground mb-1">{item.title}</h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                viewport={{ once: true }}
-                className="order-1 lg:order-2"
-              >
-                <TaskGenerationDemo />
-              </motion.div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Calendar Sync section ────────────────────────────────────────── */}
-        <section className="py-12 sm:py-24">
-          <div className="container mx-auto px-4 sm:px-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              className="max-w-2xl mb-16"
-            >
-              <p className="text-sm font-medium text-primary mb-3 tracking-wide uppercase">Calendar Integration</p>
-              <h2 className="text-2xl sm:text-4xl font-heading font-bold text-foreground mb-4">
-                Your maintenance schedule,<br />
-                inside your calendar.
-              </h2>
-              <p className="text-lg text-muted-foreground leading-relaxed">
-                Subscribe once and your tasks appear in Google Calendar, Apple Calendar, or Outlook — automatically, alongside your dentist appointments. When a contractor is booked, it shows up as a timed event. No app-switching required.
-              </p>
-            </motion.div>
-
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              <motion.div
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                viewport={{ once: true }}
-                className="space-y-6 lg:py-8"
-              >
-                {[
-                  { icon: CalendarClock, title: "One-time setup", desc: "Click Subscribe. Your entire maintenance schedule syncs to your calendar app instantly — no manual exports, ever." },
-                  { icon: RefreshCw, title: "Auto-updates every 6 hours", desc: "Set a due date on a new task and it appears in your calendar automatically. New tasks, completed tasks, contractor bookings — all reflected." },
-                  { icon: Smartphone, title: "Works on every platform", desc: "Google Calendar, Apple Calendar, Outlook, and any app that supports iCal subscriptions. One URL, any device." },
-                ].map((item, i) => (
-                  <div key={i} className="flex gap-4">
-                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                      <item.icon className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-heading font-bold text-foreground mb-1">{item.title}</h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </motion.div>
-
-              {/* Inline calendar subscribe mockup — no extra component needed */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                viewport={{ once: true }}
-                className="rounded-2xl border bg-card p-6 shadow-xl shadow-black/5 space-y-3"
-              >
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Subscribe with your calendar app</p>
-                {[
-                  { name: "Google Calendar", sub: 'Opens in a new tab → click "Add"', bg: "#1a73e8", label: "G" },
-                  { name: "Apple Calendar", sub: "macOS / iOS — opens Calendar app", bg: "#ff3b30", label: "A" },
-                  { name: "Outlook", sub: "Outlook.com or Office 365", bg: "#0078d4", label: "O" },
-                ].map((platform) => (
-                  <div
-                    key={platform.name}
-                    className="flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 border-border bg-background"
-                  >
-                    <div
-                      className="w-9 h-9 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0"
-                      style={{ backgroundColor: platform.bg }}
-                    >
-                      {platform.label}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-foreground text-sm">{platform.name}</p>
-                      <p className="text-xs text-muted-foreground">{platform.sub}</p>
-                    </div>
-                  </div>
-                ))}
-                <div className="pt-3 border-t">
-                  <p className="text-xs text-muted-foreground mb-2 font-medium">Or copy the URL for any other app</p>
-                  <div className="flex items-center gap-2">
-                    <code className="min-w-0 flex-1 truncate rounded-lg bg-muted px-3 py-2 font-mono text-xs text-muted-foreground">
-                      https://homebuddy.space/api/calendar/…
-                    </code>
-                    <div className="shrink-0 px-3 py-2 rounded-md border text-xs font-medium text-muted-foreground">
-                      Copy
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── "More than a to-do list" ─────────────────────────────────────── */}
-        <section className="py-12 sm:py-24">
-          <div className="container mx-auto px-4 sm:px-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              className="text-center mb-16"
-            >
-              <h2 className="text-2xl sm:text-4xl font-heading font-bold text-foreground mb-4">
-                More than a to-do list
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Home Buddy brings together everything you need to take care of your home — without the overwhelm
-              </p>
-            </motion.div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-              <motion.div
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                transition={{ delay: 0 }}
-                viewport={{ once: true }}
-              >
-                <ChatDemo />
-                <div className="flex items-center gap-3 mt-4">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <MessageSquare className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-heading font-bold text-foreground text-lg" data-testid="text-feature-assistant">
-                      AI Assistant
-                    </h3>
-                    <p className="text-sm text-muted-foreground">Ask anything about your home. Get real answers with cost estimates, safety guidance, and step-by-step instructions.</p>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                transition={{ delay: 0.15 }}
-                viewport={{ once: true }}
-              >
-                <DashboardDemo />
-                <div className="flex items-center gap-3 mt-4">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <Calendar className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-heading font-bold text-foreground text-lg" data-testid="text-feature-scheduling">Priority Dashboard</h3>
-                    <p className="text-sm text-muted-foreground">Now, Soon, Later. See what needs attention at a glance. Swipe to complete tasks as you go.</p>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          </div>
-        </section>
-
-        <section className="py-12 sm:py-24 bg-secondary/30">
-          <div className="container mx-auto px-4 sm:px-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              className="text-center mb-16"
-            >
-              <h2 className="text-2xl sm:text-4xl font-heading font-bold text-foreground mb-4">
-                How it works
-              </h2>
-              <p className="text-lg text-muted-foreground">
-                Set up your home in minutes. Stay on top of maintenance for years.
-              </p>
-            </motion.div>
-
-            <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-              {howItWorks.map((step, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0 }}
-                  whileInView={{ opacity: 1 }}
-                  transition={{ delay: i * 0.15 }}
-                  viewport={{ once: true }}
-                  className="relative"
-                >
-                  <div className="text-6xl font-heading font-bold text-primary/10 mb-3">{step.step}</div>
-                  <h3 className="text-xl font-heading font-bold text-foreground mb-2">{step.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{step.description}</p>
-                  {i < howItWorks.length - 1 && (
-                    <ChevronRight className="hidden md:block absolute top-8 -right-4 h-6 w-6 text-primary/20" />
-                  )}
-                </motion.div>
+            <div className="mt-8 grid gap-6 md:grid-cols-3">
+              {steps.map((step, index) => (
+                <article key={step.title} className="border-l-2 border-primary/50 pl-5">
+                  <span className="text-sm font-extrabold text-primary">0{index + 1}</span>
+                  <h3 className="mt-3 text-lg font-bold">{step.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{step.copy}</p>
+                </article>
               ))}
             </div>
           </div>
         </section>
 
-        {/* Homeowner Guides / Articles Section */}
-        <section className="py-12 sm:py-24 bg-muted/20">
-          <div className="container mx-auto px-4 sm:px-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              className="text-center mb-12"
-            >
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
-                Homeowner Guides
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Honest, practical advice for people who own a house and want to keep it from falling apart.
-              </p>
-            </motion.div>
-
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-5xl mx-auto">
-              {[
-                {
-                  title: "Home Maintenance Checklist by Month",
-                  description: "A month-by-month breakdown of what your home needs—because your house won't text you.",
-                  href: "/guides/home-maintenance-checklist-by-month",
-                  trackId: "article_monthly_checklist",
-                },
-                {
-                  title: "First 90 Days After Buying a House",
-                  description: "The essential tasks to handle in your first three months as a new homeowner.",
-                  href: "/guides/first-90-days-after-buying-a-house",
-                  trackId: "article_first_90_days",
-                },
-                {
-                  title: "What to Fix First After a Home Inspection",
-                  description: "How to turn an overwhelming inspection report into a clear, manageable plan.",
-                  href: "/guides/what-to-fix-after-home-inspection",
-                  trackId: "article_home_inspection",
-                },
-                {
-                  title: "How Much Does Home Maintenance Cost?",
-                  description: "The real cost of owning a home, where the money goes, and how to stop being surprised.",
-                  href: "/guides/how-much-does-home-maintenance-cost",
-                  trackId: "article_maintenance_cost",
-                },
-                {
-                  title: "Printable Schedule (And Why It Fails)",
-                  description: "Why printable checklists feel great but rarely work—and what actually keeps you on track.",
-                  href: "/guides/printable-home-maintenance-schedule",
-                  trackId: "article_printable_schedule",
-                },
-              ].map((article, i) => (
-                <motion.div
-                  key={article.href}
-                  initial={{ opacity: 0 }}
-                  whileInView={{ opacity: 1 }}
-                  transition={{ delay: i * 0.1 }}
-                  viewport={{ once: true }}
-                >
-                  <Link
-                    href={article.href}
-                    onClick={() => trackEvent('click', 'landing', article.trackId)}
-                    className="block rounded-lg bg-card border border-border/50 p-6 hover:border-primary/30 hover:shadow-md transition-all duration-200 no-underline h-full"
-                  >
-                    <h3 className="font-heading font-semibold text-foreground mb-2 text-lg">
-                      {article.title}
-                    </h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-                      {article.description}
-                    </p>
-                    <span className="text-sm font-medium text-primary inline-flex items-center gap-1">
-                      Read article <ArrowRight className="h-3.5 w-3.5" />
-                    </span>
-                  </Link>
-                </motion.div>
+        <section className="border-y border-border/70 bg-muted/20 py-12 sm:py-16" aria-labelledby="questions-heading">
+          <div className="mx-auto max-w-3xl px-4 sm:px-6">
+            <h2 id="questions-heading" className="text-2xl font-bold tracking-tight sm:text-3xl">A few things you may be wondering</h2>
+            <div className="mt-6 divide-y divide-border rounded-2xl border border-border bg-card px-5 sm:px-7">
+              {questions.map((item) => (
+                <details key={item.question} className="group py-4">
+                  <summary className="cursor-pointer rounded-sm py-1 text-sm font-semibold leading-6 text-foreground marker:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:text-base">{item.question}</summary>
+                  <p className="mt-2 pb-1 text-sm leading-7 text-muted-foreground">{item.answer}</p>
+                </details>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="py-12 sm:py-24 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-t from-primary/5 to-transparent" />
-          <div className="container mx-auto px-6 relative">
-            <motion.div
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              className="max-w-3xl mx-auto text-center space-y-8"
-            >
-              <h2 className="text-4xl md:text-5xl font-heading font-bold text-foreground">
-                Your home deserves better than a spreadsheet.
-              </h2>
-              <p className="text-xl text-muted-foreground leading-relaxed">
-                Built by homeowners who got tired of forgetting when they last changed the furnace filter. Takes 2 minutes to set up.
-              </p>
-            </motion.div>
+        <section className="py-14 sm:py-20" aria-labelledby="final-heading">
+          <div className="mx-auto max-w-4xl px-4 text-center sm:px-6">
+            <h2 id="final-heading" className="text-3xl font-extrabold tracking-tight sm:text-4xl">Your home has a lot to remember. You don't have to.</h2>
+            <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-muted-foreground">Start with your home basics. Get a useful plan, then keep the details that matter in one place.</p>
+            <Link href="/signup" className="mx-auto mt-7 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-7 text-base font-bold text-primary-foreground no-underline hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:w-auto" onClick={() => trackSignupClick("final")} data-testid="button-cta-final">Set Up My Home <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-border/40 py-12" role="contentinfo">
-        <div className="container mx-auto px-4 sm:px-6">
-          <div className="grid sm:grid-cols-3 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <img src="/images/home-buddy-icon.webp" alt="Home Buddy" className="h-6 w-6 rounded" width="24" height="24" />
-                <span className="font-heading font-bold text-foreground">Home Buddy</span>
-              </div>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Your AI-powered home maintenance planner. Track systems, schedule tasks, upload inspection reports, and stay ahead of costly repairs.
-              </p>
-            </div>
-            <div>
-              <h4 className="font-heading font-semibold text-foreground mb-3">Guides</h4>
-              <ul className="space-y-2 text-sm">
-                <li>
-                  <Link href="/guides/home-maintenance-checklist-by-month" onClick={() => trackEvent('click', 'landing', 'footer_guide_monthly')} className="text-muted-foreground hover:text-foreground no-underline transition-colors" data-testid="link-guide-monthly">Monthly Maintenance Checklist</Link>
-                </li>
-                <li>
-                  <Link href="/guides/annual-home-maintenance-schedule" onClick={() => trackEvent('click', 'landing', 'footer_guide_annual')} className="text-muted-foreground hover:text-foreground no-underline transition-colors" data-testid="link-guide-annual">Annual Maintenance Schedule</Link>
-                </li>
-                <li>
-                  <Link href="/guides/what-to-maintain-in-a-new-house" onClick={() => trackEvent('click', 'landing', 'footer_guide_new_homeowner')} className="text-muted-foreground hover:text-foreground no-underline transition-colors" data-testid="link-guide-new-homeowner">New Homeowner Guide</Link>
-                </li>
-                <li>
-                  <Link href="/guides/first-90-days-after-buying-a-house" onClick={() => trackEvent('click', 'landing', 'footer_guide_first_90')} className="text-muted-foreground hover:text-foreground no-underline transition-colors">First 90 Days</Link>
-                </li>
-                <li>
-                  <Link href="/guides/what-to-fix-after-home-inspection" onClick={() => trackEvent('click', 'landing', 'footer_guide_inspection')} className="text-muted-foreground hover:text-foreground no-underline transition-colors">After a Home Inspection</Link>
-                </li>
-                <li>
-                  <Link href="/guides/how-much-does-home-maintenance-cost" onClick={() => trackEvent('click', 'landing', 'footer_guide_cost')} className="text-muted-foreground hover:text-foreground no-underline transition-colors">Maintenance Costs</Link>
-                </li>
-                <li>
-                  <Link href="/guides/printable-home-maintenance-schedule" onClick={() => trackEvent('click', 'landing', 'footer_guide_printable')} className="text-muted-foreground hover:text-foreground no-underline transition-colors">Printable Schedule</Link>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-heading font-semibold text-foreground mb-3">Links</h4>
-              <ul className="space-y-2 text-sm">
-                <li>
-                  <Link href="/login" className="text-muted-foreground hover:text-foreground no-underline transition-colors">Sign In</Link>
-                </li>
-                <li>
-                  <Link href="/support" className="text-muted-foreground hover:text-foreground no-underline transition-colors">Donate to Home Buddy</Link>
-                </li>
-                <li>
-                  <Link href="/terms" onClick={() => trackEvent('click', 'landing', 'footer_terms')} className="text-muted-foreground hover:text-foreground no-underline transition-colors" data-testid="link-footer-terms">Terms & Conditions</Link>
-                </li>
-                <li>
-                  <Link href="/contact" onClick={() => trackEvent('click', 'landing', 'footer_contact')} className="text-muted-foreground hover:text-foreground no-underline transition-colors" data-testid="link-footer-contact">Contact</Link>
-                </li>
-              </ul>
-            </div>
+      <footer className="border-t border-border bg-muted/20 py-10" role="contentinfo">
+        <div className="mx-auto grid max-w-6xl gap-8 px-4 sm:grid-cols-3 sm:px-6">
+          <div>
+            <p className="text-lg font-bold">HomeBuddy</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">The intelligent operating record of your home.</p>
+            <p className="mt-4 text-xs text-muted-foreground">© 2026 HomeBuddy</p>
           </div>
-          <div className="border-t border-border/40 pt-6 text-center text-sm text-muted-foreground">
-            <p>&copy; 2026 Home Buddy. AI-powered home maintenance assistant.</p>
+          <div>
+            <h2 className="text-sm font-semibold">Homeowner guides</h2>
+            <ul className="mt-3 grid gap-2">
+              {guideLinks.map((guide) => (
+                <li key={guide.href}><Link href={guide.href} onClick={() => trackEvent("click", "landing", "guide_" + guide.href.split("/").pop())} className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">{guide.label}</Link></li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold">More</h2>
+            <ul className="mt-3 grid gap-2 text-sm">
+              <li><Link href="/login" className="text-muted-foreground hover:text-foreground">Sign in</Link></li>
+              <li><Link href="/support" className="text-muted-foreground hover:text-foreground">Support HomeBuddy</Link></li>
+              <li><Link href="/terms" className="text-muted-foreground hover:text-foreground">Terms & privacy</Link></li>
+              <li><Link href="/contact" className="text-muted-foreground hover:text-foreground">Contact</Link></li>
+            </ul>
           </div>
         </div>
       </footer>
