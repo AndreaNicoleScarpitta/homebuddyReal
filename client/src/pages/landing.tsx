@@ -165,6 +165,7 @@ export default function Landing() {
     document.title = "HomeBuddy — Know Your Home. Stay Ahead of What Matters.";
     document.querySelector('meta[name="description"]')?.setAttribute("content", "HomeBuddy keeps home systems, maintenance tasks, documents, and history together. Know what needs attention and build a useful home record over time.");
     trackSlugPageView(PAGE_SLUGS.landing);
+    trackEvent("landing_page_view", "conversion", "landing");
   }, []);
 
   return (
