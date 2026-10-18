@@ -1,11 +1,10 @@
 import { Layout } from "@/components/layout";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Bot, User, Camera, Loader2, AlertCircle, X, Info, Plus, PanelLeftClose, PanelLeftOpen, MessageSquare, Clock, Search } from "lucide-react";
+import { Send, Bot, User, Camera, Loader2, AlertCircle, X, Info, Plus, PanelLeftClose, PanelLeftOpen, MessageSquare, Clock, Search, ArrowLeft, ArrowUpRight, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -224,6 +223,7 @@ export default function Chat() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [hasAutoTitled, setHasAutoTitled] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showSafetyNotice, setShowSafetyNotice] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
@@ -357,10 +357,9 @@ export default function Chat() {
     }
   };
 
-  const handleSend = async () => {
-    if ((!input.trim() && !selectedImage) || !home || isStreaming) return;
-
-    const userMessage = input;
+  const handleSend = async (suggestedPrompt?: string) => {
+    const userMessage = suggestedPrompt ?? input;
+    if ((!userMessage.trim() && !selectedImage) || !home || isStreaming) return;
     const imageToSend = selectedImage;
     const imagePreviewToSend = imagePreview;
     
@@ -516,27 +515,32 @@ export default function Chat() {
   );
 
   return (
-    <Layout>
+    <Layout immersive>
       <PhotoConsentModal 
         isOpen={showConsentModal} 
         onAccept={handleConsentAccept}
         onCancel={handleConsentCancel}
       />
       
-      <div className="h-[calc(100vh-8rem)] md:h-[calc(100vh-4rem)] flex pb-16 md:pb-0">
+      <div className="flex h-full min-h-0 w-full">
         {!isMobile && sidebarOpen && (
           <div className="w-[300px] shrink-0 border-r bg-card/50 flex flex-col" data-testid="sidebar-sessions">
             {sidebarContent}
           </div>
         )}
 
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="mb-4 px-4 pt-4 flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <header className="flex shrink-0 items-center justify-between gap-2 border-b bg-card/80 px-3 py-2.5 md:px-5">
+            <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+              {isMobile && (
+                <Link href="/dashboard" aria-label="Back to Home" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted">
+                  <ArrowLeft className="h-5 w-5" />
+                </Link>
+              )}
               {isMobile ? (
                 <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
                   <SheetTrigger asChild>
-                    <Button variant="ghost" size="icon" aria-label="Open chat sessions" className="shrink-0" data-testid="button-mobile-sidebar">
+                    <Button variant="ghost" size="icon" aria-label="Open conversation history" className="h-10 w-10 shrink-0" data-testid="button-mobile-sidebar">
                       <PanelLeftOpen className="h-5 w-5" />
                     </Button>
                   </SheetTrigger>
@@ -548,7 +552,7 @@ export default function Chat() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label={sidebarOpen ? "Close sidebar" : "Open chat sessions"}
+                  aria-label={sidebarOpen ? "Close conversation history" : "Open conversation history"}
                   onClick={() => setSidebarOpen(!sidebarOpen)}
                   className="shrink-0"
                   data-testid="button-toggle-sidebar"
@@ -556,25 +560,40 @@ export default function Chat() {
                   {sidebarOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
                 </Button>
               )}
-              <div>
-                <h1 className="text-3xl font-heading font-bold text-foreground" data-testid="text-heading">Assistant</h1>
-                <p className="text-muted-foreground text-sm">Expert guidance for your home, 24/7.</p>
+              <div className="min-w-0">
+                <h1 className="truncate text-base font-heading font-bold leading-tight md:text-xl" data-testid="text-heading">Home Assistant</h1>
+                <p className="truncate text-xs text-muted-foreground">Repairs, maintenance and costs</p>
               </div>
             </div>
-          </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={handleNewChat}
+              disabled={isCreatingSession || isStreaming}
+              aria-label="Start a new conversation"
+              className="h-10 w-10 shrink-0"
+              data-testid="button-new-chat-header"
+            >
+              <Plus className="h-5 w-5" />
+            </Button>
+          </header>
 
-          <div className="px-4">
-            <div className="flex items-start gap-2 p-3 mb-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg text-sm max-w-3xl">
-              <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-              <div className="text-blue-800 dark:text-blue-200">
-                <span className="font-medium">For informational purposes only.</span> Our AI provides general guidance, not professional advice. 
-                <Link href="/terms" className="underline ml-1 hover:text-blue-600">View terms</Link>
-              </div>
+          {showSafetyNotice && (
+            <div role="note" className="mx-3 mt-2 flex shrink-0 items-start gap-2 rounded-lg border border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground md:mx-5" data-testid="chat-safety-notice">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <p className="min-w-0 flex-1 leading-relaxed">
+                General guidance, not professional advice. <Link href="/terms" className="font-medium underline underline-offset-2">View terms</Link>
+              </p>
+              <button type="button" onClick={() => setShowSafetyNotice(false)} aria-label="Dismiss informational notice" className="flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-muted">
+                <X className="h-4 w-4" />
+              </button>
             </div>
-          </div>
+          )}
 
-          <Card className="flex-1 flex flex-col overflow-hidden border-none shadow-md bg-card/50 backdrop-blur-sm mx-4 mb-4 max-w-3xl">
-            <ScrollArea className="flex-1 p-4">
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="Home Assistant conversation">
+            <ScrollArea className="min-h-0 flex-1" data-testid="chat-message-scroll">
+              <div className="mx-auto w-full max-w-3xl px-3 pb-5 pt-4 md:px-6">
               {isLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">
@@ -583,54 +602,55 @@ export default function Chat() {
                   </div>
                 </div>
               ) : messages.length === 0 ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-center max-w-md px-4">
-                    <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Bot className="h-8 w-8 text-primary" />
+                <div className="mx-auto flex w-full max-w-lg flex-col gap-5 py-3 md:py-10" data-testid="chat-empty-state">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <Home className="h-5 w-5" aria-hidden="true" />
                     </div>
-                    <h3 className="text-lg font-semibold mb-3">How can I help?</h3>
-                    <p className="text-sm text-muted-foreground mb-6">
-                      I can help you understand repairs, estimate costs, or figure out what can wait. You can also share photos for guidance.
-                    </p>
-                    <div className="flex flex-wrap justify-center gap-2">
-                      <button 
-                        onClick={() => { trackEvent('click', 'chat', 'suggestion_prioritize'); setInput("What repairs should I prioritize?"); }}
-                        className="px-3 py-2 text-sm bg-muted hover:bg-muted/80 rounded-full transition-colors"
-                        data-testid="button-suggestion-prioritize"
-                      >
-                        What should I fix first?
-                      </button>
-                      <button 
-                        onClick={() => { trackEvent('click', 'chat', 'suggestion_budget'); setInput("How much should I budget for home repairs?"); }}
-                        className="px-3 py-2 text-sm bg-muted hover:bg-muted/80 rounded-full transition-colors"
-                        data-testid="button-suggestion-budget"
-                      >
-                        Help me plan costs
-                      </button>
-                      <button 
-                        onClick={() => { trackEvent('click', 'chat', 'suggestion_diy'); setInput("What can I safely do myself vs hire a pro?"); }}
-                        className="px-3 py-2 text-sm bg-muted hover:bg-muted/80 rounded-full transition-colors"
-                        data-testid="button-suggestion-diy"
-                      >
-                        DIY or hire a pro?
-                      </button>
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-heading font-semibold">What can I help with?</h2>
+                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                        Troubleshoot a problem, prioritize maintenance, or understand repair costs for your home.
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-6 italic">
-                      Estimates are general ranges, not quotes. You're always in control.
-                    </p>
                   </div>
+                  <div className="space-y-2">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Suggested questions</p>
+                    <button type="button"
+                      onClick={() => { trackEvent("click", "chat", "suggestion_prioritize"); void handleSend("What maintenance tasks should I prioritize for my home?"); }}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-muted"
+                      data-testid="button-suggestion-prioritize"
+                    >
+                      <span>What maintenance should I prioritize?</span><ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </button>
+                    <button type="button"
+                      onClick={() => { trackEvent("click", "chat", "suggestion_budget"); void handleSend("How much could a home repair cost?"); }}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-muted"
+                      data-testid="button-suggestion-budget"
+                    >
+                      <span>How much could a repair cost?</span><ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </button>
+                    <button type="button"
+                      onClick={() => { trackEvent("click", "chat", "suggestion_diy"); void handleSend("Help me safely diagnose a problem with my home."); }}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-muted"
+                      data-testid="button-suggestion-diy"
+                    >
+                      <span>Help me diagnose a problem</span><ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">You can also attach a photo using the camera below. Estimates are general ranges, not quotes.</p>
                 </div>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-5">
                   {messages.map((msg) => (
                     <div
                       key={msg.id}
-                      className={`flex gap-4 ${
+                      className={`flex gap-2.5 md:gap-4 ${
                         msg.role === "user" ? "flex-row-reverse" : "flex-row"
                       }`}
                       data-testid={`message-${msg.id}`}
                     >
-                      <Avatar className="h-10 w-10 border shadow-sm">
+                      <Avatar className="h-8 w-8 shrink-0 border shadow-sm md:h-10 md:w-10">
                         {msg.role === "assistant" ? (
                           <AvatarImage src={logoImage} />
                         ) : null}
@@ -644,7 +664,7 @@ export default function Chat() {
                           {msg.role === "assistant" ? "Home Buddy" : "You"}
                         </span>
                         <div
-                          className={`p-4 rounded-2xl shadow-sm text-sm leading-relaxed ${
+                          className={`p-3 md:p-4 rounded-2xl shadow-sm text-sm leading-relaxed break-words ${
                             msg.role === "user"
                               ? "bg-primary text-primary-foreground rounded-tr-none"
                               : "bg-card border text-foreground rounded-tl-none"
@@ -659,7 +679,7 @@ export default function Chat() {
                   ))}
                   
                   {streamingMessage && (
-                    <div className="flex gap-4">
+                    <div className="flex gap-2.5 md:gap-4">
                       <Avatar className="h-10 w-10 border shadow-sm">
                         <AvatarImage src={logoImage} />
                         <AvatarFallback className="bg-primary text-primary-foreground">
@@ -670,7 +690,7 @@ export default function Chat() {
                         <span className="text-xs text-muted-foreground font-medium mb-1">
                           Home Buddy
                         </span>
-                        <div className="p-4 rounded-2xl shadow-sm text-sm leading-relaxed bg-card border text-foreground rounded-tl-none">
+                        <div className="rounded-2xl rounded-tl-none border bg-card p-3 text-sm leading-relaxed text-foreground shadow-sm md:p-4">
                           <div>{renderRichText(streamingMessage)}</div>
                           <span className="inline-block w-2 h-4 bg-primary/50 animate-pulse ml-1" />
                         </div>
@@ -690,7 +710,7 @@ export default function Chat() {
                         <span className="text-xs text-muted-foreground font-medium mb-1">
                           Home Buddy
                         </span>
-                        <div className="p-4 rounded-2xl shadow-sm text-sm leading-relaxed bg-card border text-foreground rounded-tl-none">
+                        <div className="rounded-2xl rounded-tl-none border bg-card p-3 text-sm leading-relaxed text-foreground shadow-sm md:p-4">
                           <Loader2 className="h-4 w-4 animate-spin text-primary" />
                         </div>
                       </div>
@@ -700,9 +720,10 @@ export default function Chat() {
                   <div ref={scrollRef} />
                 </div>
               )}
+              </div>
             </ScrollArea>
 
-            <div className="p-4 bg-card/80 border-t backdrop-blur-md">
+            <div className="shrink-0 border-t bg-card px-3 pb-2 pt-3 md:px-5" data-testid="chat-composer">
               {imagePreview && (
                 <div className="mb-3 flex items-start gap-2">
                   <div className="relative">
@@ -729,7 +750,7 @@ export default function Chat() {
                 </div>
               )}
               
-              <div className="relative flex items-end gap-2">
+              <div className="flex w-full min-w-0 items-end gap-2">
                 <input
                   type="file"
                   accept="image/*"
@@ -744,9 +765,10 @@ export default function Chat() {
                     <Button 
                       variant="ghost" 
                       size="icon" 
-                      className="text-muted-foreground hover:text-primary shrink-0" 
+                      className="h-11 w-11 text-muted-foreground hover:text-primary shrink-0" 
                       onClick={() => { trackEvent('click', 'chat', 'add_photo'); fileInputRef.current?.click(); }}
                       disabled={isStreaming}
+                      aria-label="Attach a photo"
                       data-testid="button-add-photo"
                     >
                       <Camera className="h-5 w-5" />
@@ -755,17 +777,17 @@ export default function Chat() {
                   <TooltipContent>Add a photo for analysis</TooltipContent>
                 </Tooltip>
                 <Textarea
-                  placeholder={selectedImage ? "Ask about this photo..." : "Ask about maintenance, repairs, or costs..."}
+                  placeholder={selectedImage ? "Ask about this photo..." : "Ask about your home..."}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey && !isStreaming) {
                       e.preventDefault();
-                      handleSend();
+                      void handleSend();
                     }
                   }}
                   disabled={isStreaming}
-                  className="flex-1 min-h-[44px] max-h-32 px-4 py-2.5 border-muted-foreground/20 focus-visible:ring-primary/20 resize-none overflow-auto rounded-2xl"
+                  className="min-w-0 w-0 flex-1 min-h-[44px] h-[44px] max-h-28 px-3 py-2.5 text-base md:text-sm border-muted-foreground/20 focus-visible:ring-primary/20 resize-none overflow-y-auto rounded-xl"
                   rows={1}
                   data-testid="input-message"
                 />
@@ -773,9 +795,10 @@ export default function Chat() {
                   <TooltipTrigger asChild>
                     <Button 
                       size="icon" 
-                      onClick={handleSend}
+                      onClick={() => void handleSend()}
                       disabled={(!input.trim() && !selectedImage) || isStreaming}
-                      className="rounded-full shadow-lg shadow-primary/20 shrink-0"
+                      className="h-11 w-11 rounded-full shadow-sm shrink-0"
+                      aria-label="Send message"
                       data-testid="button-send"
                     >
                       {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -784,8 +807,9 @@ export default function Chat() {
                   <TooltipContent>Send message</TooltipContent>
                 </Tooltip>
               </div>
+              <p className="mt-2 text-center text-[11px] text-muted-foreground">AI guidance only · <Link href="/terms" className="underline underline-offset-2">Terms &amp; limitations</Link></p>
             </div>
-          </Card>
+          </section>
         </div>
       </div>
     </Layout>
