@@ -1,11 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("HomeBuddy landing → signup conversion", () => {
-  test.beforeEach(async ({ page }) => {
-    // The branded splash screen is a separate first-visit experience.
-    // Skip it here to isolate the public conversion journey.
-    await page.addInitScript(() => sessionStorage.setItem("splashShown", "true"));
-  });
+  // Do not set splashShown: these checks exercise a true first visit.
 
   test("communicates the product value and routes each signup CTA directly", async ({ page }) => {
     await page.goto("/");
