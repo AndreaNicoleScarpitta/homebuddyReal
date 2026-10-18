@@ -134,7 +134,11 @@ function Router() {
     setSplashComplete(true);
   };
   
-  if (showSplash && !splashComplete) {
+  // Public visitors should see the landing or signup page immediately, not a
+  // timed branded animation. Preserve the existing splash for returning users
+  // arriving at the authenticated home dashboard.
+  const isDashboardEntry = window.location.pathname === "/" || window.location.pathname === "/dashboard";
+  if (showSplash && !splashComplete && !isLoading && isAuthenticated && isDashboardEntry) {
     return (
       <AnimatePresence>
         <SplashScreen onComplete={handleSplashComplete} />
