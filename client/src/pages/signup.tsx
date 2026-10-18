@@ -116,7 +116,7 @@ export default function Signup() {
             >
               <div className="space-y-6">
                 <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                  <Sparkles className="h-4 w-4" />
+                  <House className="h-4 w-4" />
                   Your home, organized
                 </div>
 
