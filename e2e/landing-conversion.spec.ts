@@ -65,6 +65,13 @@ test.describe("HomeBuddy landing → signup conversion", () => {
       await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
       const signupWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(signupWidth, "Signup must fit viewport").toBeLessThanOrEqual(width + 1);
+      await page.getByTestId("button-signup-email").click();
+      await expect(page.getByTestId("input-signup-email")).toBeVisible();
+      const formWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(formWidth, "Email signup form must fit viewport").toBeLessThanOrEqual(width + 1);
+      if ([320, 390, 1440].includes(width)) {
+        await page.screenshot({ path: "test-results/signup-" + width + ".png", fullPage: true });
+      }
     });
   }
 
