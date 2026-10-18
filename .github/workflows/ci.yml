@@ -110,8 +110,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: landing-responsive-screenshots
-          path: test-results/landing-*.png
+          name: landing-signup-responsive-screenshots
+          path: |
+            test-results/landing-*.png
+            test-results/signup-*.png
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: failure()
