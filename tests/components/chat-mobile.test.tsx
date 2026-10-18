@@ -42,8 +42,8 @@ beforeEach(() => {
   mocks.createChatSession.mockResolvedValue({ sessionId: "session-test" });
   mocks.updateChatSessionTitle.mockResolvedValue(undefined);
   const chunks = [
-    { done: false, value: new TextEncoder().encode('data: {"content":"Check your due maintenance tasks."}\\n') },
-    { done: false, value: new TextEncoder().encode('data: {"done":true}\\n') },
+    { done: false, value: new TextEncoder().encode('data: {"content":"Check your due maintenance tasks."}\n') },
+    { done: false, value: new TextEncoder().encode('data: {"done":true}\n') },
     { done: true, value: undefined },
   ];
   vi.stubGlobal("fetch", vi.fn(async () => ({
