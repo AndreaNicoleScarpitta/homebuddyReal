@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Chat from "@/pages/chat";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const mocks = vi.hoisted(() => ({
   getHome: vi.fn(),
@@ -30,7 +31,7 @@ vi.mock("@/components/ui/scroll-area", () => ({
 
 function mount() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}><Chat /></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><TooltipProvider><Chat /></TooltipProvider></QueryClientProvider>);
 }
 
 beforeEach(() => {
