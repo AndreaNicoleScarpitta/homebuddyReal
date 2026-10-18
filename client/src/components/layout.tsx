@@ -27,7 +27,7 @@ function isNavActive(location: string, item: { href: string; match?: string[] })
   return location === item.href || location.startsWith(item.href + "/");
 }
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function Layout({ children, immersive = false }: { children: React.ReactNode; immersive?: boolean }) {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useAuth();
@@ -42,7 +42,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const userInitial = user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "?";
 
   return (
-    <div className="h-screen bg-background flex flex-col md:flex-row overflow-hidden">
+    <div className="h-[100dvh] bg-background flex flex-col md:flex-row overflow-hidden">
       <OfflineBanner />
       {/* Mobile Header — minimal, breathable */}
       <header className="md:hidden flex items-center justify-between px-5 py-3.5 border-b bg-card/80 backdrop-blur-sm z-50 sticky top-0">
@@ -234,14 +234,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto pb-20 md:pb-0">
-        <div className="max-w-5xl mx-auto p-4 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <main className={immersive
+        ? "flex-1 min-h-0 overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0"
+        : "flex-1 min-h-0 overflow-auto pb-20 md:pb-0"}>
+        <div className={immersive
+          ? "h-full min-h-0 w-full max-w-5xl mx-auto"
+          : "max-w-5xl mx-auto p-4 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500"}>
           {children}
         </div>
       </main>
 
       {/* PWA install banner — appears above bottom nav after 20 s */}
-      {!location.startsWith("/maintenance-log") && !location.startsWith("/onboarding") && <PwaInstallPrompt />}
+      {!immersive && !location.startsWith("/maintenance-log") && !location.startsWith("/onboarding") && <PwaInstallPrompt />}
 
       {/* Mobile Bottom Navigation — the same three jobs as desktop */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t z-50 safe-area-bottom">
