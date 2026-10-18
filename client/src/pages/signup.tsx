@@ -121,14 +121,14 @@ export default function Signup() {
               className="order-2 space-y-6 lg:order-1 lg:sticky lg:top-28"
             >
               <div className="space-y-6">
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-100 text-orange-800 dark:bg-orange-950/30 dark:text-orange-200 text-sm font-medium">
                   <House className="h-4 w-4" />
                   Your home, organized
                 </div>
 
                 <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-foreground leading-[1.08] tracking-tight">
                   Know your home.<br />
-                  <span className="text-primary">Stay ahead.</span>
+                  <span className="text-orange-700 dark:text-orange-300">Stay ahead.</span>
                 </h1>
 
                 <p className="text-lg text-muted-foreground max-w-lg leading-relaxed">
@@ -229,7 +229,7 @@ export default function Signup() {
                         <p className="text-xs text-destructive">Passwords don't match.</p>
                       )}
                     </div>
-                    <Button type="submit" className="w-full min-h-12" disabled={submitting} data-testid="button-submit-signup">
+                    <Button type="submit" className="w-full min-h-12 bg-orange-700 text-white hover:bg-orange-800" disabled={submitting} data-testid="button-submit-signup">
                       {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}
                     </Button>
                     <button type="button" onClick={() => setShowEmailForm(false)}
