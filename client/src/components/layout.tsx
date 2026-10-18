@@ -30,10 +30,39 @@ function isNavActive(location: string, item: { href: string; match?: string[] })
 export function Layout({ children, immersive = false }: { children: React.ReactNode; immersive?: boolean }) {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+  const [assistantKeyboard, setAssistantKeyboard] = useState({ open: false, height: 0 });
   const { user } = useAuth();
   const { openDefinitions } = useDefinitions();
 
   useEffect(() => { if (isOpen) trackModalOpen(MODAL_SLUGS.mobileNav); }, [isOpen]);
+
+  // Mobile browsers may resize only visualViewport, leaving fixed chat controls behind the keyboard.
+  // In immersive mode, size the app shell to the visible area and hide the bottom nav while typing.
+  useEffect(() => {
+    if (!immersive || !window.visualViewport) return;
+    const viewport = window.visualViewport;
+    let expandedHeight = viewport.height;
+    const syncKeyboard = () => {
+      if (!viewport) return;
+      expandedHeight = Math.max(expandedHeight, viewport.height);
+      const focused = document.activeElement;
+      const isTextField = focused instanceof HTMLTextAreaElement ||
+        (focused instanceof HTMLInputElement && focused.type !== "file");
+      setAssistantKeyboard({
+        open: isTextField && expandedHeight - viewport.height > 140,
+        height: Math.round(viewport.height),
+      });
+    };
+    syncKeyboard();
+    viewport.addEventListener("resize", syncKeyboard);
+    document.addEventListener("focusin", syncKeyboard);
+    document.addEventListener("focusout", syncKeyboard);
+    return () => {
+      viewport.removeEventListener("resize", syncKeyboard);
+      document.removeEventListener("focusin", syncKeyboard);
+      document.removeEventListener("focusout", syncKeyboard);
+    };
+  }, [immersive]);
 
   const handleLogout = () => {
     trackEvent('logout', 'auth', 'logout_button');
@@ -42,7 +71,10 @@ export function Layout({ children, immersive = false }: { children: React.ReactN
   const userInitial = user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "?";
 
   return (
-    <div className="h-[100dvh] bg-background flex flex-col md:flex-row overflow-hidden">
+    <div
+      className="h-[100dvh] bg-background flex flex-col md:flex-row overflow-hidden"
+      style={immersive && assistantKeyboard.open ? { height: `${assistantKeyboard.height}px` } : undefined}
+    >
       <OfflineBanner />
       {/* Mobile Header — minimal, breathable */}
       <header className="md:hidden flex items-center justify-between px-5 py-3.5 border-b bg-card/80 backdrop-blur-sm z-50 sticky top-0">
@@ -235,7 +267,9 @@ export function Layout({ children, immersive = false }: { children: React.ReactN
 
       {/* Main Content */}
       <main className={immersive
-        ? "flex-1 min-h-0 overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0"
+        ? assistantKeyboard.open
+          ? "flex-1 min-h-0 overflow-hidden"
+          : "flex-1 min-h-0 overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0"
         : "flex-1 min-h-0 overflow-auto pb-20 md:pb-0"}>
         <div className={immersive
           ? "h-full min-h-0 w-full max-w-5xl mx-auto"
@@ -248,7 +282,9 @@ export function Layout({ children, immersive = false }: { children: React.ReactN
       {!immersive && !location.startsWith("/maintenance-log") && !location.startsWith("/onboarding") && <PwaInstallPrompt />}
 
       {/* Mobile Bottom Navigation — the same three jobs as desktop */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t z-50 safe-area-bottom">
+      <nav className={immersive && assistantKeyboard.open
+        ? "hidden"
+        : "md:hidden fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t z-50 safe-area-bottom"}>
         <div className="flex items-center justify-around h-14">
           {bottomNavItems.map((item) => {
             const active = isNavActive(location, item);
