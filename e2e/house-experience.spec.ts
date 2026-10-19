@@ -242,3 +242,61 @@ test("Home Assistant fits narrow mobile viewports without obscuring prompts or t
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
 });
+
+test("Plan header, actions, cards, and task controls fit mobile viewports", async ({ page }) => {
+  await mockAuthenticatedHome(page);
+  await page.route("**/v2/homes/house-uuid/tasks", route =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([{
+        id: "responsive-task", homeId: "house-uuid",
+        title: "Check for leaks underneath every bathroom and kitchen sink",
+        status: "pending", state: "pending", urgency: "later",
+        dueDate: null, category: "Plumbing",
+      }]),
+    })
+  );
+
+  for (const width of [320, 360, 390, 428, 768]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/maintenance-log");
+
+    const heading = page.getByTestId("text-heading");
+    const description = page.getByText("Your next actions, upcoming work, and completed maintenance");
+    const calendar = page.getByTestId("button-calendar-sync");
+    const logWork = page.getByTestId("button-add-entry");
+    const task = page.getByTestId("row-task-responsive-task");
+    const complete = page.getByTestId("button-complete-responsive-task");
+
+    await expect(heading).toBeVisible();
+    await expect(description).toBeVisible();
+    await expect(calendar).toBeVisible();
+    await expect(logWork).toBeVisible();
+    await expect(task).toBeVisible();
+    await expect(complete).toBeVisible();
+
+    for (const item of [
+      heading, description, calendar, logWork, task, complete,
+      page.getByTestId("filter-completed"),
+      page.getByTestId("filter-past_due"),
+      page.getByTestId("filter-due"),
+      page.getByTestId("filter-upcoming"),
+    ]) {
+      const rect = await item.boundingBox();
+      expect(rect, `Element at ${width}px should be laid out`).not.toBeNull();
+      expect(rect!.x, `Element at ${width}px is clipped on the left`).toBeGreaterThanOrEqual(-1);
+      expect(rect!.x + rect!.width, `Element at ${width}px overflows right`).toBeLessThanOrEqual(width + 1);
+    }
+
+    if (width < 640) {
+      const descriptionBox = (await description.boundingBox())!;
+      const actionBox = (await page.getByTestId("plan-actions").boundingBox())!;
+      expect(descriptionBox.width).toBeGreaterThan(width * 0.65);
+      expect(actionBox.y).toBeGreaterThanOrEqual(descriptionBox.y + descriptionBox.height);
+      await expect(page.getByTestId("text-task-title-responsive-task")).toHaveCSS("white-space", "normal");
+    }
+
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+});

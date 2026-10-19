@@ -137,7 +137,7 @@ function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand, gu
   return (
     <div data-testid={`row-task-${task.id}`}>
       <div 
-        className={`flex items-center justify-between p-3 rounded-lg border transition-colors cursor-pointer ${
+        className={`flex min-w-0 flex-col gap-2 rounded-lg border p-3 transition-colors cursor-pointer sm:flex-row sm:items-center sm:justify-between ${
           isOverdue ? "border-red-200 bg-red-50/50 dark:border-red-900/30 dark:bg-red-950/20" :
           isDueToday ? "border-orange-200 bg-orange-50/50 dark:border-orange-900/30 dark:bg-orange-950/20" :
           isCompleted ? "border-green-200 bg-green-50/30 dark:border-green-900/30 dark:bg-green-950/20" :
@@ -158,7 +158,7 @@ function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand, gu
         onClick={handleClick}
         data-testid={`button-expand-task-${task.id}`}
       >
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
           <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${
             isCompleted ? "bg-green-500/20" : isOverdue ? "bg-red-500/20" : "bg-muted"
           }`}>
@@ -170,8 +170,8 @@ function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand, gu
               <Wrench className="h-4 w-4 text-muted-foreground" />
             )}
           </div>
-          <div className="min-w-0">
-            <p className={`font-medium text-sm truncate ${isCompleted ? "line-through text-muted-foreground" : ""}`} data-testid={`text-task-title-${task.id}`}>
+          <div className="min-w-0 flex-1">
+            <p className={`line-clamp-2 break-words text-sm font-medium sm:line-clamp-1 ${isCompleted ? "line-through text-muted-foreground" : ""}`} data-testid={`text-task-title-${task.id}`}>
               {task.title}
             </p>
             <div className="flex items-center gap-2 flex-wrap mt-0.5">
@@ -197,7 +197,7 @@ function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand, gu
           </div>
         </div>
 
-        <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+        <div className="flex flex-shrink-0 items-center justify-end gap-2 sm:ml-2">
           {task.urgency && !isCompleted && (
             <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 hidden sm:flex ${urgencyColor(task.urgency)}`}>
               {task.urgency}
@@ -215,7 +215,7 @@ function TaskRow({ task, systemsById, onComplete, isExpanded, onToggleExpand, gu
             <Button 
               size="sm" 
               variant="outline"
-              className="h-7 text-xs"
+              className="min-h-9 text-xs"
               onClick={(e) => { e.stopPropagation(); onComplete(task); }}
               data-testid={`button-complete-${task.id}`}
             >
@@ -563,33 +563,34 @@ export default function MaintenanceLog() {
 
   return (
     <Layout>
-      <div className="space-y-6">
-        <header className="flex justify-between items-start">
-          <div>
+      <div className="min-w-0 space-y-5 sm:space-y-6">
+        <header className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between" data-testid="plan-header">
+          <div className="min-w-0">
             <h1 className="text-3xl font-heading font-bold" data-testid="text-heading">
               Plan
             </h1>
-            <p className="text-muted-foreground mt-1">
+            <p className="mt-1 max-w-xl text-sm text-muted-foreground sm:text-base">
               Your next actions, upcoming work, and completed maintenance
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Calendar sync belongs with the plan it syncs. The page was
-                previously unreachable from anywhere in the UI. */}
-            <Link href="/calendar">
-              <Button variant="outline" data-testid="button-calendar-sync">
-                <CalendarPlus className="h-4 w-4 mr-2" />
-                Sync to calendar
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center" data-testid="plan-actions">
+            {/* Keep both actions visible and touch-friendly without forcing
+                the title into a narrow column on phone-sized screens. */}
+            <Link href="/calendar" className="min-w-0 w-full sm:w-auto">
+              <Button variant="outline" className="h-11 w-full min-w-0 px-2 text-xs sm:h-10 sm:px-4 sm:text-sm" data-testid="button-calendar-sync">
+                <CalendarPlus className="mr-1.5 h-4 w-4 shrink-0 sm:mr-2" />
+                <span className="sm:hidden">Sync calendar</span>
+                <span className="hidden sm:inline">Sync to calendar</span>
               </Button>
             </Link>
-            <Button onClick={() => { trackEvent('click', 'maintenance_log', 'log_work'); setSelectedTask(null); setShowAddEntry(true); }} data-testid="button-add-entry">
-              <Plus className="h-4 w-4 mr-2" />
+            <Button className="h-11 w-full min-w-0 px-2 text-xs sm:h-10 sm:w-auto sm:px-4 sm:text-sm" onClick={() => { trackEvent('click', 'maintenance_log', 'log_work'); setSelectedTask(null); setShowAddEntry(true); }} data-testid="button-add-entry">
+              <Plus className="mr-1.5 h-4 w-4 shrink-0 sm:mr-2" />
               Log Work
             </Button>
           </div>
         </header>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4">
           <button
             type="button"
             aria-label={`Completed: ${counts.completed} tasks`}
@@ -599,15 +600,15 @@ export default function MaintenanceLog() {
             className={`rounded-xl border bg-card text-card-foreground shadow text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeFilter === "completed" ? "ring-2 ring-primary border-primary bg-primary/5" : ""}`}
             data-testid="filter-completed"
           >
-            <CardContent className="pt-4 relative">
+            <CardContent className="relative p-3 sm:p-4">
               <ChevronRight aria-hidden="true" className="absolute right-2 top-5 h-4 w-4 text-muted-foreground"/>
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="h-9 w-9 shrink-0 rounded-full sm:h-10 sm:w-10 bg-green-500/10 flex items-center justify-center">
                   <CheckCircle2 className="h-5 w-5 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="text-completed-count">{counts.completed}</p>
-                  <p className="text-xs text-muted-foreground">Completed</p>
+                  <p className="text-xl font-bold sm:text-2xl" data-testid="text-completed-count">{counts.completed}</p>
+                  <p className="text-[11px] leading-tight text-muted-foreground sm:text-xs">Completed</p>
                 </div>
               </div>
             </CardContent>
@@ -621,15 +622,15 @@ export default function MaintenanceLog() {
             className={`rounded-xl border bg-card text-card-foreground shadow text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeFilter === "past_due" ? "ring-2 ring-primary border-primary bg-primary/5" : ""}`}
             data-testid="filter-past_due"
           >
-            <CardContent className="pt-4 relative">
+            <CardContent className="relative p-3 sm:p-4">
               <ChevronRight aria-hidden="true" className="absolute right-2 top-5 h-4 w-4 text-muted-foreground"/>
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-red-500/10 flex items-center justify-center">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="h-9 w-9 shrink-0 rounded-full sm:h-10 sm:w-10 bg-red-500/10 flex items-center justify-center">
                   <AlertTriangle className="h-5 w-5 text-red-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="text-past-due-count">{counts.past_due}</p>
-                  <p className="text-xs text-muted-foreground">Past Due</p>
+                  <p className="text-xl font-bold sm:text-2xl" data-testid="text-past-due-count">{counts.past_due}</p>
+                  <p className="text-[11px] leading-tight text-muted-foreground sm:text-xs">Past Due</p>
                 </div>
               </div>
             </CardContent>
@@ -643,15 +644,15 @@ export default function MaintenanceLog() {
             className={`rounded-xl border bg-card text-card-foreground shadow text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeFilter === "due" ? "ring-2 ring-primary border-primary bg-primary/5" : ""}`}
             data-testid="filter-due"
           >
-            <CardContent className="pt-4 relative">
+            <CardContent className="relative p-3 sm:p-4">
               <ChevronRight aria-hidden="true" className="absolute right-2 top-5 h-4 w-4 text-muted-foreground"/>
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-orange-500/10 flex items-center justify-center">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="h-9 w-9 shrink-0 rounded-full sm:h-10 sm:w-10 bg-orange-500/10 flex items-center justify-center">
                   <Clock className="h-5 w-5 text-orange-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="text-due-count">{counts.due}</p>
-                  <p className="text-xs text-muted-foreground">Due / Urgent</p>
+                  <p className="text-xl font-bold sm:text-2xl" data-testid="text-due-count">{counts.due}</p>
+                  <p className="text-[11px] leading-tight text-muted-foreground sm:text-xs">Due / Urgent</p>
                 </div>
               </div>
             </CardContent>
@@ -665,15 +666,15 @@ export default function MaintenanceLog() {
             className={`rounded-xl border bg-card text-card-foreground shadow text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeFilter === "upcoming" ? "ring-2 ring-primary border-primary bg-primary/5" : ""}`}
             data-testid="filter-upcoming"
           >
-            <CardContent className="pt-4 relative">
+            <CardContent className="relative p-3 sm:p-4">
               <ChevronRight aria-hidden="true" className="absolute right-2 top-5 h-4 w-4 text-muted-foreground"/>
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="h-9 w-9 shrink-0 rounded-full sm:h-10 sm:w-10 bg-blue-500/10 flex items-center justify-center">
                   <CalendarClock className="h-5 w-5 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="text-upcoming-count">{counts.upcoming}</p>
-                  <p className="text-xs text-muted-foreground">Upcoming</p>
+                  <p className="text-xl font-bold sm:text-2xl" data-testid="text-upcoming-count">{counts.upcoming}</p>
+                  <p className="text-[11px] leading-tight text-muted-foreground sm:text-xs">Upcoming</p>
                 </div>
               </div>
             </CardContent>
