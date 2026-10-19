@@ -234,9 +234,12 @@ app.use((req, res, next) => {
     skip: (req) => req.method === "GET",
   });
 
+  // Browser CI exercises many synthetic homeowners through one loopback IP.
+  // Raise only that isolated CI runner's GET budget; never change live limits.
+  const browserCiReadLimit = process.env.CI === "true" && process.env.NODE_ENV === "production" ? 2000 : 300;
   const readLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 300,
+    max: browserCiReadLimit,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: "Too many requests, please try again later" },
