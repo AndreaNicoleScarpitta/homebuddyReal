@@ -5,7 +5,7 @@ test.describe("HomeBuddy landing → signup conversion", () => {
 
   test("communicates the product value and routes each signup CTA directly", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1, name: /know your home.*stay ahead of what matters/i })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /know your home.*stay ahead/i })).toBeVisible();
     await expect(page.getByTestId("landing-product-preview")).toBeVisible();
 
     for (const testId of ["button-signup-header", "button-cta-hero", "button-cta-final"]) {
@@ -16,6 +16,25 @@ test.describe("HomeBuddy landing → signup conversion", () => {
     await expect(page).toHaveURL(/\/signup$/);
     await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
     await expect(page.getByTestId("button-signup-email")).toBeVisible();
+  });
+
+  test("uses one brand orange for CTAs and concise benefit-led copy", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Know your home\. Stay ahead\./);
+    await expect(page.getByText("Maintenance, documents, and home details—all connected, so you know what's next.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "One place. A clearer next step." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Start small. Stay ready." })).toBeVisible();
+
+    const brand = await page.getByTestId("button-cta-hero").evaluate(el => {
+      const style = getComputedStyle(el);
+      return { background: style.backgroundColor, foreground: style.color };
+    });
+    const header = await page.getByTestId("button-signup-header").evaluate(el => getComputedStyle(el).backgroundColor);
+    const final = await page.getByTestId("button-cta-final").evaluate(el => getComputedStyle(el).backgroundColor);
+    expect(brand.background).toBe("rgb(249, 115, 22)");
+    expect(header).toBe(brand.background);
+    expect(final).toBe(brand.background);
+    expect(brand.foreground).toBe("rgb(28, 25, 23)");
   });
 
   test("uses the existing analytics helper for distinct CTA placements", async ({ page }) => {
@@ -42,9 +61,9 @@ test.describe("HomeBuddy landing → signup conversion", () => {
     await page.getByRole("tab", { name: "Plan" }).click();
     await expect(page.getByText("Due / Urgent")).toBeVisible();
     await page.getByRole("tab", { name: "My House" }).click();
-    await expect(page.getByRole("heading", { name: "Information worth keeping" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Find what matters" })).toBeVisible();
     await page.getByRole("tab", { name: "Assistant" }).click();
-    await expect(page.getByText(/get practical guidance, with home context/i)).toBeVisible();
+    await expect(page.getByText(/practical guidance based on your saved details/i)).toBeVisible();
   });
 
   for (const width of [320, 375, 390, 768, 1440]) {
@@ -74,7 +93,7 @@ test.describe("HomeBuddy landing → signup conversion", () => {
   test("public metadata and no-script fallback use the same positioning and domain", async ({ page, request }) => {
     const raw = await request.get("/");
     const html = await raw.text();
-    expect(html).toContain("Know your home. Stay ahead of what matters.");
+    expect(html).toContain("Know your home. Stay ahead.");
     expect(html).toContain('href="/signup"');
     expect(html).not.toContain("home-buddy.replit.app");
     await page.goto("/");
