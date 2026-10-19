@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import {
-  ArrowRight, BookOpen, CheckCircle2, ClipboardList, Clock3, FileText,
-  House, MessageCircle, ShieldCheck, Smartphone, Wrench,
+  ArrowRight, CheckCircle2, ClipboardList, Clock3, FileText,
+  House, MessageCircle, ShieldCheck, Wrench,
 } from "lucide-react";
 import { trackEvent, trackSlugPageView } from "@/lib/analytics";
 import { PAGE_SLUGS } from "@/lib/slug-registry";
@@ -40,7 +40,7 @@ function ProductPreview() {
             aria-controls="preview-panel"
             onClick={() => setActive(tab.id)}
             className={"min-h-11 min-w-0 rounded-lg px-1 py-2 text-[11px] font-semibold transition-colors sm:text-sm " +
-              (active === tab.id ? "bg-orange-700 text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
+              (active === tab.id ? "bg-primary text-stone-950" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
           >
             {tab.label}
           </button>
@@ -50,9 +50,9 @@ function ProductPreview() {
         {active === "home" && (
           <>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-700 dark:text-orange-300">Your home at a glance</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-700 dark:text-orange-300">Home overview</p>
               <h3 className="mt-1 text-xl font-bold text-foreground sm:text-2xl">Know what needs attention</h3>
-              <p className="mt-1 text-sm text-muted-foreground">See the next useful action without digging through a checklist.</p>
+              <p className="mt-1 text-sm text-muted-foreground">See what matters next.</p>
             </div>
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/20">
               <div className="flex items-start gap-3">
@@ -60,7 +60,7 @@ function ProductPreview() {
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground">Needs attention</p>
                   <p className="mt-1 text-sm text-foreground">Check your HVAC filter</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Open Plan to review and track the task.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">See the task in Plan.</p>
                 </div>
               </div>
             </div>
@@ -75,8 +75,8 @@ function ProductPreview() {
           <>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-700 dark:text-orange-300">Maintenance planning</p>
-              <h3 className="mt-1 text-xl font-bold text-foreground sm:text-2xl">A plan you can act on</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Review what is coming up and record what is done.</p>
+              <h3 className="mt-1 text-xl font-bold text-foreground sm:text-2xl">Your plan, made clear</h3>
+              <p className="mt-1 text-sm text-muted-foreground">See what’s due. Log what’s done.</p>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {["Upcoming", "Due / Urgent", "Past Due", "Completed"].map((label) => (
@@ -94,13 +94,13 @@ function ProductPreview() {
           <>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-700 dark:text-orange-300">My House</p>
-              <h3 className="mt-1 text-xl font-bold text-foreground sm:text-2xl">Information worth keeping</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Systems, shutoffs, warranties, and saved files where you can find them.</p>
+              <h3 className="mt-1 text-xl font-bold text-foreground sm:text-2xl">Find what matters</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Your systems, shutoffs, and files in one place.</p>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-xl border border-border p-3"><House className="mb-2 h-5 w-5 text-orange-700 dark:text-orange-300" aria-hidden="true" /><p className="text-sm font-semibold">Systems & appliances</p></div>
               <div className="rounded-xl border border-border p-3"><ShieldCheck className="mb-2 h-5 w-5 text-orange-700 dark:text-orange-300" aria-hidden="true" /><p className="text-sm font-semibold">Emergency & utilities</p></div>
-              <div className="col-span-2 flex items-center gap-3 rounded-xl border border-border p-3"><FileText className="h-5 w-5 shrink-0 text-orange-700 dark:text-orange-300" aria-hidden="true" /><div><p className="text-sm font-semibold">Documents</p><p className="text-xs text-muted-foreground">Inspection reports, manuals, and records you upload</p></div></div>
+              <div className="col-span-2 flex items-center gap-3 rounded-xl border border-border p-3"><FileText className="h-5 w-5 shrink-0 text-orange-700 dark:text-orange-300" aria-hidden="true" /><div><p className="text-sm font-semibold">Documents</p><p className="text-xs text-muted-foreground">Inspections, manuals, and more</p></div></div>
             </div>
           </>
         )}
@@ -108,10 +108,10 @@ function ProductPreview() {
           <>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-700 dark:text-orange-300">Home Assistant</p>
-              <h3 className="mt-1 text-xl font-bold text-foreground sm:text-2xl">Ask a home question</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Get practical guidance, with home context where available.</p>
+              <h3 className="mt-1 text-xl font-bold text-foreground sm:text-2xl">Ask HomeBuddy</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Practical guidance based on your saved details.</p>
             </div>
-            <div className="ml-auto w-fit max-w-[88%] rounded-2xl rounded-br-sm bg-primary px-4 py-3 text-sm text-orange-700 dark:text-orange-300-foreground">Where should I keep my water shutoff details?</div>
+            <div className="ml-auto w-fit max-w-[88%] rounded-2xl rounded-br-sm bg-primary px-4 py-3 text-sm text-stone-950">Where should I keep my water shutoff details?</div>
             <div className="mr-auto max-w-[92%] rounded-2xl rounded-bl-sm bg-muted px-4 py-3 text-sm leading-relaxed text-foreground">Save the shutoff location under My House → Emergency & utilities, so it's easier to find when needed.</div>
           </>
         )}
@@ -124,24 +124,22 @@ function ProductPreview() {
 }
 
 const benefits = [
-  { icon: ClipboardList, title: "Know what needs attention", copy: "See maintenance priorities and the tasks coming up for your home." },
-  { icon: FileText, title: "Keep home details together", copy: "Save system information, documents, warranties, and important shutoff details." },
-  { icon: CheckCircle2, title: "Keep a useful history", copy: "Mark work complete and keep track of what you've taken care of." },
-  { icon: MessageCircle, title: "Get help with the next step", copy: "Ask questions and get guidance informed by the home details available." },
+  { icon: ClipboardList, title: "Know what’s next", copy: "See what needs attention and what’s coming up." },
+  { icon: FileText, title: "Keep it together", copy: "Systems, documents, and shutoffs. One home record." },
+  { icon: CheckCircle2, title: "Remember the work", copy: "Track completed maintenance and build a useful history." },
+  { icon: MessageCircle, title: "Ask with context", copy: "Get guidance informed by your saved home details." },
 ];
 
 const steps = [
-  { title: "Tell us about your home", copy: "Add a few property details and select the systems you have." },
-  { title: "Start with a maintenance plan", copy: "HomeBuddy creates starter tasks you can review and manage." },
-  { title: "Build a record over time", copy: "Track completed work and add useful documents and home information." },
+  { title: "Add your home", copy: "Start with the basics and your main systems." },
+  { title: "Get a plan", copy: "Review your starter maintenance tasks." },
+  { title: "Build your record", copy: "Save work, files, and details as you go." },
 ];
 
 const questions = [
-  { question: "Is setup complicated?", answer: "No lengthy inventory is required to begin. Quick setup starts with a few home details and your main systems, then creates starter maintenance tasks." },
-  { question: "What happens after I sign up?", answer: "You'll be guided through quick setup. When it's complete, you'll have a maintenance plan to review and a place to save information about your home." },
-  { question: "Can I add documents I already have?", answer: "Yes. You can upload house files, including inspection reports and manuals. Where document analysis is available, suggestions can help you add relevant details or tasks for review." },
-  { question: "Can I manage or remove my information?", answer: "You decide what home information and documents to add. Account settings include a way to request deletion of your account and its associated data." },
-  { question: "Does it work on my phone?", answer: "Yes. HomeBuddy is designed for mobile browsers and can be installed as a progressive web app on supported devices." },
+  { question: "What happens when I sign up?", answer: "Add a few home details and systems. HomeBuddy creates starter maintenance tasks you can review." },
+  { question: "Can I add my own documents?", answer: "Yes. Upload inspection reports, manuals, and other home files." },
+  { question: "Can I remove my information?", answer: "You control what you add. Account settings let you request deletion of your account and associated data." },
 ];
 
 const guideLinks = [
@@ -162,8 +160,8 @@ function trackSignupClick(placement: "header" | "hero" | "final") {
 
 export default function Landing() {
   useEffect(() => {
-    document.title = "HomeBuddy — Know Your Home. Stay Ahead of What Matters.";
-    document.querySelector('meta[name="description"]')?.setAttribute("content", "HomeBuddy keeps home systems, maintenance tasks, documents, and history together. Know what needs attention and build a useful home record over time.");
+    document.title = "HomeBuddy — Know Your Home. Stay Ahead.";
+    document.querySelector('meta[name="description"]')?.setAttribute("content", "HomeBuddy connects home maintenance, documents, systems, and history. Know what needs attention and what to do next.");
     trackSlugPageView(PAGE_SLUGS.landing);
     trackEvent("landing_page_view", "conversion", "landing");
   }, []);
@@ -178,27 +176,27 @@ export default function Landing() {
           </Link>
           <div className="flex shrink-0 items-center gap-1 sm:gap-3">
             <Link href="/login" className="inline-flex min-h-11 items-center px-2 text-xs font-semibold text-muted-foreground no-underline hover:text-foreground sm:px-3 sm:text-sm" data-testid="button-login" onClick={() => trackEvent("click", "landing", "sign_in_header")}>Sign in</Link>
-            <Link href="/signup" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-orange-700 px-3 text-xs font-bold text-white no-underline hover:bg-orange-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:px-5 sm:text-sm" onClick={() => trackSignupClick("header")} data-testid="button-signup-header">Set Up My Home</Link>
+            <Link href="/signup" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-3 text-xs font-bold text-stone-950 no-underline hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:px-5 sm:text-sm" onClick={() => trackSignupClick("header")} data-testid="button-signup-header">Set Up My Home</Link>
           </div>
         </nav>
       </header>
 
       <main>
-        <section className="relative overflow-hidden bg-gradient-to-b from-orange-50/70 via-background to-background py-10 dark:from-orange-950/15 sm:py-16 lg:py-20" aria-labelledby="landing-heading">
+        <section className="relative overflow-hidden bg-gradient-to-b from-primary/10 via-background to-background py-10 dark:from-primary/10 sm:py-16 lg:py-20" aria-labelledby="landing-heading">
           <div className="mx-auto grid max-w-6xl min-w-0 items-center gap-10 px-4 sm:px-6 lg:grid-cols-[minmax(0,0.93fr)_minmax(0,1.07fr)] lg:gap-14">
             <div className="min-w-0">
-              <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-orange-700 dark:text-orange-300 sm:text-sm">A better way to care for your home</p>
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-orange-700 dark:text-orange-300 sm:text-sm">Less guesswork. Better homeownership.</p>
               <h1 id="landing-heading" className="max-w-xl text-[clamp(2.15rem,9vw,3.8rem)] font-extrabold leading-[1.09] tracking-[-0.045em] text-foreground">
-                Know your home. <span className="text-orange-700 dark:text-orange-300">Stay ahead of what matters.</span>
+                Know your home. <span className="text-orange-600 dark:text-orange-400">Stay ahead.</span>
               </h1>
-              <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
-                HomeBuddy brings your home's systems, maintenance tasks, documents, and history together—so you know what needs attention and have the information to act.
+              <p className="mt-4 max-w-lg text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
+                Maintenance, documents, and home details—all connected, so you know what's next.
               </p>
-              <div className="mt-7 flex flex-col items-start gap-3">
-                <Link href="/signup" className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-orange-700 px-6 text-base font-bold text-white no-underline shadow-sm shadow-primary/15 transition-colors hover:bg-orange-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:w-auto" onClick={() => trackSignupClick("hero")} data-testid="button-cta-hero">
+              <div className="mt-6 flex flex-col items-start gap-2">
+                <Link href="/signup" className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 text-base font-bold text-stone-950 no-underline shadow-sm shadow-primary/15 transition-colors hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:w-auto" onClick={() => trackSignupClick("hero")} data-testid="button-cta-hero">
                   Set Up My Home <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
-                <p className="text-xs leading-5 text-muted-foreground">Start with a few home details. Your first maintenance plan comes next.</p>
+                <p className="text-xs leading-5 text-muted-foreground">A few home details. Then your first maintenance plan.</p>
               </div>
             </div>
             <div className="min-w-0" aria-label="Product demonstration">
@@ -207,16 +205,16 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="border-y border-border/70 bg-muted/20 py-12 sm:py-16" aria-labelledby="benefits-heading">
+        <section className="border-y border-border/70 bg-muted/20 py-10 sm:py-14" aria-labelledby="benefits-heading">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="max-w-2xl">
-              <h2 id="benefits-heading" className="text-2xl font-bold tracking-tight sm:text-3xl">Less to remember. More confidence at home.</h2>
-              <p className="mt-3 leading-7 text-muted-foreground">Your home needs more than a to-do list. Keep the work and the information connected.</p>
+              <h2 id="benefits-heading" className="text-2xl font-bold tracking-tight sm:text-3xl">One place. A clearer next step.</h2>
+              <p className="mt-3 leading-7 text-muted-foreground">Know what matters. Keep what you learn.</p>
             </div>
             <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {benefits.map(({ icon: Icon, title, copy }) => (
                 <article key={title} className="rounded-2xl border border-border bg-card p-5">
-                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-950/30"><Icon className="h-5 w-5 text-orange-700 dark:text-orange-300" aria-hidden="true" /></div>
+                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 dark:bg-primary/20"><Icon className="h-5 w-5 text-orange-700 dark:text-orange-300" aria-hidden="true" /></div>
                   <h3 className="text-base font-bold">{title}</h3>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">{copy}</p>
                 </article>
@@ -225,15 +223,15 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="py-14 sm:py-20" aria-labelledby="how-heading">
+        <section className="py-12 sm:py-16" aria-labelledby="how-heading">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="max-w-xl">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-orange-700 dark:text-orange-300">How it works</p>
-              <h2 id="how-heading" className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">From a few details to a home you understand.</h2>
+              <h2 id="how-heading" className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">Start small. Stay ready.</h2>
             </div>
             <div className="mt-8 grid gap-6 md:grid-cols-3">
               {steps.map((step, index) => (
-                <article key={step.title} className="border-l-2 border-orange-500/50 pl-5">
+                <article key={step.title} className="border-l-2 border-primary/50 pl-5">
                   <span className="text-sm font-extrabold text-orange-700 dark:text-orange-300">0{index + 1}</span>
                   <h3 className="mt-3 text-lg font-bold">{step.title}</h3>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">{step.copy}</p>
@@ -243,13 +241,13 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="border-y border-border/70 bg-muted/20 py-12 sm:py-16" aria-labelledby="questions-heading">
+        <section className="border-y border-border/70 bg-muted/20 py-10 sm:py-14" aria-labelledby="questions-heading">
           <div className="mx-auto max-w-3xl px-4 sm:px-6">
-            <h2 id="questions-heading" className="text-2xl font-bold tracking-tight sm:text-3xl">A few things you may be wondering</h2>
+            <h2 id="questions-heading" className="text-2xl font-bold tracking-tight sm:text-3xl">Good to know</h2>
             <div className="mt-6 divide-y divide-border rounded-2xl border border-border bg-card px-5 sm:px-7">
               {questions.map((item) => (
                 <details key={item.question} className="group py-4">
-                  <summary className="cursor-pointer rounded-sm py-1 text-sm font-semibold leading-6 text-foreground marker:text-orange-700 dark:text-orange-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:text-base">{item.question}</summary>
+                  <summary className="cursor-pointer rounded-sm py-1 text-sm font-semibold leading-6 text-foreground marker:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:text-base">{item.question}</summary>
                   <p className="mt-2 pb-1 text-sm leading-7 text-muted-foreground">{item.answer}</p>
                 </details>
               ))}
@@ -257,11 +255,11 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="py-14 sm:py-20" aria-labelledby="final-heading">
+        <section className="py-12 sm:py-16" aria-labelledby="final-heading">
           <div className="mx-auto max-w-4xl px-4 text-center sm:px-6">
-            <h2 id="final-heading" className="text-3xl font-extrabold tracking-tight sm:text-4xl">Your home has a lot to remember. You don't have to.</h2>
-            <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-muted-foreground">Start with your home basics. Get a useful plan, then keep the details that matter in one place.</p>
-            <Link href="/signup" className="mx-auto mt-7 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-orange-700 px-7 text-base font-bold text-white no-underline hover:bg-orange-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:w-auto" onClick={() => trackSignupClick("final")} data-testid="button-cta-final">Set Up My Home <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+            <h2 id="final-heading" className="text-3xl font-extrabold tracking-tight sm:text-4xl">Your home. Better handled.</h2>
+            <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-muted-foreground">Start with a plan. Build a home record that lasts.</p>
+            <Link href="/signup" className="mx-auto mt-7 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-7 text-base font-bold text-stone-950 no-underline hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:w-auto" onClick={() => trackSignupClick("final")} data-testid="button-cta-final">Set Up My Home <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
           </div>
         </section>
       </main>
