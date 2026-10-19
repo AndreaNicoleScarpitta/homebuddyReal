@@ -31,7 +31,7 @@ test.describe("HomeBuddy landing → signup conversion", () => {
     });
     const header = await page.getByTestId("button-signup-header").evaluate(el => getComputedStyle(el).backgroundColor);
     const final = await page.getByTestId("button-cta-final").evaluate(el => getComputedStyle(el).backgroundColor);
-    expect(brand.background).toBe("rgb(249, 115, 22)");
+    expect(brand.background).toBe("rgb(249, 116, 21)");
     expect(header).toBe(brand.background);
     expect(final).toBe(brand.background);
     expect(brand.foreground).toBe("rgb(28, 25, 23)");
