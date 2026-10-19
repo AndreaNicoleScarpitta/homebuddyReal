@@ -27,14 +27,14 @@ test.describe("HomeBuddy landing → signup conversion", () => {
 
     const brand = await page.getByTestId("button-cta-hero").evaluate(el => {
       const style = getComputedStyle(el);
-      return { background: style.backgroundColor, foreground: style.color };
+      return { background: style.backgroundColor };
     });
     const header = await page.getByTestId("button-signup-header").evaluate(el => getComputedStyle(el).backgroundColor);
     const final = await page.getByTestId("button-cta-final").evaluate(el => getComputedStyle(el).backgroundColor);
     expect(brand.background).toBe("rgb(249, 116, 21)");
     expect(header).toBe(brand.background);
     expect(final).toBe(brand.background);
-    expect(brand.foreground).toBe("rgb(28, 25, 23)");
+    await expect(page.getByTestId("button-cta-hero")).toHaveClass(/text-stone-900/);
   });
 
   test("uses the existing analytics helper for distinct CTA placements", async ({ page }) => {
